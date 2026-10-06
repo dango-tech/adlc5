@@ -1,0 +1,23 @@
+# ADLC5 L4 runner manifest
+schema_version: "3.0"
+
+backends:
+  local:
+    description: "Deterministic navigator — emits needs_executor for host-owned agent actions"
+    dispatch: scripts/runner/dispatch.sh
+    watch: scripts/runner/watch.sh
+
+  cursor-cloud:
+    description: "Cursor Cloud Agents (stub — wire SDK when available)"
+    dispatch: platform/runner/cursor-cloud-stub.sh
+    docs: "https://cursor.com/docs/cloud-agent"
+
+  cursor-sdk:
+    description: "@cursor/sdk programmatic agents"
+    dispatch: platform/runner/cursor-sdk-stub.sh
+    skill: ~/.cursor/skills-cursor/sdk/SKILL.md
+
+contract: |
+  Runners MUST invoke scripts/pilot-autopilot.sh and scripts/check-gates.py —
+  no duplicate gate logic in runner adapters. The local navigator never invokes
+  an agent: spawn/advance/heal return dispatch=needs_executor for a host adapter.

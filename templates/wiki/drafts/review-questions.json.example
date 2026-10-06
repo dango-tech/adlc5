@@ -1,0 +1,18 @@
+{
+  "feature": "{feature-name}",
+  "packet": "wiki/drafts/promote-{feature}/packet.md",
+  "questions": [
+    {
+      "id": "candidate-id",
+      "prompt": "Accept claim as project truth?",
+      "options": [
+        { "id": "promote_entity", "label": "Promote to entity page" },
+        { "id": "promote_concept", "label": "Promote as concept only" },
+        { "id": "reject", "label": "Reject — keep feature-local" },
+        { "id": "investigate", "label": "Needs investigation — challenges/" }
+      ],
+      "evidence": ["path/to/file:10-40"],
+      "claim": "One-line claim text"
+    }
+  ]
+}

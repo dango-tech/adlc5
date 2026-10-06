@@ -1,0 +1,7 @@
+# Current information rule
+
+Before relying on or shipping volatile facts—versions, release/status labels, APIs, protocols, provider capabilities, security guidance, compatibility, or current best practices—verify them against an official primary source during the current task.
+
+Record `last_verified`, stability status, and exact source URLs in tracked snapshots. Separate sourced facts from ADLC5 recommendations. If a load-bearing claim cannot be revalidated, stale information is a blocker: mark it unverified or remove it rather than presenting it as current.
+
+Canonical procedure: [current-information.md](../../../core/guides/current-information.md).

@@ -1,0 +1,57 @@
+{
+  "project_name": "{project_name}",
+  "current_phase": "autoresearch-1-intake",
+  "phase_status": {
+    "intake": "pending",
+    "baseline": "pending",
+    "loop": "pending",
+    "synthesis": "pending"
+  },
+  "context": {
+    "interaction_mode": "hitl",
+    "save_qa_log": true,
+    "budget": {
+      "mode": "wall-clock",
+      "per_trial": "5m",
+      "max_trials": 50,
+      "max_total_wall_clock": "8h"
+    },
+    "safety": {
+      "kill_switch_path": ".autoresearch/{project_name}/STOP",
+      "cost_cap_usd": null,
+      "cost_accumulated_usd": 0,
+      "tripwires": {
+        "consecutive_failures": 3,
+        "metric_nan_or_inf": true,
+        "regression_streak": { "count": 5, "threshold_pct": 50 },
+        "trial_budget_overrun": "2x"
+      },
+      "consecutive_failure_counter": 0
+    },
+    "target": {
+      "artifact_path": null,
+      "supporting_files": [],
+      "execute_cmd": null,
+      "metric_name": null,
+      "metric_direction": "min",
+      "metric_extract_cmd": null
+    }
+  },
+  "baseline": {
+    "metric_value": null,
+    "trial_id": null,
+    "captured_at": null
+  },
+  "trials": {},
+  "leaderboard": {
+    "best_trial_id": null,
+    "best_metric_value": null,
+    "updated_at": null
+  },
+  "memory": {
+    "index_path": ".autoresearch/{project_name}/memory/INDEX.md",
+    "last_compacted": null
+  },
+  "created_at": "{iso8601}",
+  "updated_at": "{iso8601}"
+}

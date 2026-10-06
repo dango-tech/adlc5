@@ -1,0 +1,32 @@
+# ADLC5 — tiny change autopilot profile
+# Clear, bounded, low-risk changes only.
+
+defaults:
+  interaction_mode: autonomous
+  execution_mode: sequential
+  verify_policy: auto
+  integrate_policy: auto
+
+autopilot:
+  endpoint: pr_ready
+  interaction_mode: autonomous
+  profile: tiny
+  wall_clock_cap_minutes: 30
+  max_iterations: 30
+  consecutive_failure_tripwire: 3
+  require_human_pr_approval: false
+
+  quality_gates:
+    require_tests: true
+    lint_errors_max: 0
+
+  retry_budgets:
+    implementation_per_story: 2
+    verification_per_story: 2
+
+# Cost tiering — routes implement-1-build subagents to a cheap execution-tier
+# model (platform_profiles.<host>.execution) instead of inheriting the
+# orchestrator's model. Safe here: tiny changes are bounded and low-risk.
+# See core/guides/model-matrix.md and ./scripts/resolve-model.sh.
+model_routing:
+  execution_policy: explicit

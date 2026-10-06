@@ -1,0 +1,12 @@
+{
+  "feature": "{feature-name}",
+  "approved_at": "{ISO-8601-timestamp}",
+  "approved_by": "user",
+  "candidates": [
+    {
+      "id": "candidate-id",
+      "action": "promote_entity",
+      "target": "wiki/entities/slug.md"
+    }
+  ]
+}

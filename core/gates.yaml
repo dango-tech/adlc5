@@ -1,0 +1,137 @@
+# ADLC5 gate registry — gate ID → checks and optional skill routing
+schema_version: "3.0"
+
+gates:
+  specify-complete:
+    stage: specify
+    description: Git recorded, spec-handoff exists, clarity threshold met
+    script: check-gates.py
+    checks:
+      - git_isolation_recorded
+      - spec_handoff_exists
+      - clarity_threshold
+
+  plan-complete:
+    stage: plan
+    description: Engineering gates + design artifacts complete + design critique verdict
+    script: check-gates.py
+    checks:
+      - craftsmanship_architecture
+      - craftsmanship_patterns
+      - design_discovery
+      - design_contracts
+      - design_operations
+      - design_critique   # design/design-critique.md — blocking fails; missing fails in autonomous, warns in HITL
+
+  tasks-1-stories-complete:
+    stage: tasks
+    step: tasks-1-stories
+    persona: analyst
+    description: User stories decomposed with conflict analysis
+    script: check-gates.py
+    checks:
+      - stories_defined
+
+  tasks-2-code-spec-complete:
+    stage: tasks
+    step: tasks-2-code-spec
+    persona: architect
+    description: TDD code specs written (tests before code)
+    script: check-gates.py
+    checks:
+      - code_specs_complete
+
+  tasks-complete:
+    stage: tasks
+    description: Stories decomposed and TDD code specs written
+    script: check-gates.py
+    checks:
+      - stories_defined
+      - code_specs_complete
+      - task_graph_valid
+
+  implement-1-build:
+    stage: implement
+    step: implement-1-build
+    skill: adlc5-implement
+    subagent: build-implementer
+    script: check-gates.py
+
+  implement-2-verify:
+    stage: implement
+    step: implement-2-verify
+    skill: adlc5-implement
+    subagent: assure-verifier
+    script: check-gates.py
+    checks:
+      - anchor_integrity
+
+  implement-3-integrate:
+    stage: implement
+    step: implement-3-integrate
+    skill: adlc5-implement
+    script: check-gates.py
+
+  implement-4-qa:
+    stage: implement
+    step: implement-4-qa
+    skill: qa
+    script: check-gates.py
+
+  implement-5-pr:
+    stage: implement
+    step: implement-5-pr
+    skill: pr-reviewer
+    script: check-gates.py
+
+  pr-ready:
+    stage: implement
+    description: Composite production-ready gate
+    script: check-gates.py
+    terminal: true
+    checks:
+      - build_complete
+      - verification_complete
+      - integration_complete  # when the selected profile includes implement-3-integrate
+      - qa_clearance          # when the selected profile includes implement-4-qa
+      - pr_review
+      - human_pr_approval   # only when policies require_human_pr_approval
+      - anchor_integrity
+      - quality_gates
+      - custom_gates
+
+  deploy-ready:
+    stage: post-pr
+    description: QA clearance + PR recorded + human deploy approval (always HITL)
+    script: check-gates.py
+    skill: deploy
+    checks:
+      - qa_clearance
+      - pr_recorded
+      - deploy_approval   # clarity.history {type: deploy_approval} — required in every mode
+
+# Legacy gate ID aliases (normalize on read)
+legacy_aliases:
+  spec-4-exit: specify-complete
+  plan-1-discovery: plan-complete
+  plan-5-code-spec: tasks-complete
+  build-1-implementation: implement-1-build
+  assure-1-verification: implement-2-verify
+  assure-2-integration: implement-3-integrate
+  assure-3-qa: implement-4-qa
+  assure-4-pr-reviewer: implement-5-pr
+
+# Autopilot skill routing (pilot loop)
+pilot_routing:
+  specify-0-git: adlc5-specify
+  specify-4-handoff: adlc5-specify
+  plan-1-engineering-architecture: adlc5-plan
+  plan-4-design-discovery: adlc5-plan
+  plan-7-design-critique: adlc5-plan
+  tasks-1-stories: adlc5-tasks
+  tasks-2-code-spec: adlc5-tasks
+  implement-1-build: adlc5-implement
+  implement-2-verify: adlc5-implement
+  implement-3-integrate: adlc5-implement
+  implement-4-qa: qa
+  implement-5-pr: pr-reviewer

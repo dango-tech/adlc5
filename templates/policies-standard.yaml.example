@@ -1,0 +1,39 @@
+# ADLC5 — standard change autopilot profile
+# Ordinary brownfield feature: Specify → Tasks → Implement → Verify → PR
+# readiness (see docs/evaluation.md Task Classes). Skips the Plan-stage
+# craftsmanship/design substeps and implement-4-qa — for a feature that
+# needs those, use the default full profile (omit `profile:`) or
+# policies-high-risk.yaml.example instead.
+
+defaults:
+  interaction_mode: autonomous
+  execution_mode: parallel
+  verify_policy: auto
+  integrate_policy: auto
+
+autopilot:
+  endpoint: pr_ready
+  interaction_mode: autonomous
+  profile: standard
+  wall_clock_cap_minutes: 180
+  max_iterations: 100
+  consecutive_failure_tripwire: 3
+  require_human_pr_approval: false
+
+  quality_gates:
+    coverage_min: 80
+    lint_errors_max: 0
+    require_tests: true
+
+  retry_budgets:
+    implementation_per_story: 2
+    verification_per_story: 3
+    integration_total: 2
+
+# Cost tiering — routes implement-1-build subagents to a cheap execution-tier
+# model (platform_profiles.<host>.execution) instead of inheriting the
+# orchestrator's model. See core/guides/model-matrix.md and
+# ./scripts/resolve-model.sh. Switch to `inherit` if a feature under this
+# profile turns out to need reasoning-tier judgment during build.
+model_routing:
+  execution_policy: explicit

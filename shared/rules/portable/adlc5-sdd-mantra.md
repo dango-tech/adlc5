@@ -1,0 +1,17 @@
+
+# ADLC5 SDD Mantra — Scripts over Skill Logic
+
+## The Mantra
+
+> "Anything that is a repeatable task gets converted to scripts, and skills hold the logic of calling these scripts at the right time while using the ADLC5 SDD (Software Design Document)."
+
+## Architecture Rules
+
+1. **Scripts over Prompts**: If an action is repeatable (e.g., scaffolding a project, deploying, running tests, vendor synchronization, boilerplate generation), it MUST be codified as an executable script in the repository (e.g. `scripts/` or `tools/`).
+2. **Skills as Orchestrators**: Agent skills (`SKILL.md`) should NOT contain complex raw shell logic or perform heavy lifting directly. Instead, skills should interpret context, enforce stage gates, read the SDD, and **invoke the correct scripts** at the right time.
+3. **SDD-Driven Execution**: Skills use the ADLC5 SDD (Software Design Document / Code Spec / Design) as the source of truth to decide which parameters to pass to the scripts.
+
+## Review Checks
+
+- Does a skill prompt have raw shell commands that could be a script? → Extract it to a script and have the skill call the script.
+- Does a repeatable action lack a codified script? → Write the script first, then update the skill to use it.

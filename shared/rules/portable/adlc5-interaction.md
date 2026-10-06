@@ -1,0 +1,18 @@
+
+# ADLC5 interaction — use Q&A form
+
+When executing **@adlc5**, **@adlc5-***, **@adlc5-plan***, or pipeline skills (**@discover**, **@prt**, **@qa**) in an ADLC5 lifecycle:
+
+1. **Structured choices** → call the **AskQuestion** tool (Cursor Q&A form).
+2. **Do not** ask the user to "reply with 1 or 2" or type yes/no in chat when options are known.
+3. **Batch** up to 2 related questions per AskQuestion call when practical.
+4. **Stage/step advance**, **preferences** (Q&A log, execution mode, interaction mode), **clarity clarification**, **clarity waive**, and **resume feature** → always AskQuestion.
+5. **Specify + Plan:** run clarity gate per [clarity-scoring.md](../../../core/guides/clarity-scoring.md) before advancing steps.
+
+Full convention: [core/guides/askquestion-convention.md](../../../core/guides/askquestion-convention.md)
+
+Canonical stages and steps: [core/sdd-model.md](../../../core/sdd-model.md)
+
+After the user selects an option, map `option.id` to canonical `state.json` and continue.
+
+**Feature names** (e.g. `visual-qa-tools`) are user-chosen kebab-case labels for `.adlc5/{feature}/` — not framework components.

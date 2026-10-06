@@ -1,0 +1,102 @@
+# ADLC5 autopilot policies (opt-in). Copy to .adlc5/{feature}/policies.yaml
+# Default HITL behavior is unchanged when this file is absent.
+
+defaults:
+  interaction_mode: hitl          # hitl | autonomous
+  execution_mode: sequential      # parallel | sequential (Implement build only)
+  verify_policy: hitl             # hitl | auto — implement-2-verify
+  integrate_policy: hitl          # hitl | auto — implement-3-integrate
+
+# Custom commands evaluated in consumer workspace (check-gates.py pr-ready)
+custom_gates: {}
+  # Shorthand map form (supported by check-gates.py):
+  # e2e_docker: pnpm test:e2e:frontend
+  # Or list form:
+  # - name: e2e_docker
+  #   command: pnpm test:e2e:frontend
+  #   cwd: frontend
+
+# Names from custom_gates that must pass for pr-ready (fail if missing/fail)
+required_gates: []
+
+# Skills required before Implement completes (compatibility field consumed by pr-ready checks)
+assure_skills_required:
+  - qa
+  - craftsmanship-code-review
+  - pr-review
+
+# Autonomous @adlc5 profile (explicit opt-in)
+autopilot:
+  endpoint: pr_ready              # pr_ready | merged | deployed — past pr_ready, @deploy's deploy-ready gate still requires human deploy_approval
+  interaction_mode: autonomous
+  execution_mode: parallel
+  verify_policy: auto
+  integrate_policy: auto
+
+  # Resume scope: null | current_step | explicit canonical step id (e.g. implement-4-qa)
+  resume_from: null
+  # Do not advance past this step without AskQuestion (e.g. implement-1-build)
+  stop_at_phase: null
+
+  kill_switch_file: .adlc5/{feature}/STOP
+  wall_clock_cap_minutes: 360
+  max_iterations: 200
+  consecutive_failure_tripwire: 3
+
+  retry_policy:
+    max_implementation_attempts: 3
+    max_rework_attempts: 3
+    transient_retry: true
+    escalate_on_spec_signal: true
+
+  hard_escalation:
+    - security_critical
+    - rework_anti_pattern
+    - scaffold_violation_no_waiver
+    - contradictory_spec
+    - clarity_below_threshold_after_clarification_attempts
+    - unapproved_verifier_waiver
+    - verification_report_out_of_sync
+
+  # Require a human sign-off before pr-ready passes: check-gates.py fails
+  # human_pr_approval until state.json clarity.history has an entry
+  # {type: pr_approval, approved_by: user}. Recommended for autonomous runs.
+  require_human_pr_approval: false
+
+  quality_gates:
+    coverage_min: 80
+    coverage_changed_lines_min: 90
+    lint_errors_max: 0
+    cyclomatic_max: 20
+
+  # Additional required custom_gate names for autopilot pr_ready (merged with top-level required_gates)
+  required_gates: []
+
+  retry_budgets:
+    implementation_per_story: 2
+    verification_per_story: 3
+    integration_total: 2
+
+# The orchestrator reads this file directly; canonical progress remains in state.json.
+
+# Execution personas (opt-in memory walls + spawn policy)
+persona_mode:
+  enabled: false
+  verifier_different_model: true    # Tester uses reasoning tier, not Coder inherit
+  fresh_subagent_per_persona: true  # Rotate host session per persona handoff
+  forbid_orchestrator_implement: true  # Orchestrator routes only; never writes product code
+
+# Discover facilitation defaults (copied into .discover/{topic}/state.json context when starting @discover)
+# Orthogonal to council_enabled. ask_only = no unsolicited suggestions.
+discover:
+  facilitation_mode: ask_only   # ask_only | collaborative
+  assumption_policy: refuse     # refuse | tagged | allow
+
+# Optional Cursor H2 scope guard (also: env ADLC5_SCOPE_GUARD=warn|enforce|off)
+# Inactive unless mode or allowed_paths is set (or ADLC5_SCOPE_GUARD is set).
+# Default mode when activated: warn (allow + agent_message). enforce = deny out-of-scope writes.
+# scope_guard:
+#   mode: warn                  # warn | enforce | off
+#   allowed_paths:
+#     - src/feature-x
+#     - tests/feature-x

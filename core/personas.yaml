@@ -1,0 +1,144 @@
+# ADLC5 execution personas — role identity, memory walls, spawn policy
+schema_version: "3.0"
+
+personas:
+  analyst:
+    display: Requirements Analyst
+    mission: Problem framing, AC, NFRs, user stories — no code or architecture
+    stages: [specify]
+    steps: [specify-0-git, specify-1-discover, specify-2-requirements, specify-3-nfr, specify-4-handoff, tasks-1-stories]
+    skills: [adlc5-specify, discover, prt]
+    memory_allow:
+      - AGENTS.md
+      - .agents/architecture.yaml
+      - .agents/boundaries.yaml
+      - .agents/commands.yaml
+      - spec-handoff.md
+      - .prt/
+      - .discover/
+      - memory/summaries/specify.md
+      - memory/INDEX.md
+      - tasks/stories.json
+      - tasks/board.md
+    memory_deny:
+      - design/
+      - tasks/code-spec/
+      - verify/
+      - .qa/
+    model_tier: balanced
+    template: templates/personas/analyst.md
+
+  architect:
+    display: System Architect
+    mission: Layers, patterns, contracts, ops, TDD code specs — no product source
+    stages: [plan]
+    steps:
+      - plan-1-engineering-architecture
+      - plan-2-engineering-patterns
+      - plan-3-engineering-algorithms
+      - plan-4-design-discovery
+      - plan-5-design-contracts
+      - plan-6-design-operations
+      - plan-7-design-critique
+      - tasks-2-code-spec
+    skills: [adlc5-plan, clean-architecture-review, design-pattern-advisor, algorithm-advisor, pbe-select-patterns]
+    memory_allow:
+      - AGENTS.md
+      - .agents/architecture.yaml
+      - .agents/boundaries.yaml
+      - .agents/commands.yaml
+      - .agent-cache/repo-index.json
+      - .agent-cache/module-map.json
+      - .agent-cache/symbols.json
+      - .agent-cache/dependency-graph.json
+      - .agent-cache/test-map.json
+      - spec-handoff.md
+      - design/
+      - memory/summaries/plan.md
+      - memory/summaries/specify.md
+      - memory/INDEX.md
+      - tasks/code-spec/
+      - tasks/stories.json
+    memory_deny:
+      - verify/
+      - .qa/
+    model_tier: reasoning
+    template: templates/personas/architect.md
+
+  coder:
+    display: Senior Coder
+    mission: TDD implementation in bounded files — reusable, maintainable code
+    stages: [implement]
+    steps: [implement-1-build]
+    skills: [adlc5-implement, build-implementer, adlc5-tdd]
+    subagents: [build-implementer]
+    memory_allow:
+      - AGENTS.md
+      - .agents/architecture.yaml
+      - .agents/boundaries.yaml
+      - .agents/commands.yaml
+      - .agent-cache/
+      - memory/context-packs/story-*.md
+      - tasks/code-spec/
+      - spec-handoff.md
+      - memory/summaries/implement.md
+      - memory/INDEX.md
+    memory_deny:
+      - verify/verification-report.md
+      - .qa/
+    model_tier: implementation
+    template: templates/personas/coder.md
+
+  tester:
+    display: QA / Verification Engineer
+    mission: Adversarial validation, security, PR readiness — read-only on product code
+    stages: [implement]
+    steps:
+      - implement-2-verify
+      - implement-3-integrate
+      - implement-4-qa
+      - implement-5-pr
+    skills: [adlc5-implement, assure-verifier, adlc5-assure-reworker, qa, pr-reviewer]
+    subagents: [assure-verifier, adlc5-assure-reworker]
+    memory_allow:
+      - AGENTS.md
+      - .agents/architecture.yaml
+      - .agents/boundaries.yaml
+      - .agents/commands.yaml
+      - .agent-cache/
+      - memory/context-packs/verify-*.md
+      - verify/
+      - .qa/
+      - spec-handoff.md
+      - tasks/code-spec/
+      - memory/summaries/implement.md
+      - memory/INDEX.md
+    memory_deny: []
+    read_only_product_code: true
+    model_tier: reasoning
+    template: templates/personas/tester.md
+
+# Map step ID → active persona (for routing and pilot)
+step_persona:
+  specify-0-git: analyst
+  specify-1-discover: analyst
+  specify-2-requirements: analyst
+  specify-3-nfr: analyst
+  specify-4-handoff: analyst
+  plan-1-engineering-architecture: architect
+  plan-2-engineering-patterns: architect
+  plan-3-engineering-algorithms: architect
+  plan-4-design-discovery: architect
+  plan-5-design-contracts: architect
+  plan-6-design-operations: architect
+  plan-7-design-critique: architect
+  tasks-1-stories: analyst
+  tasks-2-code-spec: architect
+  implement-1-build: coder
+  implement-2-verify: tester
+  implement-3-integrate: tester
+  implement-4-qa: tester
+  implement-5-pr: tester
+
+# Persona handoff order
+persona_order: [analyst, architect, analyst, architect, coder, tester]

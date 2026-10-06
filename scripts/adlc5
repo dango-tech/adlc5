@@ -1,0 +1,628 @@
+#!/usr/bin/env python3
+"""ADLC5 kernel façade — deterministic ops via existing scripts.
+
+Usage:
+  ./scripts/adlc5 [--version] [-h|--help]
+  ./scripts/adlc5 version
+  ./scripts/adlc5 gate --feature NAME [--gate GATE] [--workspace DIR] ...
+  ./scripts/adlc5 pack --feature NAME --story-id ID [--workspace DIR] [--persona coder|tester]
+  ./scripts/adlc5 clarity <file_path> [--step-id ID]
+  ./scripts/adlc5 phase --feature NAME [--workspace DIR] [--target PHASE_ID]
+  ./scripts/adlc5 pilot --feature NAME [--workspace DIR] [--record-result pass|fail]
+  ./scripts/adlc5 state get --feature NAME [--workspace DIR]
+  ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
+  ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]
+  ./scripts/adlc5 repo-spec init|reconcile|validate [--workspace DIR]
+  ./scripts/adlc5 repo-index build|refresh|check [--workspace DIR]
+  ./scripts/adlc5 resolve-model --tier TIER [--platform NAME] ...
+  ./scripts/adlc5 cleanup-features --workspace DIR ...
+  ./scripts/adlc5 feature summarize --feature-dir PATH [--workspace DIR] [--dry-run]
+  ./scripts/adlc5 patterns lookup --tags TAG[,TAG...] [--group GROUP] ...
+
+Stdout: pass-through from underlying tools (JSON where those tools emit JSON).
+Exit: pass-through from underlying tools; usage/validation errors → 2.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS = ROOT / "scripts"
+VERSION_FILE = ROOT / "core" / "VERSION"
+
+sys.path.insert(0, str(SCRIPTS))
+from lib.state_v2 import (  # noqa: E402
+    feature_state_path,
+    load_feature_state,
+    set_feature_state,
+)
+
+COMMANDS = {
+    "gate": "Evaluate delivery/lifecycle gates (→ check-gates.py)",
+    "pack": "Generate story context pack (→ generate-pack.sh)",
+    "clarity": "Score a spec/design file (→ clarity-score.py)",
+    "phase": "Suggest/validate phase advance (→ advance-phase.sh; no apply — use state set)",
+    "pilot": "One autopilot iteration (→ pilot-autopilot.sh)",
+    "state": "Read/write feature state.json (set is schema-validated)",
+    "anchors": "Lock/check acceptance anchors (lock applies the validated state patch)",
+    "repo-spec": "Initialize/validate tracked repository constitution files",
+    "repo-index": "Build/refresh/check generated repository intelligence",
+    "resolve-model": "Resolve tier → host model ID (→ resolve-model.sh)",
+    "cleanup-features": "Dry-run/archive/delete aged .adlc5/{feature}/ (default: dry-run archive → _archive/)",
+    "feature": "Feature helpers (summarize → OKF FEATURE.md)",
+    "usage": "Record/summarize/fleet-roll-up model + token usage (→ memory/usage-ledger.py)",
+    "patterns": "OKF catalog lookup — ids/paths only (→ patterns/lookup.sh)",
+    "spec-lint": "Lint code-spec YAML frontmatter (→ tasks/spec-lint.py)",
+    "verify-story": "Deterministic per-story pre-check before @assure-verifier (→ verify-story.py)",
+    "version": "Print ADLC5 semver from core/VERSION",
+}
+
+
+def read_version() -> str:
+    if VERSION_FILE.is_file():
+        return VERSION_FILE.read_text(encoding="utf-8").strip()
+    return "0.0.0"
+
+
+def usage(stream=sys.stdout) -> None:
+    print(
+        f"""adlc5 {read_version()} — fat kernel façade
+
+Usage:
+  ./scripts/adlc5 [--version] [-h|--help]
+  ./scripts/adlc5 <command> [args...]
+
+Commands:
+  gate           {COMMANDS['gate']}
+  pack           {COMMANDS['pack']}
+  clarity        {COMMANDS['clarity']}
+  phase          {COMMANDS['phase']}
+  pilot          {COMMANDS['pilot']}
+  state get|set  {COMMANDS['state']}
+  anchors lock|check {COMMANDS['anchors']}
+  repo-spec init|reconcile|validate {COMMANDS['repo-spec']}
+  repo-index build|refresh|check {COMMANDS['repo-index']}
+  resolve-model  {COMMANDS['resolve-model']}
+  cleanup-features  {COMMANDS['cleanup-features']}
+  feature summarize {COMMANDS['feature']}
+  usage record|summary {COMMANDS['usage']}
+  patterns lookup  {COMMANDS['patterns']}
+  spec-lint      {COMMANDS['spec-lint']}
+  verify-story   {COMMANDS['verify-story']}
+  version        {COMMANDS['version']}
+
+Examples:
+  ./scripts/adlc5 gate --feature NAME --gate pr-ready --workspace .
+  ./scripts/adlc5 pack --feature NAME --story-id US-1 --workspace .
+  ./scripts/adlc5 clarity path/to/spec.md --step-id specify
+  ./scripts/adlc5 phase --feature NAME --workspace .
+  ./scripts/adlc5 pilot --feature NAME --workspace .
+  ./scripts/adlc5 state get --feature NAME --workspace .
+  ./scripts/adlc5 state set --feature NAME --workspace . --patch '{{"current_step":"specify-1-scope"}}'
+  ./scripts/adlc5 anchors lock --feature NAME --workspace .
+  ./scripts/adlc5 repo-spec init --workspace .
+  ./scripts/adlc5 repo-spec reconcile --workspace .
+  ./scripts/adlc5 repo-index refresh --workspace .
+  ./scripts/adlc5 resolve-model --tier balanced --platform cursor
+  ./scripts/adlc5 cleanup-features --workspace . --status complete --older-than 90 --dry-run
+  ./scripts/adlc5 cleanup-features --workspace . --status complete --older-than 90 --archive
+  ./scripts/adlc5 feature summarize --feature-dir .adlc5/_archive/NAME-YYYYMMDD --workspace .
+  ./scripts/adlc5 usage record --feature NAME --workspace . --model-id claude-sonnet-5 \\
+    --input-tokens 1000 --output-tokens 200 --cache-read-tokens 900
+  ./scripts/adlc5 usage summary --feature NAME --workspace . --format markdown
+  ./scripts/adlc5 usage fleet --workspace . --format markdown
+  ./scripts/adlc5 patterns lookup --tags latency,extensibility --limit 3
+  ./scripts/adlc5 spec-lint --feature NAME --workspace .
+  ./scripts/adlc5 verify-story --feature NAME --story-id US-1 --workspace .
+  ./scripts/adlc5 version
+
+Underlying tools keep their own flags; unknown args are forwarded.
+Phase apply: advance-phase.sh is suggest-only — apply via state set after HITL.
+See: docs/ADLC5-kernel.md
+""",
+        file=stream,
+        end="",
+    )
+
+
+def run(cmd: list[str], *, env: dict | None = None) -> int:
+    proc = subprocess.run(cmd, cwd=str(ROOT), env=env or os.environ.copy())
+    return int(proc.returncode)
+
+
+def require_exec(script: Path) -> int | None:
+    if not script.is_file():
+        print(f"ERROR: missing: {script}", file=sys.stderr)
+        return 2
+    if not os.access(script, os.X_OK) and script.suffix == ".sh":
+        print(f"ERROR: not executable: {script}", file=sys.stderr)
+        return 2
+    return None
+
+
+def cmd_gate(args: list[str]) -> int:
+    script = SCRIPTS / "check-gates.py"
+    return run([sys.executable, str(script), *args])
+
+
+def cmd_spec_lint(args: list[str]) -> int:
+    script = SCRIPTS / "tasks" / "spec-lint.py"
+    return run([sys.executable, str(script), *args])
+
+
+def cmd_verify_story(args: list[str]) -> int:
+    script = SCRIPTS / "verify-story.py"
+    return run([sys.executable, str(script), *args])
+
+
+def cmd_pack(args: list[str]) -> int:
+    script = ROOT / "scripts" / "memory" / "generate-pack.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *args])
+
+
+def cmd_clarity(args: list[str]) -> int:
+    if not args or args[0] in ("-h", "--help"):
+        print(
+            "Usage: ./scripts/adlc5 clarity <file_path> [--step-id ID]\n"
+            "Stdout: JSON clarity report",
+            file=sys.stderr if not args else sys.stdout,
+        )
+        return 0 if args and args[0] in ("-h", "--help") else 2
+    script = SCRIPTS / "clarity-score.py"
+    return run([sys.executable, str(script), *args])
+
+
+def cmd_phase(args: list[str]) -> int:
+    if args and args[0] == "apply":
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "phase_apply_unavailable",
+                    "message": (
+                        "advance-phase.sh is suggest-only (no safe mutate path). "
+                        "Confirm with ./scripts/adlc5 phase, then apply via "
+                        "./scripts/adlc5 state set --patch '{...}'."
+                    ),
+                }
+            )
+        )
+        return 2
+    script = SCRIPTS / "advance-phase.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *args])
+
+
+def cmd_pilot(args: list[str]) -> int:
+    script = ROOT / "scripts" / "pilot-autopilot.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *args])
+
+
+def cmd_resolve_model(args: list[str]) -> int:
+    script = ROOT / "scripts" / "resolve-model.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *args])
+
+
+def _state_help(stream=sys.stdout) -> None:
+    print(
+        """Usage:
+  ./scripts/adlc5 state get --feature NAME [--workspace DIR]
+  ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
+
+state set merges --patch/--file into existing state.json (default), validates against
+core/state-schema.json, then atomically writes. Invalid patches leave state untouched.
+--replace requires a full document (still schema-validated; feature/schema_version locked).
+""",
+        file=stream,
+        end="",
+    )
+
+
+def cmd_state_get(rest: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="adlc5 state get", add_help=True)
+    parser.add_argument("--feature", required=True)
+    parser.add_argument("--workspace", default=".")
+    try:
+        ns = parser.parse_args(rest)
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 2
+        return code if code else 0
+
+    workspace = Path(ns.workspace).resolve()
+    path = feature_state_path(workspace, ns.feature)
+
+    def path_display() -> str:
+        try:
+            return str(path.relative_to(workspace))
+        except ValueError:
+            return str(path)
+
+    data = load_feature_state(workspace, ns.feature)
+    if data is None:
+        err = "state_not_found" if not path.is_file() else "invalid_json"
+        print(json.dumps({"status": "error", "error": err, "path": path_display()}))
+        return 2
+
+    print(json.dumps(data, indent=2))
+    return 0
+
+
+def cmd_state_set(rest: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="adlc5 state set", add_help=True)
+    parser.add_argument("--feature", required=True)
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--patch", default=None, help="JSON object merged into existing state")
+    parser.add_argument("--file", dest="file_path", default=None, help="JSON file (patch or replace)")
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace entire state with --file/--patch document (not merge)",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Validate only; do not write")
+    try:
+        ns = parser.parse_args(rest)
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 2
+        return code if code else 0
+
+    if (ns.patch is None) == (ns.file_path is None):
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "usage",
+                    "message": "provide exactly one of --patch or --file",
+                }
+            )
+        )
+        return 2
+
+    try:
+        if ns.file_path is not None:
+            raw = Path(ns.file_path).read_text(encoding="utf-8")
+        else:
+            raw = ns.patch
+        payload = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(json.dumps({"status": "error", "error": "invalid_json", "message": str(exc)}))
+        return 2
+
+    if not isinstance(payload, dict):
+        print(json.dumps({"status": "error", "error": "invalid_payload", "message": "JSON must be an object"}))
+        return 2
+
+    workspace = Path(ns.workspace).resolve()
+    if ns.replace:
+        result = set_feature_state(
+            workspace, ns.feature, replace=payload, dry_run=ns.dry_run
+        )
+    else:
+        result = set_feature_state(
+            workspace, ns.feature, patch=payload, dry_run=ns.dry_run
+        )
+
+    # Keep stdout lean on success: status/path (+ dry_run); include errors on failure
+    if result.get("status") == "ok":
+        out = {"status": "ok", "path": result["path"]}
+        if result.get("dry_run"):
+            out["dry_run"] = True
+        print(json.dumps(out, indent=2))
+        return 0
+
+    print(json.dumps(result, indent=2))
+    return 2
+
+
+def cmd_state(args: list[str]) -> int:
+    if not args or args[0] in ("-h", "--help"):
+        _state_help(sys.stdout if args else sys.stderr)
+        return 0 if args and args[0] in ("-h", "--help") else 2
+
+    sub, rest = args[0], args[1:]
+    if sub == "get":
+        return cmd_state_get(rest)
+    if sub == "set":
+        return cmd_state_set(rest)
+    print(f"ERROR: unknown state subcommand: {sub}", file=sys.stderr)
+    _state_help(sys.stderr)
+    return 2
+
+
+def read_anchor_ref(workspace: Path, feature: str) -> str | None:
+    proc = subprocess.run(
+        ["git", "-C", str(workspace), "rev-parse", "--verify", "--quiet", f"refs/adlc5/anchors/{feature}"],
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def restore_anchor_trust(
+    workspace: Path,
+    feature: str,
+    manifest: Path,
+    previous_manifest: bytes | None,
+    previous_ref: str | None,
+) -> None:
+    if previous_manifest is None:
+        manifest.unlink(missing_ok=True)
+    else:
+        manifest.write_bytes(previous_manifest)
+    ref = f"refs/adlc5/anchors/{feature}"
+    command = ["git", "-C", str(workspace), "update-ref", ref, previous_ref] if previous_ref else [
+        "git", "-C", str(workspace), "update-ref", "-d", ref
+    ]
+    subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+def cmd_anchors(args: list[str]) -> int:
+    if not args or args[0] not in ("lock", "check"):
+        print("Usage: ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]", file=sys.stderr)
+        return 2
+
+    action, rest = args[0], args[1:]
+    checker = SCRIPTS / "tasks" / "check-anchors.py"
+    if action == "check":
+        return run([sys.executable, str(checker), action, *rest])
+
+    parser = argparse.ArgumentParser(prog="adlc5 anchors lock", add_help=False)
+    parser.add_argument("--feature", required=True)
+    parser.add_argument("--workspace", default=".")
+    try:
+        ns, unknown = parser.parse_known_args(rest)
+    except SystemExit:
+        return 2
+    if unknown:
+        print(f"ERROR: unknown arguments: {' '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    workspace = Path(ns.workspace).resolve()
+    manifest = workspace / ".adlc5" / ns.feature / "acceptance-lock.json"
+    previous_manifest = manifest.read_bytes() if manifest.is_file() else None
+    previous_ref = read_anchor_ref(workspace, ns.feature)
+    proc = subprocess.run(
+        [sys.executable, str(checker), "lock", "--feature", ns.feature, "--workspace", str(workspace)],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(proc.stdout, end="")
+        return int(proc.returncode)
+    try:
+        report = json.loads(proc.stdout)
+        result = set_feature_state(workspace, ns.feature, patch=report["patch"])
+    except Exception as exc:
+        result = {"status": "error", "error": "invalid_anchor_output", "message": str(exc)}
+    if result.get("status") != "ok":
+        restore_anchor_trust(workspace, ns.feature, manifest, previous_manifest, previous_ref)
+        print(json.dumps(result, indent=2))
+        return 2
+    report["applied"] = True
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def cmd_cleanup_features(args: list[str]) -> int:
+    script = SCRIPTS / "cleanup-features.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *args])
+
+
+def cmd_repository_context(area: str, args: list[str]) -> int:
+    allowed = {
+        "repo-spec": {"init", "reconcile", "validate"},
+        "repo-index": {"build", "refresh", "check"},
+    }
+    if not args or args[0] in ("-h", "--help"):
+        actions = "|".join(sorted(allowed[area]))
+        print(f"Usage: ./scripts/adlc5 {area} {actions} [--workspace DIR]")
+        return 0 if args else 2
+    if args[0] not in allowed[area]:
+        print(f"ERROR: unknown {area} action: {args[0]}", file=sys.stderr)
+        return 2
+    script = SCRIPTS / "repository-context.py"
+    if not script.is_file():
+        print(f"ERROR: missing: {script}", file=sys.stderr)
+        return 2
+    return run([sys.executable, str(script), area, *args])
+
+
+def cmd_repo_spec(args: list[str]) -> int:
+    return cmd_repository_context("repo-spec", args)
+
+
+def cmd_repo_index(args: list[str]) -> int:
+    return cmd_repository_context("repo-index", args)
+
+
+def _feature_help(stream=sys.stdout) -> None:
+    print(
+        """Usage:
+  ./scripts/adlc5 feature summarize --feature-dir PATH [--workspace DIR] [--dry-run]
+
+Writes OKF v0.2 Feature card (FEATURE.md) from state.json + artifact heads.
+Also upserts .adlc5/_archive/index.md when path is under _archive/, and mirrors
+to wiki/concepts/feature-{name}.md when wiki/ exists.
+""",
+        file=stream,
+        end="",
+    )
+
+
+def cmd_feature(args: list[str]) -> int:
+    if not args or args[0] in ("-h", "--help"):
+        _feature_help(sys.stdout if args else sys.stderr)
+        return 0 if args and args[0] in ("-h", "--help") else 2
+
+    sub, rest = args[0], args[1:]
+    if sub != "summarize":
+        print(f"ERROR: unknown feature subcommand: {sub}", file=sys.stderr)
+        _feature_help(sys.stderr)
+        return 2
+
+    script = SCRIPTS / "memory" / "summarize-feature-okf.py"
+    if not script.is_file():
+        print(f"ERROR: missing: {script}", file=sys.stderr)
+        return 2
+    return run([sys.executable, str(script), *rest])
+
+
+def _usage_help(stream=sys.stdout) -> None:
+    print(
+        """Usage:
+  ./scripts/adlc5 usage record --feature NAME [--workspace DIR] --model-id ID
+      [--platform NAME] [--tier TIER] [--stage STAGE] [--step STEP]
+      [--source self_reported|transcript|api]
+      [--input-tokens N] [--output-tokens N] [--thinking-tokens N]
+      [--cache-creation-tokens N] [--cache-read-tokens N]
+      [--cache-5m-tokens N] [--cache-1h-tokens N] [--total-tokens N]
+      [--extra-json JSON] [--note TEXT]
+  ./scripts/adlc5 usage summary --feature NAME [--workspace DIR] [--format json|markdown]
+  ./scripts/adlc5 usage summary --feature-dir PATH [--format json|markdown]
+  ./scripts/adlc5 usage fleet --workspace DIR [--active-only] [--format json|markdown]
+  ./scripts/adlc5 usage cursor sync [--workspace DIR] [--force]
+  ./scripts/adlc5 usage cursor sync-all [--force]
+  ./scripts/adlc5 usage cursor sync-cloud [--workspace DIR] [--force]
+  ./scripts/adlc5 usage cursor sync-cloud-all [--force]
+  ./scripts/adlc5 usage cursor cloud --feature NAME --agent-id ID --model-id ID [--run-id ID]
+
+`sync`/`sync-all` reconcile IDE Composer sessions via the Cursor Admin API
+(`/teams/filtered-usage-events`) — requires a Team or Org Admin API key, not
+available on every account. `sync-cloud`/`sync-cloud-all` reconcile Cloud
+Agent runs via `/v1/agents` + `/v1/agents/{id}/usage` — works with a personal
+User API key. Bind an agent the same way as an IDE conversation:
+`usage cursor bind --feature NAME --conversation-id bc-...`.
+
+Appends model + token usage to .adlc5/{feature}/memory/usage-ledger.jsonl (best-effort,
+self-reported by the calling agent/skill — not a billing reconciliation). stage/step
+default to state.json current_stage/current_step when omitted. Carried into the archive
+by cleanup-features.sh (mv moves memory/); embedded as a Usage section in FEATURE.md
+and written as usage-summary.json when `adlc5 feature summarize` / `--archive` runs.
+
+`fleet` rolls totals up across every feature under a workspace's .adlc5/ — active
+and archived (--active-only excludes .adlc5/_archive/) — with by_model/by_stage/
+by_feature breakdowns, for a workspace-wide token/cost view `summary` can't give
+(it's scoped to one feature).
+""",
+        file=stream,
+        end="",
+    )
+
+
+def cmd_usage(args: list[str]) -> int:
+    if not args or args[0] in ("-h", "--help"):
+        _usage_help(sys.stdout if args else sys.stderr)
+        return 0 if args and args[0] in ("-h", "--help") else 2
+
+    sub, rest = args[0], args[1:]
+    if sub == "cursor":
+        script = SCRIPTS / "cursor-usage.py"
+        if not script.is_file():
+            print(f"ERROR: missing: {script}", file=sys.stderr)
+            return 2
+        return run([sys.executable, str(script), *rest])
+
+    if sub not in ("record", "summary", "fleet"):
+        print(f"ERROR: unknown usage subcommand: {sub}", file=sys.stderr)
+        _usage_help(sys.stderr)
+        return 2
+
+    script = SCRIPTS / "memory" / "usage-ledger.py"
+    if not script.is_file():
+        print(f"ERROR: missing: {script}", file=sys.stderr)
+        return 2
+    return run([sys.executable, str(script), sub, *rest])
+
+
+def _patterns_help(stream=sys.stdout) -> None:
+    print(
+        """Usage:
+  ./scripts/adlc5 patterns lookup --tags TAG[,TAG...] [--group GROUP] [--limit N] [--frontmatter]
+  ./scripts/adlc5 patterns lookup --id gof/strategy [--frontmatter]
+  ./scripts/patterns/lookup.sh ...   # same tool
+
+Prints matching concept id + path only (optional short frontmatter). Never dumps card bodies.
+""",
+        file=stream,
+        end="",
+    )
+
+
+def cmd_patterns(args: list[str]) -> int:
+    if not args or args[0] in ("-h", "--help"):
+        _patterns_help(sys.stdout if args else sys.stderr)
+        return 0 if args and args[0] in ("-h", "--help") else 2
+
+    sub, rest = args[0], args[1:]
+    if sub != "lookup":
+        print(f"ERROR: unknown patterns subcommand: {sub}", file=sys.stderr)
+        _patterns_help(sys.stderr)
+        return 2
+
+    script = SCRIPTS / "patterns" / "lookup.sh"
+    err = require_exec(script)
+    if err is not None:
+        return err
+    return run(["bash", str(script), *rest])
+
+
+def cmd_version(_args: list[str]) -> int:
+    print(f"adlc5 {read_version()}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        usage()
+        return 0
+    if argv[0] in ("--version", "-V"):
+        return cmd_version([])
+
+    command, rest = argv[0], argv[1:]
+    if command not in COMMANDS:
+        print(f"ERROR: unknown command: {command}", file=sys.stderr)
+        usage(sys.stderr)
+        return 2
+
+    dispatch = {
+        "gate": cmd_gate,
+        "pack": cmd_pack,
+        "clarity": cmd_clarity,
+        "phase": cmd_phase,
+        "pilot": cmd_pilot,
+        "state": cmd_state,
+        "anchors": cmd_anchors,
+        "repo-spec": cmd_repo_spec,
+        "repo-index": cmd_repo_index,
+        "resolve-model": cmd_resolve_model,
+        "cleanup-features": cmd_cleanup_features,
+        "feature": cmd_feature,
+        "usage": cmd_usage,
+        "patterns": cmd_patterns,
+        "spec-lint": cmd_spec_lint,
+        "verify-story": cmd_verify_story,
+        "version": cmd_version,
+    }
+    return dispatch[command](rest)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

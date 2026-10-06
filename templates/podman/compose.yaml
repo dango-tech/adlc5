@@ -1,0 +1,16 @@
+# Podman Compose — local dev + smoke service
+services:
+  app:
+    build:
+      context: ../../..
+      dockerfile: templates/podman/Containerfile
+    volumes:
+      - ../../..:/app:Z
+    working_dir: /app
+
+  smoke:
+    build:
+      context: ../../..
+      dockerfile: templates/podman/Containerfile
+    working_dir: /app
+    command: ["python3", "-c", "print('podman smoke ok')"]

@@ -1,0 +1,32 @@
+---
+description: Slim Clean Code pointer — names, DRY, fail fast; detail in R3 and docs/playbook.md
+alwaysApply: true
+---
+
+# Clean Code (slim)
+
+Tactical depth is in **R3** (`cc-functions-and-tests.mdc`) and `shared/docs/playbook.md` Part II. Do not duplicate R3 here.
+
+## Self-documenting code
+
+- **Meaningful names** — Intention-revealing; one word per concept; searchable
+- **Small, focused units** — Functions and classes do one thing (see R3)
+- **Express intent** — Code readable without narrating comments
+
+## Comment policy
+
+- **Avoid** comments that restate what the code does
+- **Use** comments for *why*, business rules, TODO/FIXME with ticket refs, workarounds with issue links
+
+## DRY and fail fast
+
+- Extract duplication; constants/enums over magic values
+- Validate preconditions early; reduce nesting with early returns
+
+## AI-generated noise
+
+See `ai-slop-cleanup.mdc` for high-confidence removals vs intentional style.
+
+## Review and smells
+
+Cite G/F/N/T heuristic IDs in review — full tables in R3 and `shared/docs/playbook.md` Appendix G.

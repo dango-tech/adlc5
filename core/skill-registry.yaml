@@ -1,0 +1,110 @@
+# ADLC5 invokable skill registry (~12 core + aux)
+schema_version: "3.0"
+framework_version: "4.1.0"
+
+personas_registry: "core/personas.yaml"
+
+core:
+  - id: adlc5
+    invoke: "@adlc5"
+    path: skills/adlc5/SKILL.md
+    role: Navigator, stage router, autopilot loop
+    model_tier: balanced
+
+  - id: adlc5-specify
+    invoke: "@adlc5-specify"
+    path: skills/specify/SKILL.md
+    stage: specify
+    model_tier: balanced
+
+  - id: adlc5-plan
+    invoke: "@adlc5-plan"
+    path: skills/plan/SKILL.md
+    stage: plan
+    model_tier: reasoning
+
+  - id: adlc5-tasks
+    invoke: "@adlc5-tasks"
+    path: skills/tasks/SKILL.md
+    stage: tasks
+    model_tier: balanced
+
+  - id: adlc5-implement
+    invoke: "@adlc5-implement"
+    path: skills/implement/SKILL.md
+    stage: implement
+    model_tier: implementation
+
+auxiliary:
+  - id: discover
+    invoke: "@discover"
+    path: skills/discover/SKILL.md
+    stage: specify
+
+  - id: prt
+    invoke: "@prt"
+    path: skills/prt/SKILL.md
+    stage: specify
+
+  - id: autoresearch
+    invoke: "@autoresearch"
+    path: skills/autoresearch/SKILL.md
+    stage: plan
+
+  - id: build-implementer
+    invoke: "@build-implementer"
+    path: skills/build-implementer/SKILL.md
+    subagent: true
+
+  - id: assure-verifier
+    invoke: "@assure-verifier"
+    path: skills/assure-verifier/SKILL.md
+    subagent: true
+
+  - id: adlc5-assure-reworker
+    invoke: "@adlc5-assure-reworker"
+    path: skills/adlc5-assure-reworker/SKILL.md
+    subagent: true
+
+  - id: qa
+    invoke: "@qa"
+    path: skills/qa/SKILL.md
+    stage: implement
+
+  - id: pr-reviewer
+    invoke: "@pr-reviewer"
+    path: skills/pr-reviewer/SKILL.md
+    stage: implement
+
+  - id: project-wiki
+    invoke: "@adlc5-project-wiki"
+    path: skills/project-wiki/SKILL.md
+
+soul:
+  - id: adlc5-soul
+    invoke: "@adlc5-soul"
+    path: skills/adlc5-soul/SKILL.md
+    role: Fifth pillar — graph/evidence-aware five-guard reasoning discipline, cross-cutting (all stages)
+    rule: shared/rules/portable/adlc5-soul.md
+    model_tier: reasoning
+
+craftsmanship:
+  - id: clean-architecture-review
+    invoke: "@clean-architecture-review"
+    path: skills/clean-architecture-review/SKILL.md
+    stage: plan
+
+  - id: design-pattern-advisor
+    invoke: "@design-pattern-advisor"
+    path: skills/design-pattern-advisor/SKILL.md
+    stage: plan
+
+  - id: algorithm-advisor
+    invoke: "@algorithm-advisor"
+    path: skills/algorithm-advisor/SKILL.md
+    stage: plan
+
+  - id: craftsmanship-code-review
+    invoke: "@craftsmanship-code-review"
+    path: skills/craftsmanship-code-review/SKILL.md
+    stage: implement

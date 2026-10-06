@@ -1,0 +1,29 @@
+
+# PBE Core Values (R0)
+
+Patterns are **engineered assets** (specification + implementation + lifecycle), not ad hoc copy-paste.
+
+## Principles
+
+- **Patterns as assets** — Treat proven solutions as reusable artifacts with context, variability points, and governance. See `shared/docs/patterns/` when cataloged.
+- **Rule of Three** — Same problem/solution in three unique situations → candidate pattern. Document evidence before cataloging.
+- **Business impact before catalog** — Add to org catalog only when recurrence and ROI justify cost. Use community GoF patterns ad hoc until then.
+- **Domain-agnostic** — Pick patterns and algorithms for the **business use case** and NFRs, not for a fixed platform.
+
+## Practices
+
+- Identify pattern opportunities **each iteration**; ship piecemeal (80% value early).
+- Patterns are **alive** — version, review, and refine from feedback.
+- Focus on **consumability** — findable names, clear specs, tested implementations.
+- **Pattern density** — integrate patterns in combination; avoid "patterns everywhere" without impact.
+
+## Antipatterns to avoid
+
+| Antipattern | Mitigation |
+|-------------|------------|
+| Perfect Pattern | Piecemeal creation |
+| Get 'em next time | Build patterns during the current project |
+| Patterns everywhere | Business impact + density discipline |
+| Waterfall pattern use | Identify each iteration |
+
+**Reference:** `shared/docs/playbook.md` Part I (PBE).

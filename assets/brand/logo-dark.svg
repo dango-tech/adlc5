@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260" role="img" aria-label="ADLC5">
+  <rect x="40" y="40" width="230" height="200" rx="14" fill="#101317" stroke="rgba(255,255,255,0.08)"/>
+  <line x1="40" y1="78" x2="270" y2="78" stroke="rgba(255,255,255,0.06)"/>
+  <circle cx="62" cy="59" r="4.5" fill="rgba(255,255,255,0.16)"/>
+  <circle cx="80" cy="59" r="4.5" fill="rgba(255,255,255,0.16)"/>
+  <circle cx="98" cy="59" r="4.5" fill="rgba(255,255,255,0.16)"/>
+  <text x="58" y="165" font-family="SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="21" font-weight="500">
+    <tspan fill="rgba(255,255,255,0.32)">$</tspan><tspan fill="#34d399"> adlc5</tspan>
+  </text>
+  <rect x="160" y="149" width="9" height="20" fill="#34d399"/>
+  <text x="310" y="158" font-family="SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="58" font-weight="800" letter-spacing="-1.5" fill="#f4f4f5">ADLC5</text>
+  <text x="310" y="180" font-family="SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="600" letter-spacing="3" fill="rgba(244,244,245,0.5)">AI DEVELOPMENT LIFECYCLE</text>
+  <text x="310" y="202" font-family="SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="12" letter-spacing="1" fill="rgba(244,244,245,0.32)">specify &#8594; plan &#8594; tasks &#8594; implement</text>
+</svg>

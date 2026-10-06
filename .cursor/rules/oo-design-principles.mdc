@@ -1,0 +1,40 @@
+---
+description: HFDP OO design — seven principles, GoF pattern selection, composition over inheritance, program to interfaces
+alwaysApply: false
+---
+
+# OO Design Principles (R4)
+
+Apply when **structuring code** for recurring design problems. Principles first; patterns second.
+
+## Seven principles (HFDP)
+
+1. **Encapsulate what varies**
+2. **Favor composition over inheritance**
+3. **Program to an interface, not an implementation**
+4. **Strive for loosely coupled designs**
+5. **Open for extension, closed for modification**
+6. **Only talk to your friends** (Law of Demeter)
+7. **Single responsibility**
+
+## Pattern selection
+
+| If the problem is… | Consider… |
+|--------------------|-----------|
+| Many algorithms for same job | Strategy (pair with R5 for which algorithm) |
+| One-to-many state notification | Observer |
+| Add features at runtime | Decorator |
+| Hide complex subsystem | Facade |
+| Messy object creation | Factory / Builder |
+| Tree structures | Composite |
+| Mode-dependent behavior | State |
+
+**GoF quick reference:** Strategy, Observer, Decorator, Factory Method, Abstract Factory, Singleton (use sparingly), Command, Adapter, Facade, Template Method, Iterator, Composite, State, Proxy.
+
+Full table with confusion pairs: `shared/docs/playbook.md` Part IV §IV.3.
+
+## Catalog discipline
+
+GoF patterns are community specifications. Add to `shared/docs/patterns/` only when Rule of Three + ROI apply (R0).
+
+**Reference:** `shared/docs/playbook.md` Part IV (Head First Design Patterns).

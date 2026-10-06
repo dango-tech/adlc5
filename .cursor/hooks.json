@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": ".cursor/hooks/secret-scan.sh",
+        "matcher": "UserPromptSubmit"
+      },
+      {
+        "command": ".cursor/hooks/cursor-usage.sh before-submit",
+        "matcher": "UserPromptSubmit"
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/cursor-usage.sh session-start"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": ".cursor/hooks/cursor-usage.sh session-end"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": ".cursor/hooks/scope-guard.sh"
+      },
+      {
+        "command": ".cursor/hooks/cursor-usage.sh pre-tool"
+      },
+      {
+        "command": ".cursor/hooks/engagement-gate.sh"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/lint-hint.sh"
+      }
+    ]
+  }
+}

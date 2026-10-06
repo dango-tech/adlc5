@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "adlc5": {
+      "command": "bash",
+      "args": [".cursor-plugin/run-mcp.sh"]
+    }
+  }
+}

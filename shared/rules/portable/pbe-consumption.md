@@ -1,0 +1,26 @@
+
+# PBE Consumption (R1)
+
+Apply when **specifying, designing, or selecting** patterns for a feature.
+
+## Selection order
+
+1. **Large-scope first** — Architecture patterns (layers, boundaries) before design patterns before idioms.
+2. **Requirements-driven** — Match patterns to functional requirements and NFRs via metadata; requirements ↔ patterns, not pattern-first shopping.
+3. **Pattern density** — Prefer tight integration of complementary patterns over isolated Singleton counting.
+
+## During design and review
+
+- **Communicate with pattern names** — Use shared vocabulary in PRs, specs, and reviews (e.g. Strategy, Repository, Observer).
+- **Refactor with patterns** — Patterns describe the target state; refactor stepwise toward them.
+- **Use catalog when available** — Search `shared/docs/patterns/` before inventing; reverse-engineer legacy via pattern vocabulary.
+
+## Cross-links
+
+| Consumption guideline | See also |
+|-----------------------|----------|
+| Large-scope first | R2 `clean-architecture.mdc` |
+| Design patterns | R4 `oo-design-principles.mdc` |
+| Scale-sensitive patterns | R5 `algorithm-complexity.mdc` |
+
+**Reference:** `shared/docs/playbook.md` Part I §I.6 (Consumption guidelines).

@@ -1,0 +1,16 @@
+config.yaml
+.cursor/hooks/state/*.log
+.cursor/hooks/state/continual-learning.json
+.cursor/hooks/state/continual-learning-index.json
+.adlc5/
+.adlc5-smoke-persona/
+dogfood/fixtures/smoke-persona/.adlc5/
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.env
+*.pem
+credentials.json
+__pycache__/
+*.pyc

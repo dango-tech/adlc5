@@ -1,0 +1,64 @@
+# ADLC5 — model pricing snapshot for usage-ledger cost estimates (lever 9)
+#
+# Consumed by scripts/lib/model_prices.py, which usage-ledger.py's
+# `summary`/`fleet` commands use to attach a self-reported cost_usd to each
+# token bucket. This is a periodically-refreshed snapshot, not a live
+# billing API — check `last_verified` before trusting a number for anything
+# beyond relative comparison across stages/models.
+#
+# Update this file (and last_verified) whenever pricing changes; a model_id
+# missing here reports cost_usd: null with the model listed under
+# unpriced_models instead of silently defaulting to $0.
+#
+# Prices are USD per 1,000,000 tokens (MTok), first-party Anthropic API list
+# pricing. model_id must match the exact strings used in
+# platform_profiles/model_profiles (core/guides/model-matrix.md,
+# config.example.yaml) — a host-specific option suffix such as
+# "[reasoning=extra-high]" or "[thinking=true,...]" is stripped before
+# lookup, so tag it on freely in config without breaking pricing.
+schema_version: "1.0"
+last_verified: "2026-06-24"
+source: "Anthropic published API list pricing (see core/guides/model-matrix.md, claude-api skill)"
+currency: usd_per_mtok
+
+# Fallback multipliers applied to a model's input price when a specific
+# model entry below does not override them. cache_read/cache_5m/cache_1h
+# token counters come from usage-ledger.py's TOKEN_FIELDS; "thinking" tokens
+# are billed at the output rate, not listed separately here.
+cache_read_multiplier: 0.1
+cache_write_multiplier_5m: 1.25
+cache_write_multiplier_1h: 2.0
+
+models:
+  claude-fable-5-1:
+    input: 10.00
+    output: 50.00
+    cache_read_multiplier: 0.025
+  claude-mythos-5-1:
+    input: 10.00
+    output: 50.00
+    cache_read_multiplier: 0.025
+  claude-fable-5:
+    input: 10.00
+    output: 50.00
+  claude-opus-5:
+    input: 5.00
+    output: 25.00
+  claude-opus-4-8:
+    input: 5.00
+    output: 25.00
+  claude-opus-4-7:
+    input: 5.00
+    output: 25.00
+  claude-opus-4-6:
+    input: 5.00
+    output: 25.00
+  claude-sonnet-5:
+    input: 2.00
+    output: 10.00
+  claude-sonnet-4-6:
+    input: 3.00
+    output: 15.00
+  claude-haiku-4-5:
+    input: 1.00
+    output: 5.00

@@ -1,0 +1,46 @@
+
+# MCP knowledge retrieval
+
+## Goal
+
+Prefer institutional context from MCP sources before ad hoc web search or guesswork, so internal systems, policies, and shared wiki content inform answers when relevant.
+
+## Workspace-first (when to skip the MCP chain up front)
+
+Use repository tools (semantic search, grep, read file) **before** the institutional MCP tiers when the work is clearly **scoped to the current workspace**, for example:
+
+- Tracing symbols, call sites, or control flow **in this repo**
+- Explaining or changing behavior **defined in open project files**
+- Following stack traces, configs, fixtures, or tests **checked into the repo**
+- Questions like "where is X implemented?" or "why does this file do Y?" when X/Y are project artifacts
+
+If the user explicitly scopes to "this repo", "this PR", or "this file", treat that as workspace-first unless they also ask for enterprise/domain context.
+
+## MCP knowledge order (domain / institutional / cross-system research)
+
+**Always read** the tool schema under `mcps/<server>/tools/<tool>.json` (or the MCP file-system descriptors) **before** calling a tool.
+
+When the question needs **enterprise, product, or cross-service** context—not merely local code—consult tiers in order. If a server is unavailable, auth fails, or a tier is clearly irrelevant, note the skip briefly and continue (no blocking loops).
+
+### Tier 1 — Obsidian LLM wiki
+
+- **Server id:** `user-obsidian-llm-wiki` (display name `obsidian-llm-wiki`)
+- **Use for:** LLM-maintained / vault wiki notes (same Obsidian tool family as the memory bank: search, get note, list notes, etc.).
+
+### Tier 2 — Wiki (Confluence) MCP
+
+- **Server id:** `user-wiki-mcp-server` (display name `wiki-mcp-server`)
+- **Use for:** Confluence pages and institutional documentation (e.g. `search_content`, `get_page`, `get_page_by_title`, `search_pages` as appropriate to the query).
+
+### Tier 3 — Context7
+
+- **Server id:** `plugin-context7-plugin-context7` (display name `context7`)
+- **Use for:** Up-to-date third-party library, framework, SDK, and CLI documentation (APIs, setup, migrations). Prefer after internal tiers when the question mixes policy with OSS stack details.
+
+### Tier 4 — Agent discretion
+
+Other MCPs (Jira, Bitbucket, Elasticsearch, Datadog, etc.), `web_search`, or additional sources **as needed** after the first three tiers are exhausted or obviously not applicable.
+
+## Mixed questions
+
+For "internal rule + public library" (e.g. governance plus React API): use tiers 1–2 for the internal angle, then tier 3 for the library slice—preserve order without forbidding efficient follow-up.

@@ -1,0 +1,38 @@
+{
+  "campaign_name": "{campaign_name}",
+  "mode": "campaign",
+  "current_phase": "autoresearch-0-framing",
+  "phase_status": {
+    "framing": "pending",
+    "decompose": "pending",
+    "tasks": "pending"
+  },
+  "adlc5_feature": null,
+  "spec_handoff_path": null,
+  "definition_of_done": {
+    "default": "budget_exhausted",
+    "confirm_each_exit": true
+  },
+  "context": {
+    "interaction_mode": "hitl",
+    "save_qa_log": true,
+    "max_tasks": 12,
+    "budget": {
+      "mode": "wall-clock",
+      "per_trial": "5m",
+      "max_trials_per_task": 50,
+      "max_total_wall_clock": "8h"
+    },
+    "safety": {
+      "kill_switch_path": ".autoresearch/{campaign_name}/STOP",
+      "cost_cap_usd": null
+    }
+  },
+  "tasks": {},
+  "memory": {
+    "index_path": ".autoresearch/{campaign_name}/memory/INDEX.md",
+    "last_compacted": null
+  },
+  "created_at": "{iso8601}",
+  "updated_at": "{iso8601}"
+}

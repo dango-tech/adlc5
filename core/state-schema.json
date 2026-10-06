@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adlc5.dev/schemas/state-v3.json",
+  "title": "ADLC5 Feature State v3",
+  "type": "object",
+  "required": ["schema_version", "feature", "current_stage", "current_step", "stage_status"],
+  "properties": {
+    "schema_version": { "const": "3.0" },
+    "feature": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "current_stage": {
+      "type": "string",
+      "enum": ["specify", "plan", "tasks", "implement"]
+    },
+    "current_step": { "type": "string" },
+    "stage_status": {
+      "type": "object",
+      "properties": {
+        "specify": { "enum": ["pending", "in_progress", "completed", "waived"] },
+        "plan": { "enum": ["pending", "in_progress", "completed", "waived"] },
+        "tasks": { "enum": ["pending", "in_progress", "completed", "waived"] },
+        "implement": { "enum": ["pending", "in_progress", "completed", "waived"] }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["epic", "increment", "spike"] },
+        "repo_profile": { "enum": ["greenfield", "brownfield"] },
+        "repo_size": { "enum": ["small", "medium", "large", "unknown"] }
+      }
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "isolation": { "enum": ["pending", "branch", "worktree", "current", "skip", "waived"] },
+        "branch_name": { "type": "string" },
+        "base_branch": { "type": "string" },
+        "worktree_path": { "type": ["string", "null"] },
+        "workstreams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "branch": { "type": "string" },
+              "worktree_path": { "type": "string" },
+              "stories": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "pr_stack": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "workstream_id": { "type": "string" },
+              "pr_url": { "type": "string" },
+              "status": { "enum": ["open", "merged", "closed"] }
+            }
+          }
+        }
+      }
+    },
+    "scale_nfrs": {
+      "type": "object",
+      "properties": {
+        "throughput": { "type": "string" },
+        "latency": { "type": "string" },
+        "volume": { "type": "string" }
+      }
+    },
+    "craftsmanship": {
+      "type": "object",
+      "properties": {
+        "architecture_review": { "enum": ["pending", "completed", "waived"] },
+        "pattern_selection": { "enum": ["pending", "completed", "waived"] },
+        "algorithm_review": { "enum": ["pending", "completed", "waived", "not_applicable"] },
+        "pattern_opportunity": { "enum": ["pending", "completed", "waived"] }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "properties": {
+        "stories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "status": { "type": "string" },
+              "batch": { "type": "integer" },
+              "files": { "type": "array", "items": { "type": "string" } },
+              "depends_on": { "type": "array", "items": { "type": "string" } },
+              "acceptance": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "owner", "evidence"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "owner": { "type": "string", "minLength": 1 },
+                    "evidence": {
+                      "type": "object",
+                      "required": ["type", "value"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "type": { "enum": ["file", "command"] },
+                        "value": { "type": "string", "minLength": 1 },
+                        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parallel_batches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "batch": { "type": "integer" },
+              "story_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "implement": {
+      "type": "object",
+      "properties": {
+        "current_substep": { "type": "string" },
+        "story_status": { "type": "object" },
+        "verification": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pending", "in_progress", "completed"] },
+            "reports": { "type": "object" },
+            "independence": {
+              "type": "object",
+              "required": ["fresh_session", "coder_session_id", "verifier_session_id", "coder_model_id", "verifier_model_id"],
+              "additionalProperties": false,
+              "properties": {
+                "fresh_session": { "type": "boolean" },
+                "coder_session_id": { "type": "string", "minLength": 1 },
+                "verifier_session_id": { "type": "string", "minLength": 1 },
+                "coder_model_id": { "type": "string", "minLength": 1 },
+                "verifier_model_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "integration": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pending", "in_progress", "completed"] }
+          }
+        },
+        "qa": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pending", "completed"] },
+            "clearance_path": { "type": "string" }
+          }
+        },
+        "pr": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pending", "completed"] },
+            "url": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "properties": {
+        "index_path": { "type": "string" },
+        "last_compacted": { "type": ["string", "null"] },
+        "context_budget_tokens": { "type": "integer", "default": 8000 },
+        "context_pack_policy": { "const": "subagent_minimal" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "ledger_path": { "type": "string" },
+        "entries": { "type": "integer" },
+        "last_recorded": { "type": ["string", "null"] }
+      }
+    },
+    "autopilot": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["hitl", "autonomous"] },
+        "endpoint": { "enum": ["pr_ready", "tasks_complete", "merged", "deployed"] },
+        "profile": { "enum": ["tiny", "standard", "high_risk", "small_feature", "epic", "research_spike", "custom"] },
+        "iteration": { "type": "integer" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "log_path": { "type": "string" }
+      }
+    },
+    "clarity": {
+      "type": "object",
+      "properties": {
+        "score": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "threshold": { "type": "integer", "default": 80 },
+        "history": { "type": "array" }
+      }
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" }
+      }
+    },
+    "policies_path": { "type": "string" },
+    "persona": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "string",
+          "enum": ["analyst", "architect", "coder", "tester"]
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "persona": { "type": "string" },
+              "step": { "type": "string" },
+              "completed_at": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

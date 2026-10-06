@@ -1,0 +1,95 @@
+# Cursor + Codex (Agent Skills standard path)
+skills_install_target: ~/.agents/skills
+rules_install_target: ~/.cursor/rules
+
+# M14 — cross-platform skill install targets (user-global symlinks)
+claude_skills_target: ~/.claude/skills
+codex_skills_target: ~/.codex/skills
+opencode_skills_target: ~/.config/opencode/skills
+gemini_skills_target: ~/.gemini/skills
+hermes_skills_target: ~/.hermes/skills/adlc5
+antigravity_plugin_target: ~/.gemini/config/plugins/adlc5-plugin
+# Legacy (still supported if antigravity_plugin_target is omitted):
+# antigravity_skills_target: ~/.gemini/antigravity/skills
+
+# M14g — backup existing entries before replace (removed after successful verify)
+install_backup_root: ~/.adlc5-install-backup
+
+# Git isolation (@adlc5 / @adlc5-specify step 0 — before Specify requirements)
+git_branch_prefix: feat
+# Optional: project-local worktree parent (default: .worktrees/ if present, else AskQuestion)
+# git_worktree_directory: .worktrees
+
+# M15 — model routing (abstract tiers → host IDs)
+# Resolver: ./scripts/resolve-model.sh --platform <host> --tier <tier>
+# Docs: core/guides/model-matrix.md · templates/*-models.md
+model_routing:
+  strategy: cost_optimized   # balanced | cost_optimized | quality_first
+  # inherit (default): execution/implementation stays "inherit parent" when flat says so
+  # explicit: use concrete platform_profiles.execution IDs for build subagents
+  execution_policy: inherit  # inherit | explicit
+
+# Backward-compatible flat profiles (fallback when platform unknown / profile missing)
+model_profiles:
+  reasoning: "claude-4.6-opus-high"   # design, code spec, verify, @qa, discover council
+  balanced: "composer-2"                # orchestration, stories, integration, PR review
+  implementation: "inherit"             # alias of execution — inherit parent when execution_policy: inherit
+  execution: "inherit"                  # preferred name for build-implementer tier
+  fast: "composer-2-fast"               # optional; not for Delivery implement/verify or @qa
+
+# Per-platform concrete IDs + spawn hints (preferred when --platform is set)
+platform_profiles:
+  cursor:
+    reasoning: "auto"
+    balanced: "composer-2"
+    execution: "composer-2"
+    fast: "composer-2-fast"
+    spawn:
+      task_model_param: true
+  claude:
+    reasoning: "claude-opus-4-6"
+    balanced: "claude-sonnet-4-6"
+    execution: "claude-haiku-4-5"
+    spawn:
+      task_model_param: true
+  codex:
+    reasoning: "gpt-5.3-codex[reasoning=extra-high]"
+    balanced: "gpt-5.3-codex"
+    execution: "gpt-5.3-codex[fast=true]"
+    spawn:
+      spawn_agent_model: true
+  opencode:
+    reasoning: "anthropic/claude-opus-4"
+    balanced: "google/gemini-2.5-flash"
+    execution: "google/gemini-2.5-flash"  # placeholder for free/cheap
+    spawn:
+      fresh_session_per_persona: true
+  hermes:
+    reasoning: "anthropic/claude-opus-4"
+    balanced: "google/gemini-2.5-flash"
+    execution: "google/gemini-2.5-flash"
+    spawn:
+      fresh_session_per_persona: true
+  gemini:
+    reasoning: "gemini-2.5-pro"
+    balanced: "gemini-2.5-flash"
+    execution: "gemini-2.5-flash"
+
+# Cursor discover/ideate council subagents
+cursor_agents_install_target: ~/.cursor/agents
+council_models:
+  claude: "claude-opus-4-7[thinking=true,context=300k,effort=xhigh,fast=false]"
+  gpt: "gpt-5.3-codex[reasoning=extra-high,fast=true]"
+  gemini: "gemini-3.5-flash"
+
+# Optional scaffold tool hints (see core/guides/scaffold-registry.md)
+# scaffold_preferences:
+#   google_adk: agents-cli
+
+# Consumer projects: prefer .adlc5/config.yaml (see templates/workspace-config.yaml)
+# project_wiki:
+#   enabled: true
+#   root: wiki
+
+# Optional per-feature autopilot policies (copy templates/policies.yaml.example)
+# defaults.verify_policy / integrate_policy remain hitl unless overridden

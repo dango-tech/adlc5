@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adlc5.dev/schemas/task-spec.schema.json",
+  "title": "ADLC5 TaskSpec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "objective",
+    "requirements",
+    "architecture",
+    "affected_areas",
+    "implementation_steps",
+    "testing",
+    "must_not_change",
+    "escalation_conditions"
+  ],
+  "properties": {
+    "objective": { "type": "string", "minLength": 1 },
+    "requirements": { "type": "array", "items": { "type": "string" } },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approach", "constraints"],
+      "properties": {
+        "approach": { "type": "string" },
+        "constraints": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "affected_areas": { "type": "array", "items": { "type": "string" } },
+    "implementation_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "acceptance_criteria"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "acceptance_criteria": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "integration", "regression"],
+      "properties": {
+        "unit": { "type": "array", "items": { "type": "string" } },
+        "integration": { "type": "array", "items": { "type": "string" } },
+        "regression": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "must_not_change": { "type": "array", "items": { "type": "string" } },
+    "escalation_conditions": { "type": "array", "items": { "type": "string" } }
+  }
+}

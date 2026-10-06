@@ -1,0 +1,43 @@
+# ADLC5 — high-risk autopilot profile
+# Auth, money, secrets, destructive operations, schema migrations,
+# concurrency, public compatibility, or disputed acceptance criteria.
+
+defaults:
+  interaction_mode: autonomous
+  execution_mode: sequential
+  verify_policy: auto
+  integrate_policy: auto
+
+autopilot:
+  endpoint: pr_ready
+  interaction_mode: autonomous
+  profile: high_risk
+  wall_clock_cap_minutes: 360
+  max_iterations: 200
+  consecutive_failure_tripwire: 3
+  require_anchors: true
+  require_human_pr_approval: true
+
+  quality_gates:
+    coverage_min: 80
+    lint_errors_max: 0
+    require_tests: true
+
+  retry_budgets:
+    implementation_per_story: 2
+    verification_per_story: 3
+    integration_total: 2
+
+persona_mode:
+  enabled: true
+  verifier_different_model: true
+  fresh_subagent_per_persona: true
+  forbid_orchestrator_implement: true
+
+# Cost tiering stays off for high-risk work — the Coder session's own model
+# (already reasoning-tier via persona_mode) keeps implement-1-build, not a
+# cheap execution-tier model. Explicit here rather than left to the
+# config.yaml default so this profile documents its own intent.
+# See core/guides/model-matrix.md and ./scripts/resolve-model.sh.
+model_routing:
+  execution_policy: inherit

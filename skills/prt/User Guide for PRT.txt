@@ -1,0 +1,200 @@
+================================================================================
+                           USER GUIDE FOR PRT
+================================================================================
+
+OVERVIEW
+--------
+PRT (Product Requirements Tracker) is a comprehensive skill that guides you from
+a feature idea through structured product requirements, UX prototype
+specification, and Jira-ready epic decomposition. It provides an end-to-end
+workflow for product definition, from initial intake through optional handoff
+to ADLC5 Delivery for implementation.
+
+This skill is designed for Product Managers, designers, and anyone with a
+feature idea who needs to create well-structured requirements documentation.
+Whether you're working on a major new feature or a small enhancement, PRT adapts
+to your needs with Full (10-section) and Lite (4-section) PRT options.
+
+
+WHAT YOU CAN DO WITH THIS SKILL
+--------------------------------
+• Gather feature context through a structured interview or document import
+• Generate a Full PRT (10 sections) for comprehensive feature documentation
+• Generate a PRT Lite (4 sections) for small enhancements and quick features
+• Review and refine your PRT section by section with AI-assisted feedback
+• Map requirements to design system components with UX ideation
+• Produce framework-specific prototype specifications (Angular, React, Vue)
+• Decompose your PRT into Jira-ready epics with minimal dependencies
+• Export standalone Markdown files for sharing with legacy or cross-team groups
+• Hand off completed work to ADLC5 Delivery for implementation tracking
+• Resume work on any feature from where you left off
+• Import existing PRDs, PRTs, or other requirements documents
+
+
+PREREQUISITES
+-------------
+No prerequisites are required to use this skill. PRT works entirely within
+your workspace and does not require external API credentials or tool
+installations.
+
+
+HOW TO USE THIS SKILL
+---------------------
+STEP 1: Invoke the Skill
+   Start by saying "@prt for [feature-name]" where [feature-name] describes
+   the feature you want to document. The skill will create a .prt/{feature-name}/
+   directory in your workspace and begin the intake process.
+
+STEP 2: Complete Intake (Phase 0)
+   Answer questions about your feature: problem statement, target users,
+   stakeholders, business goals, and scope. Alternatively, provide an existing
+   document (PRD, meeting notes, etc.) and the agent will extract the
+   relevant information.
+
+STEP 3: Set Your Preferences
+   After intake, choose your options:
+   - PRT Depth: Full (10 sections with review) or Lite (4 sections, quick pass)
+   - Q&A Logging: Save all decisions to qa-log.md for team reference
+   - UI-Facing: Include Phase 2 (UX Ideation) if your feature has a user interface
+   - Framework: Angular, React, Vue, Other, or Framework-agnostic
+   - Epic Breakdown: Generate Jira-ready epics at the end
+
+STEP 4: Generate the PRT (Phase 1A)
+   The agent generates your PRT based on intake data. For Full PRTs, this
+   produces all 10 sections. For Lite PRTs, this produces 4 focused sections.
+
+STEP 5: Review the PRT (Phase 1B — Full PRT only)
+   For Full PRTs, review each section and flag any that need revision. The
+   agent presents a summary table and refines flagged sections until you
+   approve.
+
+STEP 6: UX Ideation (Phase 2 — UI-facing features only)
+   If your feature is UI-facing, the agent maps requirements to design system
+   components, defines user journeys, and produces a framework-specific
+   prototype specification.
+
+STEP 7: Epic Breakdown (Phase 3 — optional)
+   If you opted in, the agent decomposes your PRT into independently
+   deliverable, Jira-ready epics. Each epic delivers standalone user value
+   with minimal cross-epic dependencies.
+
+STEP 8: ADLC5 Delivery Handoff
+   After all phases complete, the agent offers to copy your PRT (and epic
+   breakdown if generated) to .adlc5/{feature-name}/ for ADLC5 Delivery to use as
+   context during implementation.
+
+
+OUTPUT STRUCTURE
+----------------
+.prt/
+└── {feature-name}/
+    ├── state.json          # Session state and phase tracking
+    ├── qa-log.md           # Q&A log (if enabled)
+    ├── prt.md              # Product Requirements Tracker
+    ├── ux-ideation.md      # UX prototype specification (Phase 2)
+    └── epic-breakdown.md   # Jira-ready epics (Phase 3)
+
+.adlc5/
+└── {feature-name}/
+    ├── prt.md              # Copy of PRT (if ADLC5 Delivery handoff accepted)
+    └── epic-breakdown.md   # Copy of epics (if handoff accepted)
+
+
+EXAMPLE SESSION
+---------------
+User: "@prt for campaign-dashboard"
+
+Agent: "Starting a new PRT for 'campaign-dashboard'. I'll guide you through
+        the intake process to gather the information needed for your
+        requirements document.
+
+        First, can you describe the problem this feature is solving?
+        Who experiences this problem and what is the impact?"
+
+User:  "Marketing managers need a centralized view of campaign performance.
+        Currently they pull data from 5 different tools manually."
+
+Agent: "Got it. Now let me ask about your target users and stakeholders.
+
+        Who are the primary users of this feature?
+        1. Marketing Managers
+        2. Campaign Analysts
+        3. Both
+        4. Other (specify)"
+
+User:  "Both"
+
+Agent: [Continues through intake questions...]
+
+        "Intake complete. Before I generate the PRT, let me confirm your
+        preferences:
+
+        What level of detail do you need for this PRT?
+        1. Full PRT - Complete 10-section document with review cycle
+        2. PRT Lite - Concise 4-section document"
+
+User:  "Full PRT"
+
+Agent: [Asks about Q&A logging, UI-facing, framework, epics...]
+
+        "Generating your PRT based on the intake data..."
+
+        "Phase 1A complete. Your PRT draft is saved at:
+        .prt/campaign-dashboard/prt.md
+
+        Ready to review it section by section?"
+
+
+TROUBLESHOOTING
+---------------
+Problem: The skill isn't finding my existing feature
+Solution: Make sure you're using the exact feature name (in kebab-case) that
+          was used when the feature was created. Say "@prt" without a feature
+          name to see a list of all existing features in this workspace.
+
+Problem: Phase 1B review is being skipped
+Solution: Phase 1B only runs for Full PRTs. If you selected PRT Lite, the
+          review cycle is skipped by design. Start a new feature with Full
+          PRT if you need section-by-section review.
+
+Problem: Phase 2 (UX Ideation) is not appearing
+Solution: Phase 2 only runs if you answered "Yes" to the UI-facing question
+          during preference setup. If your feature has UI components, start
+          fresh and select the UI-facing option.
+
+Problem: Epics have too many dependencies
+Solution: The epic breakdown aims for minimal cross-epic dependencies. If
+          you're seeing high dependency counts, the underlying PRT may need
+          refinement. Use the rework process to adjust scope boundaries.
+
+Problem: Changes to the PRT aren't cascading to epics
+Solution: After modifying a completed PRT, invoke the skill and request a
+          rework. The agent will trace changes to downstream artifacts and
+          regenerate affected sections.
+
+
+TIPS FOR EFFECTIVE USE
+-----------------------
+• Prepare a clear problem statement before starting — intake goes faster when
+  you can articulate the user pain point upfront.
+
+• Use PRT Lite for small enhancements, internal tooling tweaks, or single-
+  screen changes. Save Full PRT for cross-team projects and major features.
+
+• Enable Q&A logging for team projects — the qa-log.md file creates an audit
+  trail of all decisions made during the process.
+
+• For Angular projects at Epsilon, ensure "Angular (CORE UI)" is selected
+  so Phase 2 produces components from the approved design system.
+
+• Import existing documentation via Phase 0 if you already have PRDs, meeting
+  notes, or capability docs — the agent extracts structured data from them.
+
+• Export your PRT to the project root if you need to share it with teams not
+  using Cursor — the exported Markdown works in Confluence, GitHub, or any
+  wiki.
+
+• Take the ADLC5 Delivery handoff when offered — it pre-loads context so you don't
+  have to re-answer questions the PRT already covers.
+
+================================================================================

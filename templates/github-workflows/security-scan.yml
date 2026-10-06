@@ -1,0 +1,170 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Security Scan (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            semgrep-install: pip install semgrep
+            gitleaks-install: |
+              curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | bash -s -- -b /usr/local/bin
+            bandit-install: pip install bandit
+          - os: macos-latest
+            semgrep-install: pip install semgrep
+            gitleaks-install: brew install gitleaks
+            bandit-install: pip install bandit
+            # macOS headless fixes
+            macos-fixes: |
+              # Unlock keychain for headless operation
+              security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+              # Disable gatekeeper for downloaded tools
+              sudo spctl --master-disable 2>/dev/null || true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install security tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          ${{ matrix.semgrep-install }}
+          ${{ matrix.gitleaks-install }}
+          ${{ matrix.bandit-install }}
+
+      - name: Install security tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ${{ matrix.macos-fixes }}
+          ${{ matrix.semgrep-install }}
+          ${{ matrix.gitleaks-install }}
+          ${{ matrix.bandit-install }}
+
+      - name: Run Semgrep SAST
+        id: semgrep
+        continue-on-error: true
+        run: |
+          semgrep \
+            --config=auto \
+            --config=p/owasp-top-ten \
+            --config=p/secrets \
+            --config=p/jwt \
+            --json \
+            -o semgrep-findings.json \
+            src/ || true
+          echo "findings=$(cat semgrep-findings.json | jq '.results | length')" >> $GITHUB_OUTPUT
+
+      - name: Run Gitleaks Secret Detection
+        id: gitleaks
+        continue-on-error: true
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-format json \
+            --report-path gitleaks-findings.json \
+            --no-git=false \
+            --verbose || true
+          echo "findings=$(cat gitleaks-findings.json | jq 'length')" >> $GITHUB_OUTPUT
+
+      - name: Run Bandit (Python projects)
+        id: bandit
+        continue-on-error: true
+        if: hashFiles('**/requirements*.txt') != '' || hashFiles('**/pyproject.toml') != ''
+        run: |
+          bandit -r src/ -f json -o bandit-findings.json -ll || true
+          echo "findings=$(cat bandit-findings.json | jq '.results | length')" >> $GITHUB_OUTPUT
+
+      - name: Run npm audit (Node.js projects)
+        id: npm-audit
+        continue-on-error: true
+        if: hashFiles('**/package.json') != ''
+        run: |
+          npm audit --json > npm-audit-findings.json || true
+          echo "findings=$(cat npm-audit-findings.json | jq '.metadata.vulnerabilities.total // 0')" >> $GITHUB_OUTPUT
+
+      - name: Run pip-audit (Python projects)
+        id: pip-audit
+        continue-on-error: true
+        if: hashFiles('**/requirements*.txt') != '' || hashFiles('**/pyproject.toml') != ''
+        run: |
+          pip install pip-audit
+          pip-audit --format=json --output=pip-audit-findings.json || true
+          echo "findings=$(cat pip-audit-findings.json | jq '.dependencies | map(.vulns | length) | add // 0')" >> $GITHUB_OUTPUT
+
+      - name: Upload Semgrep findings to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('semgrep-findings.json') != ''
+        with:
+          sarif_file: semgrep-findings.json
+          category: semgrep
+
+      - name: Upload Gitleaks findings to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('gitleaks-findings.json') != ''
+        with:
+          sarif_file: gitleaks-findings.json
+          category: gitleaks
+
+      - name: Upload Bandit findings to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('bandit-findings.json') != ''
+        with:
+          sarif_file: bandit-findings.json
+          category: bandit
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tool | Findings |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep | ${{ steps.semgrep.outputs.findings || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks | ${{ steps.gitleaks.outputs.findings || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bandit | ${{ steps.bandit.outputs.findings || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| npm audit | ${{ steps.npm-audit.outputs.findings || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| pip-audit | ${{ steps.pip-audit.outputs.findings || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail on critical findings
+        if: always()
+        run: |
+          CRITICAL=0
+          # Check Semgrep for ERROR severity findings
+          if [ -f semgrep-findings.json ]; then
+            CRITICAL=$((CRITICAL + $(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-findings.json)))
+          fi
+          # Check Gitleaks for any findings (all critical)
+          if [ -f gitleaks-findings.json ]; then
+            CRITICAL=$((CRITICAL + $(jq 'length' gitleaks-findings.json)))
+          fi
+          # Check Bandit for HIGH severity findings
+          if [ -f bandit-findings.json ]; then
+            CRITICAL=$((CRITICAL + $(jq '[.results[] | select(.issue_severity == "HIGH")] | length' bandit-findings.json)))
+          fi
+          echo "Total critical findings: $CRITICAL"
+          if [ $CRITICAL -gt 0 ]; then
+            echo "::error::Security scan found $CRITICAL critical finding(s)"
+            exit 1
+          fi

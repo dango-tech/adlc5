@@ -1,0 +1,42 @@
+---
+description: Clean Code — small functions, FIRST tests, error handling, Boy Scout rule, smell awareness in review
+alwaysApply: true
+---
+
+# Clean Code — Functions & Tests (R3)
+
+**Craftsmanship = knowledge + practice.** Code is written for human readers.
+
+## Functions
+
+- **Small; do one thing** — One abstraction level per function; stepdown rule (read top-to-bottom).
+- **Few arguments** — Prefer parameter objects over flag arguments; no hidden side effects.
+- **Fail fast** — Validate preconditions early; return/throw immediately on invalid state.
+
+## Tests (FIRST)
+
+- **F**ast, **I**ndependent, **R**epeatable, **S**elf-validating, **T**imely
+- One assert per concept; test code as clean as production code.
+- **Learning tests** for third-party APIs you don't control.
+
+## Error handling
+
+- Use exceptions over error codes; don't return or pass null when avoidable.
+- Wrap third-party APIs at boundaries (see R2).
+
+## Boy Scout rule
+
+Leave the code cleaner than you found it — small improvements in touched areas.
+
+## Smell awareness (review)
+
+Cite heuristic IDs in PR review when applicable:
+
+| Family | Examples |
+|--------|----------|
+| **G** — General | G5 duplication, G6 wrong abstraction level, G23 prefer polymorphism |
+| **F** — Functions | F1 too many args, F4 dead function, G30 one thing |
+| **N** — Names | N1 non-descriptive names |
+| **T** — Tests | T1–T9 test insufficiency |
+
+Full list: `shared/docs/playbook.md` Part II §II.4 and Appendix G.

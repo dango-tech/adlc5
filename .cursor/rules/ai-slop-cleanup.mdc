@@ -1,0 +1,51 @@
+---
+description: Detect and remove AI-generated noise patterns that degrade code quality
+alwaysApply: true
+---
+
+# AI Slop Cleanup
+
+## Purpose
+
+Detect and remove AI-generated noise patterns that degrade code quality without changing behavior.
+
+## High-Confidence Removals
+
+### Comments
+- Narrate obvious code actions or restate the line below
+- `// Loop through users`, `// Return the result`, `// Increment counter`
+- Explain what the code does rather than why
+
+### Defensive Code
+- Broad `try/catch` blocks that don't match trusted call-path conventions
+- Redundant null/undefined guards after validated parsing layers
+- Over-defensive checks in internal functions with validated inputs
+
+### Type Escapes (TypeScript)
+- `as any` added only to suppress type errors
+- Unsafe casts that bypass proper narrowing
+- Ad-hoc type escape hatches instead of project utility types
+
+### Abstraction Bloat
+- Duplicate helper wrappers that only re-export existing behavior
+- Generic helper functions used exactly once when inline is the norm
+- Over-abstracted naming (`processDataHandlerManager`) when file style is simpler
+
+### Logging
+- Logging that repeats values already returned or thrown
+- Debug logs left in production code paths
+
+## Do NOT Remove
+
+- Security boundaries, permission checks, input validation
+- Error handling required by subsystem contracts
+- Retries/timeouts/circuit breakers for reliability
+- Observability hooks used by operations teams
+- Business rule guards with non-obvious intent
+
+## Scope Discipline
+
+- Edit only changed hunks unless nearby fix required for coherence
+- No non-requested refactors or unrelated formatting churn
+- If uncertain whether a pattern is intentional, ask before changing behavior
+- Preserve existing project idioms (error handling, logging, naming style)
