@@ -103,7 +103,7 @@ For each criterion in the user story / code spec:
 **Overall status:**
 
 - `pass` — no blockers (warnings allowed only if orchestrator will record user approval per verifier-rules)
-- `pass-with-warnings` — no blockers, has warnings → **requires** lifecycle `clarity.history` `verifier_waiver` before story → `verified`
+- `pass-with-warnings` — no blockers, has warnings → **requires** explicit human `evidence approve` with `type: verifier_waiver` and a reason; mandatory current checks/fresh review still apply before story → `verified`
 - `fail` — one or more blockers (including spec-handoff locked violations)
 
 **Do not** recommend overall `pass` when any acceptance criterion is FAIL or spec-handoff locked items are contradicted.

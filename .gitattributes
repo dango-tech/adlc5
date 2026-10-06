@@ -1,0 +1,19 @@
+# git archive / GitHub source archives omit development-only material.
+.github export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+AGENTS.md export-ignore
+docs/plans export-ignore
+.agents export-ignore
+.adlc5 export-ignore
+.agent-cache export-ignore
+.idea export-ignore
+.vscode export-ignore
+.cursor/plans export-ignore
+.cursor/hooks/state export-ignore
+.codex/sessions export-ignore
+.codex/memories export-ignore
+config.yaml export-ignore
+.env* export-ignore
+marketing export-ignore
+PUBLIC-LAUNCH-PLAN.md export-ignore

@@ -12,4 +12,4 @@ Run clarity scoring before advance — threshold from `state.clarity.threshold` 
 
 ## State
 
-- `current_step`: `specify-3-nfr`
+- Advance using `adlc5 transition specify-3-nfr --feature "{feature}"` after the step succeeds.

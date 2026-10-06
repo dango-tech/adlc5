@@ -70,11 +70,28 @@ if [[ ! -f "${ROOT}/core/VERSION" ]]; then
   exit 1
 fi
 
+# Check kernel prerequisites before writing configuration or install targets.
+for tool in git python3 jq; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "ERROR: required tool '$tool' is missing. Install Git, Python 3 and jq, then retry." >&2
+    exit 1
+  }
+done
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "ERROR: Python 3.10 or newer is required; upgrade python3, then retry." >&2
+  exit 1
+fi
+
+
 CONFIG="${ROOT}/config.yaml"
 if [[ ! -f "$CONFIG" ]]; then
   if [[ -f "${ROOT}/config.example.yaml" ]]; then
-    cp "${ROOT}/config.example.yaml" "$CONFIG"
-    echo "Created config.yaml from config.example.yaml"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      CONFIG="${ROOT}/config.example.yaml"
+    else
+      cp "${ROOT}/config.example.yaml" "$CONFIG"
+      echo "Created config.yaml from config.example.yaml"
+    fi
   else
     echo "ERROR: config.yaml not found" >&2
     exit 1
@@ -108,8 +125,8 @@ expand_path() {
 assert_safe_install_target() {
   local target="$1" label="$2"
   local abs_target abs_skills
-  abs_target="$(cd "$(dirname "$target")" 2>/dev/null && pwd)/$(basename "$target")"
-  abs_skills="$(cd "${SKILLS_ROOT}" && pwd)"
+  abs_target="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$target")"
+  abs_skills="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$SKILLS_ROOT")"
   if [[ "$abs_target" == "$abs_skills" || "$abs_target" == "${abs_skills}/"* ]]; then
     echo "ERROR: ${label} resolves inside the adlc5 clone (${abs_target})." >&2
     echo "  Use a user-global path in config.yaml, or init a consumer project:" >&2

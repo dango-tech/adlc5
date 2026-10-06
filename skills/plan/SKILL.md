@@ -10,7 +10,8 @@ version: 4.1.0
 
 **Invoke:** `@adlc5-plan for [feature]`
 
-**Persona:** Architect — load [templates/personas/architect.md](../../templates/personas/architect.md) at startup. Memory wall: no product `src/` or `verify/` during Plan.
+**Persona:** Architect — load [templates/personas/architect.md](../../templates/personas/architect.md) at startup. Inspect existing source read-only to understand the flow; do not edit product code
+or use implementation verification reports as design authority.
 
 ## Repository context
 
@@ -41,23 +42,20 @@ Record `last_verified`, stability status, and source URLs in the design artifact
 stale information is a blocker, not an assumption. Follow
 [current-information.md](../../core/guides/current-information.md).
 
-## Design critique (content gate)
+## Proportionate planning
 
-At `plan-7-design-critique`, check `state.clarity.score` and `state.scale_nfrs.applicable` first — this is the "decide-late / minimum sufficient profile" SOUL guard applied to Plan's own overhead, not just to model/execution routing:
+For `standard`, write one `design/plan.md`: existing flow to reuse, affected files
+and boundaries, intended behavior, compatibility/risk decisions, and checks.
+Run only `plan-4-design-discovery`; pull craftsmanship references only to resolve
+an actual design question. For `tiny`, keep these decisions in `change.md` during
+Specify. Do not generate the full design tree or spawn every persona.
 
-| Condition | Action |
-|-----------|--------|
-| `clarity.score ≥ 90` AND `scale_nfrs.applicable` is false/absent | **Skip the subagent spawn.** Write `design/design-critique.md` yourself: one line citing the clarity score and "no scale NFRs" as the skip rationale, `critique_severity: none`. No reasoning-tier round-trip for work that's already unambiguous and low-risk. |
-| Otherwise | Spawn `@adlc5-design-critic` (read-only, reasoning tier) over `spec-handoff.md` + `design/1a|1b|1c`, as before. |
+For `high_risk` or `full`, keep the detailed design ladder and independent
+`@adlc5-design-critic`. Clarity score and absent scale NFRs do not establish low
+risk and cannot waive required critique. Record `risk.json` before progression;
+uncertain/trust-boundary/data-safety work requires the high-risk route.
 
-Either path writes `design/design-critique.md` with a `critique_severity: none | minor | blocking` verdict — `./scripts/adlc5 gate` reads it at `plan-complete` the same way regardless of which path wrote it:
-
-| Verdict | Gate result | Action |
-|---------|-------------|--------|
-| `none` | pass | Proceed to Tasks |
-| `minor` | warn | HITL: AskQuestion proceed/rework; autonomous: log findings, proceed |
-| `blocking` | fail | Rework the cited design substep(s); re-run critic |
-| missing | HITL warn / autonomous fail | Run the critic |
+Critique `blocking` prevents progression; `minor` requires recorded disposition.
 
 ## Gate
 
@@ -68,7 +66,8 @@ Either path writes `design/design-critique.md` with a `critique_severity: none |
 
 ## State transition
 
-On pass: `stage_status.plan`: `completed`, `current_stage`: `tasks`, `current_step`: `tasks-1-stories`
+On pass: `./scripts/adlc5 transition tasks-1-stories --feature "{feature}"`.
+The kernel validates the selected route and writes progress; never patch it via `state set`.
 
 ## Knowledge
 

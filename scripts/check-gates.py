@@ -291,6 +291,10 @@ def check_assure_pr_review(lifecycle: dict | None) -> list[dict]:
     if not lifecycle:
         return [{"id": "lifecycle_assure", "status": "warn", "message": "lifecycle state.json missing"}]
     if is_v2_state(lifecycle):
+        # PR readiness is before PR publication. Fresh review is enforced separately.
+        verification = (lifecycle.get("implement") or {}).get("verification") or {}
+        if verification.get("status") == "completed":
+            return [{"id": "assure_pr_review", "status": "pass", "message": "verification recorded; freshness and reviewer disposition checked by completion_evidence"}]
         pr = (lifecycle.get("implement") or {}).get("pr") or {}
         if pr.get("status") == "completed" and pr.get("url"):
             return [{"id": "assure_pr_review", "status": "pass", "message": "implement.pr completed with URL"}]
@@ -390,26 +394,11 @@ def has_verifier_waiver_approval(lifecycle: dict | None) -> bool:
     )
 
 
-def is_human_approver(value: object) -> bool:
-    if not isinstance(value, str):
-        return False
-    normalized = value.strip().lower()
-    if normalized == "user":
-        return True
-    if normalized.startswith("human:"):
-        return bool(normalized.removeprefix("human:").strip())
-    if normalized.startswith("github:"):
-        return bool(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,38})", normalized.removeprefix("github:")))
-    if normalized.startswith("email:"):
-        return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized.removeprefix("email:")))
-    return False
-
+from lib.state_v2 import is_human_approver
 
 def check_verifier_independence(lifecycle: dict | None, policies: dict) -> list[dict]:
-    if profile_name(policies) != "high_risk":
-        return []
     persona = policies.get("persona_mode") or {}
-    require_fresh = bool(persona.get("fresh_subagent_per_persona"))
+    require_fresh = profile_name(policies) in ("standard", "high_risk", "full") or bool(persona.get("fresh_subagent_per_persona"))
     require_different_model = bool(persona.get("verifier_different_model"))
     if not (require_fresh or require_different_model):
         return []
@@ -467,13 +456,21 @@ def check_deploy_ready(workspace: Path, feature: str, lifecycle: dict | None) ->
     """Gate for @deploy: QA clearance + PR recorded + explicit human deploy approval."""
     checks: list[dict] = []
     checks.extend(check_assure_qa(workspace, feature))
-    checks.extend(check_assure_pr_review(lifecycle))
+    pr = ((lifecycle or {}).get("implement") or {}).get("pr") or {}
+    published = bool(pr.get("url") and (pr.get("published") is True or pr.get("status") == "completed"))
+    if not is_v2_state(lifecycle):
+        published = bool(((lifecycle or {}).get("pr_review") or {}).get("url"))
+    checks.append({"id": "pr_published", "status": "pass" if published else "fail", "message": "deployment requires actual published PR URL"})
     history = ((lifecycle or {}).get("clarity") or {}).get("history") or []
-    approved = any(
-        h.get("type") == "deploy_approval" and is_human_approver(h.get("approved_by"))
-        for h in history
-        if isinstance(h, dict)
-    )
+    if is_v2_state(lifecycle):
+        from lib.completion_evidence import records, fingerprint
+        try:
+            current = fingerprint(workspace, feature)
+            history = [r for r in records(workspace, feature) if r.get("kind") == "approval" and r.get("fingerprint") == current]
+        except (ValueError, TypeError, OSError, subprocess.CalledProcessError):
+            history = []
+    latest_approval = next((h for h in reversed(history) if isinstance(h, dict) and h.get("type") == "deploy_approval"), {})
+    approved = is_human_approver(latest_approval.get("approved_by")) and latest_approval.get("decision", "approve") == "approve"
     checks.append(
         {
             "id": "deploy_approval",
@@ -519,22 +516,21 @@ def check_anchor_integrity(workspace: Path, feature: str, policies: dict) -> lis
 
 
 def check_deterministic_verify(workspace: Path, feature: str, lifecycle: dict | None) -> list[dict]:
-    """Lever 3 — mechanical pre-check (→ scripts/verify-story.py) before
-    @assure-verifier reasons about what's actually left.
-
-    Additive and backward-safe: only stories whose code spec carries lever-2
-    frontmatter (scripts/tasks/spec-lint.py) get a deterministic check here.
-    A feature with no frontmatter yet — pre-lever-2, or a consumer that
-    hasn't adopted it — gets no checks from this function at all, so
-    implement-2-verify behaves exactly as before for it.
-    """
+    """Mechanical checks; missing/legacy specs cannot earn strict completion."""
     if not lifecycle or not is_v2_state(lifecycle):
         return []
     stories = (lifecycle.get("tasks") or {}).get("stories") or []
     if not isinstance(stories, list):
-        return []
+        return [{"id": "story_shape", "status": "fail", "message": "canonical stories must be an array"}]
 
     verifier = SCRIPT_DIR / "verify-story.py"
+    if profile_name(load_policies(workspace, feature)) == "tiny":
+        proc = subprocess.run([sys.executable, str(verifier), "--bounded-tiny", "--feature", feature, "--workspace", str(workspace)], capture_output=True, text=True)
+        try:
+            report = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            report = {"checks": [], "status": "error"}
+        return [{"id": "bounded_tiny", "status": "pass" if proc.returncode == 0 and report.get("status") == "pass" else "fail", "message": "tiny bounded record/file boundary", "details": report.get("checks", [])}]
     checks: list[dict] = []
     for s in stories:
         if not isinstance(s, dict) or s.get("type") == "integration":
@@ -553,13 +549,15 @@ def check_deterministic_verify(workspace: Path, feature: str, lifecycle: dict | 
             if spec_path is not None:
                 break
         if spec_path is None:
+            checks.append({"id": "strict_spec_" + str(sid), "status": "fail", "message": "missing machine-checkable spec; upgrade legacy feature"})
             continue
         fm, _ = load_frontmatter(spec_path.read_text(encoding="utf-8", errors="replace"))
         if not fm:
-            continue  # legacy code spec, no lever-2 frontmatter — not this check's concern
+            checks.append({"id": "strict_spec_" + str(sid), "status": "fail", "message": "legacy spec lacks frontmatter; upgrade before completion"})
+            continue
 
         proc = subprocess.run(
-            [sys.executable, str(verifier), "--feature", feature, "--story-id", str(sid), "--workspace", str(workspace)],
+            [sys.executable, str(verifier), "--feature", feature, "--story-id", str(sid), "--workspace", str(workspace), *(["--mechanical-only"] if (workspace / ".adlc5" / feature / "evidence/checks.json").is_file() else [])],
             capture_output=True,
             text=True,
         )
@@ -585,6 +583,9 @@ def check_pr_ready(
     workspace: Path, feature: str, delivery: dict, lifecycle: dict | None, policies: dict
 ) -> list[dict]:
     checks: list[dict] = []
+    from lib.policies_load import profile_risk_errors
+    risk_errors = profile_risk_errors(workspace, feature, policies)
+    checks.append({"id": "profile_risk", "status": "fail" if risk_errors else "pass", "message": "; ".join(risk_errors) or "recorded profile risk"})
     autopilot = policies.get("autopilot") or {}
     strict_quality = bool(autopilot.get("interaction_mode") == "autonomous" or autopilot.get("quality_gates"))
     checks.extend(check_quality_gates(workspace, feature, policies, strict=strict_quality))
@@ -608,7 +609,7 @@ def check_pr_ready(
                 "message": f"current_phase is {phase}",
             }
         )
-    checks.extend(check_assure_verification(delivery, workspace, feature))
+    checks.extend(check_assure_verification_stories(delivery) if is_v2_state(lifecycle) else check_assure_verification(delivery, workspace, feature))
     checks.extend(check_verifier_independence(lifecycle, policies))
     if step_enabled(policies, "implement-3-integrate"):
         checks.extend(check_assure_integration(delivery))
@@ -662,6 +663,26 @@ def check_quality_gates(
     autopilot = policies.get("autopilot") or {}
     qg = autopilot.get("quality_gates") or {}
     if not qg:
+        return checks
+    declared = workspace / ".adlc5" / feature / "evidence/checks.json"
+    if declared.is_file():
+        from lib.completion_evidence import completion_checks, config
+        checks.extend(completion_checks(workspace, feature, policies, approval=False, review=False))
+        try:
+            ids = {c["id"] for c in config(workspace, feature) if c.get("required", True)}
+            selected = []
+            if qg.get("require_tests", True):
+                selected.append(("tests", {"tests", "regression", "acceptance"}))
+            if qg.get("lint_errors_max") is not None:
+                selected.append(("lint", {"lint"}))
+            if qg.get("coverage_min") is not None:
+                selected.append(("coverage", {"coverage"}))
+            if qg.get("cyclomatic_max") is not None:
+                selected.append(("complexity", {"complexity"}))
+            for name, aliases in selected:
+                checks.append({"id": "declared_" + name, "status": "pass" if ids & aliases else "fail", "message": "required consumer command must implement selected " + name + " policy threshold"})
+        except (ValueError, TypeError, KeyError, OSError) as exc:
+            checks.append({"id": "declared_checks", "status": "fail", "message": str(exc)})
         return checks
 
     coverage_min = qg.get("coverage_min")
@@ -814,7 +835,7 @@ def check_quality_gates(
             checks.append(
                 {
                     "id": "quality_gate_cyclomatic",
-                    "status": "warn",
+                    "status": "fail" if strict else "warn",
                     "message": f"cyclomatic_max={cyclomatic_max} configured; check-architecture.sh not run",
                 }
             )
@@ -898,6 +919,9 @@ def check_v2_plan_complete(
     workspace: Path, feature: str, state: dict, policies: dict | None = None
 ) -> list[dict]:
     checks: list[dict] = []
+    if profile_name(policies or {}) == "standard":
+        path = workspace / ".adlc5" / feature / "design/plan.md"
+        return [{"id": "compact_plan", "status": "pass" if path.is_file() and path.read_text().strip() else "fail", "message": "standard requires nonempty design/plan.md"}]
     craft = state.get("craftsmanship") or {}
     for key, cid in (
         ("architecture_review", "craftsmanship_architecture"),
@@ -1166,6 +1190,19 @@ def main() -> int:
     lifecycle = load_json(lifecycle_path)
     policies = load_policies(workspace, args.feature)
     gate_id = normalize_gate_id(args.gate)
+    from lib.completion_evidence import records, fingerprint, completion_checks
+    try:
+        current_fingerprint = fingerprint(workspace, args.feature)
+        fresh_review = next((r for r in reversed(records(workspace, args.feature)) if r.get("kind") == "review" and r.get("fingerprint") == current_fingerprint), None)
+        if lifecycle:
+            approvals = [r for r in records(workspace, args.feature) if r.get("kind") == "approval" and r.get("fingerprint") == current_fingerprint]
+            for approval in approvals:
+                lifecycle.setdefault("clarity", {}).setdefault("history", []).append(dict(approval))
+        if fresh_review and lifecycle:
+            lifecycle.setdefault("implement", {}).setdefault("verification", {})["independence"] = dict(fresh_review, fresh_session=fresh_review.get("coder_session_id") != fresh_review.get("verifier_session_id"))
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        pass
+
 
     if is_v2_state(lifecycle):
         delivery = v2_to_delivery_compat(lifecycle)
@@ -1200,7 +1237,7 @@ def main() -> int:
     elif args.gate == "deploy-ready":
         checks.extend(check_deploy_ready(workspace, args.feature, lifecycle))
     elif gate_id == "assure-1-verification":
-        checks.extend(check_assure_verification(delivery, workspace, args.feature))
+        checks.extend(check_assure_verification_stories(delivery) if is_v2_state(lifecycle) else check_assure_verification(delivery, workspace, args.feature))
         checks.extend(check_verifier_independence(lifecycle, policies))
         if lifecycle and is_v2_state(lifecycle):
             checks.extend(check_anchor_integrity(workspace, args.feature, policies))
@@ -1233,6 +1270,10 @@ def main() -> int:
     if lifecycle and is_v2_state(lifecycle):
         checks.extend(check_persona_context_gate(workspace, args.feature, lifecycle, policies))
 
+    if args.gate in ("pr-ready", "deploy-ready") or gate_id == "assure-1-verification":
+        checks.extend(completion_checks(workspace, args.feature, policies, approval=args.gate == "pr-ready"))
+        if profile_name(policies) in ("standard", "high_risk", "full"):
+            checks.append(check_spec_lint(workspace, args.feature))
     status = aggregate_status(checks)
     out = {
         "gate": args.gate,

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "baseline_framework_revision": "evaluation-baseline",
+  "cases": [
+    {
+      "case_id": "tiny-label",
+      "profile": "tiny",
+      "task": "Preserve the capitalization supplied by the caller when stripping surrounding whitespace from labels.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    },
+    {
+      "case_id": "tiny-total",
+      "profile": "tiny",
+      "task": "Treat an inventory item without quantity as zero; preserve the existing total behavior.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    },
+    {
+      "case_id": "standard-search",
+      "profile": "standard",
+      "task": "Search inventory names case-insensitively after trimming the query. Preserve item ordering and return original item records.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    },
+    {
+      "case_id": "standard-export",
+      "profile": "standard",
+      "task": "Replace JSON export with CSV export with name,quantity header, correct CSV quoting and one row per item.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    },
+    {
+      "case_id": "risk-path",
+      "profile": "high_risk",
+      "task": "Reject inventory reads whose resolved path leaves the inventory root, including absolute paths, traversal and symlinks, with ValueError. Preserve valid reads. This is a local resolved-path boundary, not a defense against concurrent adversarial symlink replacement.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    },
+    {
+      "case_id": "risk-save",
+      "profile": "high_risk",
+      "task": "Write inventory JSON using a same-directory temporary file and atomic os.replace. Serialization or replacement failure must preserve the previous data and clean temporary files. Propagate the original error. This is atomic replacement, not a promise of power-loss durability.",
+      "budget": {
+        "wall_clock_minutes": 30,
+        "cost_usd": 10
+      },
+      "observation_window_hours": 24
+    }
+  ]
+}

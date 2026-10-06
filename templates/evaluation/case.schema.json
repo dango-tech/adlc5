@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen ADLC5 consumer evaluation case",
+  "type": "object",
+  "required": ["case_id", "profile", "task", "budget", "observation_window_hours"],
+  "additionalProperties": false,
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+    "profile": {"enum": ["tiny", "standard", "high_risk"]},
+    "task": {"type": "string", "minLength": 1},
+    "budget": {
+      "type": "object",
+      "required": ["wall_clock_minutes", "cost_usd"],
+      "additionalProperties": false,
+      "properties": {
+        "wall_clock_minutes": {"type": "number", "exclusiveMinimum": 0},
+        "cost_usd": {"type": "number", "minimum": 0}
+      }
+    },
+    "observation_window_hours": {"type": "number", "exclusiveMinimum": 0}
+  }
+}

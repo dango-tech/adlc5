@@ -37,6 +37,7 @@ def main() -> int:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--persona", default="")
     parser.add_argument("--paths", nargs="*", default=[])
+    parser.add_argument("--handoff", action="store_true", help="measure an assembled handoff only")
     args = parser.parse_args()
 
     workspace = Path(args.workspace).resolve()
@@ -50,10 +51,10 @@ def main() -> int:
     paths = list(args.paths)
 
     index = workspace / ".adlc5" / args.feature / "memory" / "INDEX.md"
-    if index.is_file() and str(index) not in paths:
+    if not args.handoff and index.is_file() and str(index) not in paths:
         paths.insert(0, str(index))
 
-    if is_v2_state(state):
+    if not args.handoff and is_v2_state(state):
         stage = state.get("current_stage", "specify")
         summary = workspace / ".adlc5" / args.feature / "memory" / "summaries" / f"{stage}.md"
         if summary.is_file():
@@ -86,8 +87,10 @@ def main() -> int:
 
     total = 0
     details = []
-    for p in paths:
+    for p in dict.fromkeys(paths):
         path = Path(p)
+        if not path.is_absolute():
+            path = workspace / path
         if not path.is_file():
             details.append({"path": p, "tokens": 0, "status": "missing"})
             continue
@@ -100,13 +103,17 @@ def main() -> int:
         except ValueError:
             pass
 
-    within = total <= budget
+    missing = [d["path"] for d in details if d.get("status") == "missing"]
+    within = total <= budget and not missing
     out = {
         "status": "pass" if within else "fail",
         "estimated_tokens": total,
         "budget": budget,
         "within_budget": within,
         "paths": details,
+        "missing": missing,
+        "measurement": "characters/4 estimate of supplied content",
+        "host_overhead": "unknown; subsequent reads and hidden host prompts are excluded",
     }
     if persona_check:
         out["persona_check"] = persona_check

@@ -4,12 +4,18 @@ Agent Skills, rules, hooks (Cursor), knowledge base, and lifecycle scripts. Host
 
 ## Prerequisites
 
-Git · Bash · one supported AI host · Python 3 (optional, for hooks)
+Required: Git, Bash 3.2 or newer, Python 3.10 or newer, and jq. The kernel needs Python
+and jq even without hooks. No Python packages are required for the baseline.
+Installation checks these tools before creating configuration or host links.
+
+An AI host is needed for coding sessions, but not for contract tests or the
+consumer's runnable checks. Security scanners, MCP integrations, and host CLIs
+are optional unless your consumer policy requires them.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/dango85/adlc5.git && cd adlc5
+git clone https://github.com/dango-tech/adlc5.git && cd adlc5
 cp config.example.yaml config.yaml
 ./scripts/install.sh --platform cursor
 ./scripts/verify-install.sh 

@@ -1,6 +1,7 @@
 """Load .adlc5 policies.yaml without external deps (subset parser + optional PyYAML)."""
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,6 @@ PROFILE_SKIPS = {
         "plan-1-engineering-architecture",
         "plan-2-engineering-patterns",
         "plan-3-engineering-algorithms",
-        "plan-4-design-discovery",
         "plan-5-design-contracts",
         "plan-6-design-operations",
         "plan-7-design-critique",
@@ -76,6 +76,29 @@ def next_step_for_profile(policies: dict, current: str) -> str:
         if step_enabled(policies, step):
             return step
     return "implement-5-pr"
+
+
+def profile_risk_errors(workspace: Path, feature: str, policies: dict) -> list[str]:
+    """Validate an explicit risk assessment; never infer safety from prose or clarity."""
+    if profile_name(policies) not in ("tiny", "standard", "high_risk", "full"):
+        return ["unknown profile; select tiny, standard, high_risk, or full before progression"]
+    path = workspace / ".adlc5" / feature / "risk.json"
+    try:
+        risk = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ["record risk.json with categories, uncertain, and rationale before progression"]
+    categories = {"auth", "money", "secrets", "migration", "concurrency", "destructive",
+                  "public_compatibility", "disputed_requirements"}
+    if (not isinstance(risk, dict) or not isinstance(risk.get("categories"), list)
+            or any(not isinstance(c, str) or c not in categories for c in risk["categories"])
+            or not isinstance(risk.get("uncertain"), bool)
+            or not isinstance(risk.get("rationale"), str) or not risk["rationale"].strip()):
+        return ["invalid risk.json: use known categories, boolean uncertain, and a nonempty rationale"]
+    if (risk["categories"] or risk["uncertain"]) and profile_name(policies) != "high_risk":
+        return ["risk or uncertainty requires high_risk profile before implementation"]
+    if profile_name(policies) == "high_risk" and (policies.get("autopilot") or {}).get("require_human_pr_approval") is not True:
+        return ["high_risk requires autopilot.require_human_pr_approval: true"]
+    return []
 
 
 def _merge_dict(base: dict, overlay: dict) -> dict:

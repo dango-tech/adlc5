@@ -13,6 +13,7 @@ personas:
       - .agents/architecture.yaml
       - .agents/boundaries.yaml
       - .agents/commands.yaml
+      - change.md
       - spec-handoff.md
       - .prt/
       - .discover/
@@ -52,6 +53,7 @@ personas:
       - .agent-cache/symbols.json
       - .agent-cache/dependency-graph.json
       - .agent-cache/test-map.json
+      - change.md
       - spec-handoff.md
       - design/
       - memory/summaries/plan.md
@@ -80,6 +82,7 @@ personas:
       - .agent-cache/
       - memory/context-packs/story-*.md
       - tasks/code-spec/
+      - change.md
       - spec-handoff.md
       - memory/summaries/implement.md
       - memory/INDEX.md
@@ -109,6 +112,7 @@ personas:
       - memory/context-packs/verify-*.md
       - verify/
       - .qa/
+      - change.md
       - spec-handoff.md
       - tasks/code-spec/
       - memory/summaries/implement.md

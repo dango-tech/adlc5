@@ -105,23 +105,19 @@ def changed_files(workspace: Path) -> list[str] | None:
         return None
 
     out: set[str] = set()
-
+    commands = [
+        ["diff", "--name-only", "--no-renames", "-z"],
+        ["diff", "--cached", "--name-only", "--no-renames", "-z"],
+        ["ls-files", "--others", "--exclude-standard", "-z"],
+    ]
     baseline = branch_baseline(workspace)
     if baseline:
-        ec, diff_out = _git(workspace, ["diff", "--name-only", f"{baseline}...HEAD"])
-        if ec == 0:
-            out.update(line.strip() for line in diff_out.splitlines() if line.strip())
-
-    ec, status_out = _git(workspace, ["status", "--porcelain=v1", "--untracked-files=all"])
-    if ec == 0:
-        for line in status_out.splitlines():
-            if not line.strip() or len(line) < 4:
-                continue
-            path_part = line[3:].strip()
-            if " -> " in path_part:
-                path_part = path_part.split(" -> ", 1)[1]
-            out.add(path_part.strip('"'))
-
+        commands.append(["diff", "--name-only", "--no-renames", "-z", f"{baseline}...HEAD"])
+    for command in commands:
+        ec, output = _git(workspace, command)
+        if ec != 0:
+            raise ValueError("cannot determine changed files")
+        out.update(name for name in output.split("\0") if name)
     return sorted(out)
 
 
@@ -150,7 +146,7 @@ def all_declared_files(feature_dir: Path) -> set[str]:
     return declared
 
 
-def check_file_boundary(workspace: Path, fm: dict, feature_dir: Path) -> dict:
+def check_file_boundary(workspace: Path, fm: dict, feature_dir: Path, declared_files: set[str] | None = None) -> dict:
     files_create = fm.get("files_to_create") or []
     missing_created = [p for p in files_create if not (workspace / p).is_file()]
 
@@ -166,9 +162,9 @@ def check_file_boundary(workspace: Path, fm: dict, feature_dir: Path) -> dict:
     # report) always shows as "changed" under .adlc5/ — that's not the
     # story's production-code boundary, so exclude it rather than false-flag
     # every run as scope creep.
-    changed = [c for c in changed if not c.startswith(".adlc5/")]
+    changed = [c for c in changed if not c.startswith((".adlc5/", ".qa/", ".agent-cache/"))]
 
-    feature_boundary = all_declared_files(feature_dir)
+    feature_boundary = all_declared_files(feature_dir) if declared_files is None else declared_files
     out_of_boundary = sorted(set(changed) - feature_boundary)
     if missing_created:
         return {
@@ -314,15 +310,43 @@ def check_no_debug_noise(workspace: Path, fm: dict) -> dict:
     return {"id": "no_debug_noise", "status": "pass", "message": "no known debug patterns found"}
 
 
+def check_bounded_change(workspace: Path, feature_dir: Path) -> list[dict]:
+    record = feature_dir / "change.md"
+    if not record.is_file() or not record.read_text().strip():
+        return [{"id": "bounded_change", "status": "fail", "message": "tiny requires nonempty change.md"}]
+    state = json.loads((feature_dir / "state.json").read_text())
+    declared = set()
+    for story in (state.get("tasks") or {}).get("stories", []):
+        declared.update(story.get("files") or [])
+    fm, _ = load_frontmatter(record.read_text())
+    declared.update((fm or {}).get("files_to_create") or [])
+    declared.update((fm or {}).get("files_to_modify") or [])
+    if not declared or any(not isinstance(name, str) or Path(name).is_absolute() or ".." in Path(name).parts for name in declared):
+        return [{"id": "bounded_change", "status": "fail", "message": "declare bounded files in story.files or change.md frontmatter"}]
+    boundary = check_file_boundary(workspace, {"files_to_create": []}, feature_dir, declared)
+    if boundary["status"] == "warn":
+        boundary["status"] = "fail"
+    return [boundary, check_no_debug_noise(workspace, {"files_to_modify": sorted(declared)})]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--feature", required=True)
-    p.add_argument("--story-id", required=True)
+    p.add_argument("--story-id")
+    p.add_argument("--bounded-tiny", action="store_true", help="Verify compact change record and declared story file boundary")
     p.add_argument("--workspace", default=".")
+    p.add_argument("--mechanical-only", action="store_true", help="Boundaries/spec checks only; required command evidence is enforced by canonical gates")
     args = p.parse_args(argv if argv is not None else sys.argv[1:])
 
     workspace = Path(args.workspace).resolve()
     feature_dir = workspace / ".adlc5" / args.feature
+    if args.bounded_tiny:
+        checks = check_bounded_change(workspace, feature_dir)
+        status = "fail" if any(c["status"] == "fail" for c in checks) else "pass"
+        print(json.dumps({"status": status, "checks": checks}))
+        return 0 if status == "pass" else 1
+    if not args.story_id:
+        p.error("--story-id required unless --bounded-tiny")
     spec_path = find_code_spec(feature_dir, args.story_id)
     if spec_path is None:
         print(
@@ -347,10 +371,10 @@ def main(argv: list[str] | None = None) -> int:
     checks = [
         check_file_boundary(workspace, fm, feature_dir),
         check_tests_declared_exist(workspace, fm),
-        check_tests_pass(workspace, args.feature),
+        {"id": "tests_pass", "status": "not_required", "message": "canonical gate validates declared command evidence"} if args.mechanical_only else check_tests_pass(workspace, args.feature),
         check_signatures_match(workspace, fm),
         check_no_debug_noise(workspace, fm),
-        check_lint_clean(workspace, args.feature),
+        {"id": "lint_clean", "status": "not_required", "message": "canonical gate validates declared command evidence"} if args.mechanical_only else check_lint_clean(workspace, args.feature),
     ]
     overall = "fail" if any(c["status"] == "fail" for c in checks) else "pass"
 

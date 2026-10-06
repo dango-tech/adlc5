@@ -4,103 +4,102 @@
   <img alt="ADLC5" src="assets/brand/logo-light.svg" width="480">
 </picture>
 
-**AI Development Lifecycle (ADLC5 4.x)** — an evidence-driven development skill for agent-driven software: Specify → Plan → Tasks → Implement, with clear `@adlc5-*` handles from idea to production-ready code.
+**Public preview.** ADLC5 has tested workflow contracts; comparative coding-quality
+and outside-contributor qualification are still pending.
 
-Framework and persisted-state versions are separate: ADLC5 4.x intentionally retains `schema_version: "3.0"` for state compatibility. The five core lifecycle skills plus cross-cutting SOUL track `core/VERSION`; auxiliary skills version independently.
+**ADLC5** is a coding harness for **Specify → Plan → Tasks → Implement**.
+Agent skills handle judgment; one deterministic kernel owns progression and checks.
+It aims for repeatable acceptance and failure handling, not identical generated code.
 
-- **Judgment + kernel** — Skills orchestrate discovery, design, and craftsmanship; a fat deterministic kernel (`./scripts/adlc5` + MCP) owns gates, state, clarity, packs, and model resolve. A2A is optional later — **not** the kernel.
-- **Craftsmanship, not a syllabus** — Architecture, patterns (OKF catalog on demand), algorithms, and readable code raise the bar without textbook branding.
-- **Clarity before code** — Thorough `ask_only` discovery and a solid plan make later stages more deterministic and cheaper in tokens.
-- **SOUL, the fifth pillar** — Five guards now reason over the 4.0 work graph: preserve consumer acceptance, select the minimum sufficient profile, honor dependency/file ownership, demand independent evidence, and optimize cost only after quality. Advisory; gates stay the enforcement.
-- **Lean context, many hosts** — Packs, progressive catalog, and Context7/MCP for live docs; multi-IDE Agent Plugins plus install/upgrade hygiene that prune stale host links.
-- **Pressure-tested** — [`dogfood/`](dogfood/) and `pr-ready` are proof points among the rest of the system — not the whole pitch.
+## Quickstart
 
-## Install
-
-One distribution tree at the repo root (`core/`, `skills/`, `scripts/`, …). Version: [`core/VERSION`](core/VERSION).
+Required: Git, Bash, Python 3.10+, jq, and a supported agent host for AI delivery.
+Consumer checks and kernel tests do not require an AI subscription.
 
 ```bash
-git clone https://github.com/dango85/adlc5.git && cd adlc5
+git clone https://github.com/dango-tech/adlc5.git
+cd adlc5
 cp config.example.yaml config.yaml
-./scripts/install.sh --platform all   # or: cursor | claude | codex | opencode | gemini | hermes | antigravity
-./scripts/verify-install.sh
+./scripts/install.sh --platform codex  # or your host
+./scripts/verify-install.sh --platform codex
 ```
 
-**Cursor Agent Plugin:** load [`.cursor-plugin/plugin.json`](.cursor-plugin/plugin.json) (skills + kernel/MCP shims). Classic `install.sh` still symlinks skills/rules for all seven hosts.
-
-In your **application repo**:
+In your application repository:
 
 ```bash
 /path/to/adlc5/scripts/init-workspace.sh --project .
 /path/to/adlc5/scripts/init-feature.sh --feature my-feature --interaction hitl
-@adlc5 for my-feature
 ```
 
-Workspace initialization creates a tracked `.agents/` repository constitution and
-a generated, gitignored `.agent-cache/` structural index before feature SDD starts.
-See [repository context](core/guides/repository-context.md).
+Then invoke **`@adlc5 for my-feature`**. Use the framework in consumer repositories;
+this repository distributes the framework and its portable `dogfood/` example.
+See [installation](shared/docs/INSTALL.md) for other hosts and upgrades.
 
-### Upgrade / clean old installs
+## Four stages, proportionate depth
 
-`install.sh` and `update-adlc5.sh` treat **`core/VERSION`** as source of truth. On install they:
+| Stage | Useful output |
+|---|---|
+| Specify | Expected behavior, constraints, acceptance, explicit risk assessment |
+| Plan | Existing flow to reuse, intended change, boundaries and decisions |
+| Tasks | Bounded work units and checkable specs when decomposition helps |
+| Implement | Patch, runnable checks, diff review and current completion evidence |
 
-1. Print current version and `ADLC5_ROOT`
-2. **Prune stale skill/rule symlinks** (old forge/v1 names, broken links, legacy `v1/skills` and `v2/skills` targets, retired ADLC5 `.mdc` rule links) and **aged install backups** (opt out with `--keep-backup`) via `cleanup-stale-skills.sh`
-3. Backup-replace existing install targets, then re-link current `skills/`
-4. Verify kernel + MCP + plugin metadata
+Tiny work keeps decisions in one `change.md`. Standard work keeps a brief
+`design/plan.md`; high-risk work retains detailed design, independent critique,
+QA and human approval. Knowledge-base and craftsmanship material are pulled in
+when a concrete problem needs them.
 
-Feature folders under `.adlc5/{feature}/` are **not** auto-pruned.
+## What completion establishes
+
+`adlc5 transition TARGET` validates the next step and its required gates.
+`adlc5 evidence check` runs consumer-declared commands; review and approval records
+are bound to the patch and acceptance/configuration inputs. Relevant edits make
+previous evidence stale. Generic `state set` is for metadata, not completion.
+
+`pr-ready` establishes that the selected profile's required checks and review have
+passed for current inputs. It does not establish deployment, public availability,
+legal clearance, or defect-free production operation. Local records are writable;
+this is procedural enforcement, not authentication against a malicious local actor.
+See [completion commands and limits](docs/evidence-completion.md).
+
+## Try a real consumer task
 
 ```bash
-./scripts/update-adlc5.sh --self      # this host
-./scripts/update-adlc5.sh --global    # all hosts
-./scripts/cleanup-stale-skills.sh --platform all --prune-stale-skills --prune-stale-rules
-./scripts/cleanup-features.sh --workspace . --status complete --older-than 90 --dry-run
-./scripts/cleanup-features.sh --workspace . --status complete --older-than 90 --archive
-# Archive also writes OKF Feature summary + usage summary:
-#   .adlc5/_archive/{feature}-YYYYMMDD/FEATURE.md (includes a Usage section)
-#   .adlc5/_archive/{feature}-YYYYMMDD/usage-summary.json (when usage was recorded)
+python3 dogfood/consumer/regression.py
+python3 scripts/evaluation/run-case.py prepare --case tiny-label \
+  --arm candidate --host codex --model YOUR_ACTUAL_MODEL \
+  --directory /tmp/adlc5-tiny-label-candidate-1
 ```
 
-If an old clone still has a `v2/` layout, pull/rebase onto 4.x (paths lift to root) or re-clone, then re-run `install.sh`.
+Open the generated `HANDOFF.md` in a fresh host session. The six-case fixture has
+independent frozen acceptance tests and a collector that reports missing observations
+honestly. See [consumer instructions](dogfood/consumer/README.md) and the
+[evaluation contract](docs/evaluation.md). Automated fixture tests are not live
+comparative quality results; the pilot and outside-contributor trial remain pending.
 
-## Four-stage handles
+## Host support
 
-| Invoke | Stage |
-|--------|--------|
-| `@adlc5` | Full lifecycle orchestrator |
-| `@adlc5-specify` | Specify |
-| `@adlc5-plan` | Plan |
-| `@adlc5-tasks` | Tasks |
-| `@adlc5-implement` | Implement → `pr-ready` |
+The contract-test CI matrix covers Ubuntu and macOS; disposable installation smoke
+covers Claude skill links and kernel verification. Codex and Cursor have packaged
+adapter/hook tests. Other install adapters remain available but do not imply equal
+end-to-end delivery validation. See [cross-platform details](shared/docs/CROSS-PLATFORM.md).
+Live delivery/resume qualification must be recorded per host before broader claims.
+See [distribution contents](docs/distribution.md) for archive exclusions and publication checks.
 
-Skill index: [shared/docs/SKILL-MAP.md](shared/docs/SKILL-MAP.md)
+## Contribute
 
-## Supported hosts
+```bash
+/bin/bash scripts/tests/run-all.sh
+python3 scripts/tests/test-portable-install.py
+```
 
-Cursor · Claude Code · Codex · OpenCode · Gemini CLI · Hermes Agent · Antigravity — [CROSS-PLATFORM.md](shared/docs/CROSS-PLATFORM.md)
+Start with a reproducible problem and a focused fix. A new rule, gate or skill should
+show the failure it prevents. [CONTRIBUTING.md](CONTRIBUTING.md) names the checks and
+consumer scenario expected for each contribution; [GOVERNANCE.md](GOVERNANCE.md)
+describes larger changes.
 
-## Knowledge base vs live docs (MCP)
+Further reference: [kernel](docs/ADLC5-kernel.md), [skill map](shared/docs/SKILL-MAP.md),
+[repository context](core/guides/repository-context.md), [on-demand KB](shared/docs/knowledge-base/README.md),
+[current technology sources](core/guides/current-information.md), [license](LICENSE).
 
-The [in-repo knowledge base](shared/docs/knowledge-base/) is **timeless craftsmanship** — design judgment that does not churn with release cycles. Book-depth essays live there as reference, not as the product brand.
-
-For **current** libraries, frameworks, APIs, agentic protocols, and up-to-date best practices, enable **Context7 MCP** (and your other configured MCPs — e.g. wiki / Obsidian for institutional knowledge). That is part of getting full value from ADLC5 setup; do not treat the vendored KB as a live library docs store. Agents must revalidate volatile claims against official sources and follow [current-information.md](core/guides/current-information.md) before using or shipping them.
-
-**OKF pattern catalog** (`shared/docs/patterns/`): progressive disclosure — lookup ids with `./scripts/adlc5 patterns lookup`, open ≤3 cards per turn; never paste the full catalog into development cycles.
-
-Agent retrieval order: [mcp-knowledge-retrieval](.cursor/rules/mcp-knowledge-retrieval.mdc) · install notes: [INSTALL.md](shared/docs/INSTALL.md)
-
-## Docs
-
-| Doc | Contents |
-|-----|----------|
-| [shared/docs/INSTALL.md](shared/docs/INSTALL.md) | Install, workspace, agent self-update |
-| [shared/docs/SKILL-MAP.md](shared/docs/SKILL-MAP.md) | Skill invoke index |
-| [docs/ADLC5.md](docs/ADLC5.md) | Lifecycle reference |
-| [docs/ADLC5-kernel.md](docs/ADLC5-kernel.md) | Fat kernel + MCP |
-| [core/guides/repository-context.md](core/guides/repository-context.md) | Repository constitution and generated intelligence |
-| [AGENTS.md](AGENTS.md) | Agent invoke map |
-| [STRUCTURE.md](STRUCTURE.md) | Repository layout |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes |
-
-[LICENSE](LICENSE)
+Framework version: [core/VERSION](core/VERSION). Persisted state retains schema `3.0`.

@@ -13,5 +13,5 @@ Offer `@discover` when problem framing is unclear.
 
 ## State
 
-- `current_step`: `specify-2-requirements`
+- Advance using `adlc5 transition specify-2-requirements --feature "{feature}"` after the step succeeds.
 - Link discovery brief path in evidence log

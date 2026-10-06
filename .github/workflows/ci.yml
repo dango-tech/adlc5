@@ -5,17 +5,53 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  privacy:
+    name: privacy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Privacy regressions and complete reachable history
+        run: |
+          python3 scripts/check-publication.py --self-test
+          python3 scripts/check-publication.py
 
-      - name: Contract tests
-        run: ./scripts/tests/run-all.sh
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Evaluation keeps a frozen pre-change framework revision.
 
-      - name: Install (claude platform)
-        run: ./scripts/install.sh --platform claude
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Verify install
-        run: ./scripts/verify-install.sh --platform claude
+      - name: Install jq
+        run: |
+          if ! command -v jq >/dev/null; then
+            if [[ "$RUNNER_OS" == "macOS" ]]; then
+              brew install jq
+            else
+              sudo apt-get update
+              sudo apt-get install -y jq
+            fi
+          fi
+
+      - name: Contract tests (system Bash)
+        run: /bin/bash ./scripts/tests/run-all.sh
+
+      - name: Disposable install and verification
+        run: python3 scripts/tests/test-portable-install.py
+
+      - name: Distribution exclusions and publication inputs
+        run: python3 scripts/tests/test-distribution.py

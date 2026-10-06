@@ -17,16 +17,13 @@ Write `.adlc5/{feature}/spec-handoff.md` with:
 
 Copy [templates/feature-docs/README.md](../../../templates/feature-docs/README.md) to `.adlc5/{feature}/docs/README.md`.
 
-## State
+## Progression
 
-- `stage_status.specify`: `completed`
-- Keep `current_stage: specify` and `current_step: specify-4-handoff` while
-  running `./scripts/adlc5 pilot --feature "{feature}"`.
-- Apply the returned `suggested_next` with `adlc5 state set`: `tiny` routes to
-  `implement-1-build`, `standard` to `tasks-1-stories`, and `high_risk` to
-  `plan-1-engineering-architecture`. Set `current_stage` from that step prefix
-  and mark the selected stage `in_progress`; mark any skipped `plan`/`tasks`
-  stages `waived` so state records the deliberate profile route.
+Record `risk.json` and the selected profile before implementation. Tiny work uses
+`change.md` for its bounded reuse/scope/acceptance/risk decisions; standard work
+continues into brief Plan. Run `adlc5 pilot` and apply its `suggested_next` with
+`adlc5 transition TARGET --feature "{feature}"`. The kernel validates gates and
+updates progression; never patch stage/step/completion fields with `state set`.
 
 Compact memory:
 

@@ -181,7 +181,7 @@ if [[ "$GATE_ID" == "pr-ready" ]]; then
   PR_STATUS=$(echo "$PR_OUT" | jq -r '.status // "fail"')
   if [[ "$PR_EC" -eq 0 && "$PR_STATUS" == "pass" ]]; then
     jq -nc --argjson persona "$PERSONA_JSON" --argjson model "$MODEL_JSON" \
-      '{action:"done",phase:"pr-ready",skill:null,message:"pr-ready gate passed"} + $persona + $model'
+      '{action:"done",phase:"pr-ready",skill:null,message:"pr-ready gate passed",transition_target:"completed"} + $persona + $model'
     exit 3
   fi
   jq -nc --argjson gates "$PR_OUT" --argjson persona "$PERSONA_JSON" --argjson model "$MODEL_JSON" \
@@ -208,7 +208,7 @@ print(next_step_for_profile(p, current_step))
 PY
 )
   jq -nc --arg next "$NEXT" --arg skill "$SKILL" --arg gate "$GATE_ID" --argjson persona "$PERSONA_JSON" --argjson model "$MODEL_JSON" \
-    '{action:"advance",suggested_next:$next,skill:$skill,gate:$gate,phase:"'"$CURRENT_STEP"'"} + $persona + $model'
+    '{action:"advance",suggested_next:$next,transition_target:$next,skill:$skill,gate:$gate,phase:"'"$CURRENT_STEP"'"} + $persona + $model'
   exit 0
 fi
 

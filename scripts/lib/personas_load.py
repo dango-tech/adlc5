@@ -42,10 +42,14 @@ def get_persona_config(persona_id: str, registry: dict[str, Any] | None = None) 
 
 
 def normalize_feature_path(path: str, feature: str) -> str:
-    p = path.replace("\\", "/").lstrip("./")
+    p = path.replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
     prefix = f".adlc5/{feature}/"
     if p.startswith(prefix):
         return p[len(prefix) :]
+    if prefix in p:
+        return p.split(prefix, 1)[1]
     return p
 
 
@@ -63,8 +67,8 @@ def path_matches_pattern(rel_path: str, pattern: str) -> bool:
 
 
 def is_feature_artifact(rel: str) -> bool:
-    prefixes = ("memory/", "design/", "tasks/", "verify/", ".qa/", ".prt/", ".discover/", "spec-handoff.md")
-    return rel.startswith(prefixes) or rel in ("spec-handoff.md",)
+    prefixes = ("memory/", "design/", "tasks/", "verify/", ".qa/", ".prt/", ".discover/", "spec-handoff.md", "change.md")
+    return rel.startswith(prefixes) or rel in ("spec-handoff.md", "change.md")
 
 
 def check_persona_context(

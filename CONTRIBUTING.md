@@ -33,12 +33,32 @@ ADLC5 reviews itself with its own tools. Reasonable expectations for a PR here:
 
 ## Testing
 
+Install Git, Bash 3.2+, Python 3.10+, and jq first; no AI subscription or global
+host installation is required for these checks. CI uses Linux and macOS,
+including macOS's system Bash.
+
 ```bash
-./scripts/tests/run-all.sh       # contract tests — gates, state, doc links, plugin packaging
-./scripts/verify-install.sh      # confirms a platform install resolves correctly
+/bin/bash ./scripts/tests/run-all.sh     # gates, state, docs and packaging
+python3 scripts/tests/test-portable-install.py  # disposable Claude install
 ```
 
-Both should pass before you open a PR.
+The install smoke test copies the distribution and uses a temporary home, so it
+cannot replace your existing skills or configuration. Both commands should pass
+before you open a PR. Use `./scripts/verify-install.sh --platform <host>` only
+when checking an intentional installation in your own host directories.
+
+## Focused validation
+
+| Change | Focused check | Consumer scenario |
+|---|---|---|
+| Gates, transitions, evidence | `python3 scripts/tests/test_completion_evidence.py` | Demonstrate rejected stale/failed evidence and a valid transition |
+| Skills, profiles, context | `python3 scripts/tests/test-lightweight-workflow.py` | Deliver or resume one bounded consumer task with the changed route |
+| Evaluation | `python3 scripts/tests/test-evaluation-pilot.py` | Frozen acceptance fails before delivery; unknown outcomes stay unknown |
+| Host adapter or install | `python3 scripts/tests/test-portable-install.py` | Disposable install plus actual delivery/resume for the claimed host |
+
+Use [the consumer fixture](dogfood/consumer/README.md) for a reproducible task.
+Attach actual command results and limitations to the PR. Fixture tests do not
+replace live host validation; never claim observations that were not performed.
 
 ## Pull requests
 
@@ -48,4 +68,10 @@ Both should pass before you open a PR.
 
 ## Questions
 
-Open a [discussion or issue](https://github.com/dango85/adlc5/issues) — see the issue templates under `.github/ISSUE_TEMPLATE/` for the right one to use (bug report, skill proposal, or framework RFC).
+Open a [discussion or issue](https://github.com/dango-tech/adlc5/issues) — see the issue templates under `.github/ISSUE_TEMPLATE/` for the right one to use (bug report, skill proposal, or framework RFC).
+
+Before packaging, run `python3 scripts/tests/test-distribution.py`. Follow
+[distribution guidance](docs/distribution.md) and use native Git archives.
+Keep development plans and host-local state outside tracked publication inputs.
+
+Set up [publication guardrails](docs/publication-guardrails.md) before pushing.

@@ -28,3 +28,8 @@ autopilot:
     - security_critical
     - contradictory_spec
     - unapproved_verifier_waiver
+
+# Review must be independent of the coding session.
+persona_mode:
+  fresh_subagent_per_persona: true
+  verifier_different_model: false

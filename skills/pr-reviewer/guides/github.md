@@ -36,7 +36,7 @@ Detect readiness:
 ./scripts/pr-reviewer-open.sh --feature "{feature}" --body-file /tmp/pr-body.md
 ```
 
-Record `status: completed` and `url` from JSON in `.adlc5/{feature}/state.json` → `implement.pr`.
+Record the actual `url` and `published: true` metadata from JSON in `.adlc5/{feature}/state.json` → `implement.pr`.
 
 ### Review
 

@@ -125,8 +125,18 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
         },
         "build": lambda a: ["state", "get", "--feature", a["feature"], * _opt("--workspace", a.get("workspace"))],
     },
+    "adlc5_transition": {
+        "description": "Validated canonical next step; completion requires fresh evidence",
+        "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "target": {"type": "string"}}, "required": ["feature", "target"], "additionalProperties": False},
+        "build": lambda a: ["transition", a["target"], "--feature", a["feature"], *_opt("--workspace", a.get("workspace"))],
+    },
+    "adlc5_evidence": {
+        "description": "Run declared checks or record local reviewer/approval attestation",
+        "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "action": {"enum": ["check", "review", "approve", "build"]}, "file": {"type": "string"}}, "required": ["feature", "action"], "additionalProperties": False},
+        "build": lambda a: ["evidence", a["action"], "--feature", a["feature"], *_opt("--workspace", a.get("workspace")), *_opt("--file", a.get("file"))],
+    },
     "adlc5_state_set": {
-        "description": "Schema-validated state patch/replace (→ adlc5 state set)",
+        "description": "Schema-validated metadata patch/replace; progression/results use transition/evidence",
         "inputSchema": {
             "type": "object",
             "properties": {

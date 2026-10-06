@@ -64,4 +64,4 @@ Older state layouts remain a script-level compatibility concern; current verific
 - `unapproved_verifier_waiver` — warnings without `clarity.history` approval
 - `verification_report_out_of_sync` — `sync-verification-report.sh` exit non-zero
 
-See the [ADLC5 skill](https://github.com/dango85/adlc5/blob/main/skills/adlc5/SKILL.md) (autonomous mode) and `scripts/pilot-autopilot.sh`.
+See the [ADLC5 skill](https://github.com/dango-tech/adlc5/blob/main/skills/adlc5/SKILL.md) (autonomous mode) and `scripts/pilot-autopilot.sh`.

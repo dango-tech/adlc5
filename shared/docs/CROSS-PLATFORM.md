@@ -28,7 +28,7 @@ Docs: [docs/ADLC5.md](../../docs/ADLC5.md)
 ## Install
 
 ```bash
-git clone https://github.com/dango85/adlc5.git
+git clone https://github.com/dango-tech/adlc5.git
 cd adlc5
 cp config.example.yaml config.yaml
 chmod +x scripts/*.sh

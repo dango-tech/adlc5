@@ -43,12 +43,14 @@ from lib.state_v2 import (  # noqa: E402
 )
 
 COMMANDS = {
+    "transition": "Validated canonical next-step transition",
+    "evidence": "Run checks and record review/approval evidence",
     "gate": "Evaluate delivery/lifecycle gates (→ check-gates.py)",
     "pack": "Generate story context pack (→ generate-pack.sh)",
     "clarity": "Score a spec/design file (→ clarity-score.py)",
-    "phase": "Suggest/validate phase advance (→ advance-phase.sh; no apply — use state set)",
+    "phase": "Inspect legacy phase suggestion; canonical progression uses transition",
     "pilot": "One autopilot iteration (→ pilot-autopilot.sh)",
-    "state": "Read/write feature state.json (set is schema-validated)",
+    "state": "Read/patch metadata; audited repair cannot certify completion",
     "anchors": "Lock/check acceptance anchors (lock applies the validated state patch)",
     "repo-spec": "Initialize/validate tracked repository constitution files",
     "repo-index": "Build/refresh/check generated repository intelligence",
@@ -103,7 +105,7 @@ Examples:
   ./scripts/adlc5 phase --feature NAME --workspace .
   ./scripts/adlc5 pilot --feature NAME --workspace .
   ./scripts/adlc5 state get --feature NAME --workspace .
-  ./scripts/adlc5 state set --feature NAME --workspace . --patch '{{"current_step":"specify-1-scope"}}'
+  ./scripts/adlc5 state set --feature NAME --workspace . --patch '{{"scope":{{"type":"increment"}}}}'
   ./scripts/adlc5 anchors lock --feature NAME --workspace .
   ./scripts/adlc5 repo-spec init --workspace .
   ./scripts/adlc5 repo-spec reconcile --workspace .
@@ -122,7 +124,7 @@ Examples:
   ./scripts/adlc5 version
 
 Underlying tools keep their own flags; unknown args are forwarded.
-Phase apply: advance-phase.sh is suggest-only — apply via state set after HITL.
+Phase is legacy suggest-only; canonical progression uses transition TARGET.
 See: docs/ADLC5-kernel.md
 """,
         file=stream,
@@ -189,8 +191,7 @@ def cmd_phase(args: list[str]) -> int:
                     "error": "phase_apply_unavailable",
                     "message": (
                         "advance-phase.sh is suggest-only (no safe mutate path). "
-                        "Confirm with ./scripts/adlc5 phase, then apply via "
-                        "./scripts/adlc5 state set --patch '{...}'."
+                        "Use ./scripts/adlc5 transition TARGET --feature NAME for canonical state."
                     ),
                 }
             )
@@ -225,6 +226,8 @@ def _state_help(stream=sys.stdout) -> None:
   ./scripts/adlc5 state get --feature NAME [--workspace DIR]
   ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
 
+state set changes metadata only; protected progression/results require transition or evidence.
+state repair --reason TEXT is audited recovery and cannot mint verification or approval.
 state set merges --patch/--file into existing state.json (default), validates against
 core/state-schema.json, then atomically writes. Invalid patches leave state untouched.
 --replace requires a full document (still schema-validated; feature/schema_version locked).
@@ -263,7 +266,7 @@ def cmd_state_get(rest: list[str]) -> int:
     return 0
 
 
-def cmd_state_set(rest: list[str]) -> int:
+def cmd_state_set(rest: list[str], *, repair=False) -> int:
     parser = argparse.ArgumentParser(prog="adlc5 state set", add_help=True)
     parser.add_argument("--feature", required=True)
     parser.add_argument("--workspace", default=".")
@@ -275,6 +278,7 @@ def cmd_state_set(rest: list[str]) -> int:
         help="Replace entire state with --file/--patch document (not merge)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate only; do not write")
+    parser.add_argument("--reason", default=None)
     try:
         ns = parser.parse_args(rest)
     except SystemExit as exc:
@@ -308,13 +312,19 @@ def cmd_state_set(rest: list[str]) -> int:
         return 2
 
     workspace = Path(ns.workspace).resolve()
+    if repair and not ns.reason:
+        print(json.dumps({"status": "error", "error": "repair_reason_required"}))
+        return 2
+    if repair and not ns.dry_run:
+        from lib.completion_evidence import append
+        append(workspace, ns.feature, {"kind": "repair_requested", "reason": ns.reason, "patch": payload})
     if ns.replace:
         result = set_feature_state(
-            workspace, ns.feature, replace=payload, dry_run=ns.dry_run
+            workspace, ns.feature, replace=payload, dry_run=ns.dry_run, operation="repair" if repair else "metadata"
         )
     else:
         result = set_feature_state(
-            workspace, ns.feature, patch=payload, dry_run=ns.dry_run
+            workspace, ns.feature, patch=payload, dry_run=ns.dry_run, operation="repair" if repair else "metadata"
         )
 
     # Keep stdout lean on success: status/path (+ dry_run); include errors on failure
@@ -339,6 +349,8 @@ def cmd_state(args: list[str]) -> int:
         return cmd_state_get(rest)
     if sub == "set":
         return cmd_state_set(rest)
+    if sub == "repair":
+        return cmd_state_set(rest, repair=True)
     print(f"ERROR: unknown state subcommand: {sub}", file=sys.stderr)
     _state_help(sys.stderr)
     return 2
@@ -584,6 +596,119 @@ def cmd_patterns(args: list[str]) -> int:
     return run(["bash", str(script), *rest])
 
 
+def cmd_completion(args, *, evidence=False):
+    from lib.completion_evidence import transition, run_checks, fingerprint, append
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=["check", "review", "approve", "build"] if evidence else None)
+    parser.add_argument("--feature", required=True)
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--file", help="review identity/disposition JSON or approval JSON")
+    ns = parser.parse_args(args)
+    workspace = Path(ns.workspace).resolve()
+    try:
+        if not evidence:
+            result = transition(workspace, ns.feature, ns.action)
+        elif ns.action == "check":
+            result = run_checks(workspace, ns.feature)
+            result["status"] = "ok" if result["stable"] and all(r["status"] == "pass" for r in result["results"] if r.get("required", True)) else "error"
+        else:
+            if not ns.file:
+                raise ValueError("--file JSON required")
+            result = json.loads(Path(ns.file).read_text())
+            if not isinstance(result, dict):
+                raise ValueError("record must be an object")
+            if ns.action == "build":
+                state = load_feature_state(workspace, ns.feature)
+                if not state or state.get("current_step") != "implement-1-build":
+                    raise ValueError("build records require implement-1-build")
+                ids = result.get("story_ids")
+                stories = (state.get("tasks") or {}).get("stories", [])
+                from lib.policies_load import load_policies, profile_name
+                if not isinstance(ids, list) or not ids and (stories or profile_name(load_policies(workspace, ns.feature)) != "tiny"):
+                    raise ValueError("build record requires story_ids; empty allowed only for tiny without stories")
+                if set(ids) - {s.get("id") for s in stories}:
+                    raise ValueError("unknown story ID")
+                for story in stories:
+                    if story.get("id") in ids:
+                        story["status"] = "implementation_complete"
+                saved = set_feature_state(workspace, ns.feature, patch={"tasks": {"stories": stories}}, operation="transition")
+                if saved["status"] != "ok":
+                    raise ValueError(str(saved))
+            elif ns.action == "review":
+                state = load_feature_state(workspace, ns.feature)
+                if not state or state.get("current_stage") != "implement":
+                    raise ValueError("review requires Implement stage")
+                for key in ("coder_session_id", "verifier_session_id", "coder_model_id", "verifier_model_id", "disposition"):
+                    if not isinstance(result.get(key), str) or not result[key]:
+                        raise ValueError("missing " + key)
+                if result["disposition"] not in ("pass", "reject") or not isinstance(result.get("blocking_findings", []), list):
+                    raise ValueError("invalid review disposition/findings")
+            else:
+                from lib.state_v2 import is_human_approver
+                state = load_feature_state(workspace, ns.feature)
+                approval_type = result.get("type")
+                allowed = {"type", "approved_by", "decision", "reason"}
+                if approval_type == "deploy_approval":
+                    allowed.add("environment")
+                if approval_type == "anchor_relock_approval":
+                    allowed.update(("acceptance_id", "from_sha256", "to_sha256"))
+                if set(result) - allowed:
+                    raise ValueError("unknown approval fields: " + ", ".join(sorted(set(result) - allowed)))
+                decision = result.get("decision", "approve")
+                if decision not in ("approve", "reject"):
+                    raise ValueError("approval decision must be approve or reject")
+                result["decision"] = decision
+                if approval_type not in ("pr_approval", "deploy_approval", "anchor_relock_approval", "verifier_waiver") or not is_human_approver(result.get("approved_by")):
+                    raise ValueError("scoped approval type and human provenance label required; local unauthenticated attestation")
+                allowed_stages = ("tasks", "implement") if approval_type == "anchor_relock_approval" else ("implement",)
+                if not state or state.get("current_stage") not in allowed_stages:
+                    raise ValueError("approval incompatible with current stage")
+                if approval_type == "anchor_relock_approval":
+                    import re
+                    if not isinstance(result.get("acceptance_id"), str) or not result["acceptance_id"]:
+                        raise ValueError("anchor relock requires acceptance_id")
+                    if any(not isinstance(result.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", result[key]) for key in ("from_sha256", "to_sha256")):
+                        raise ValueError("anchor relock requires from_sha256 and to_sha256")
+                if approval_type == "verifier_waiver" and not result.get("reason"):
+                    raise ValueError("verifier waiver requires reason; mandatory fresh completion review still applies")
+                if approval_type == "deploy_approval":
+                    if not isinstance(result.get("environment"), str) or not result["environment"].strip():
+                        raise ValueError("deploy approval requires nonempty environment scope")
+                    pr = (state.get("implement") or {}).get("pr") or {}
+                    if state.get("stage_status", {}).get("implement") != "completed" or not (pr.get("url") and (pr.get("published") is True or pr.get("status") == "completed")):
+                        raise ValueError("deploy approval requires completed Implement and published PR URL")
+            result.update(kind={"review": "review", "approve": "approval", "build": "build"}[ns.action], fingerprint=fingerprint(workspace, ns.feature))
+            append(workspace, ns.feature, result)
+            if ns.action == "approve":
+                # Anchor/deployment legacy readers consume history; freshness still comes from ledger.
+                history = list((state.get("clarity") or {}).get("history") or [])
+                history.append(result)
+                saved = set_feature_state(workspace, ns.feature, patch={"clarity": {"history": history}}, operation="transition")
+                if saved["status"] != "ok":
+                    raise ValueError(str(saved))
+            result = {"status": "ok"}
+        if evidence and ns.action in ("check", "review"):
+            from lib.completion_evidence import completion_checks
+            state = load_feature_state(workspace, ns.feature)
+            if state and all(c["status"] == "pass" for c in completion_checks(workspace, ns.feature, approval=False)):
+                stories = (state.get("tasks") or {}).get("stories", [])
+                for story in stories:
+                    if story.get("status") == "implementation_complete":
+                        story["status"] = "verified"
+                from lib.completion_evidence import config
+                implementation = {"verification": {"status": "completed"}}
+                if any(c["id"] == "integration" and c.get("required", True) for c in config(workspace, ns.feature)):
+                    implementation["integration"] = {"status": "completed"}
+                saved = set_feature_state(workspace, ns.feature, patch={"tasks": {"stories": stories}, "implement": implementation}, operation="transition")
+                if saved["status"] != "ok":
+                    raise ValueError(str(saved))
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("status") == "ok" else 2
+    except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}))
+        return 2
+
+
 def cmd_version(_args: list[str]) -> int:
     print(f"adlc5 {read_version()}")
     return 0
@@ -603,6 +728,8 @@ def main(argv: list[str]) -> int:
         return 2
 
     dispatch = {
+        "transition": cmd_completion,
+        "evidence": lambda args: cmd_completion(args, evidence=True),
         "gate": cmd_gate,
         "pack": cmd_pack,
         "clarity": cmd_clarity,

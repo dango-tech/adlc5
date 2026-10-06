@@ -109,7 +109,10 @@ sequenceDiagram
 | `adlc5 phase` | `scripts/advance-phase.sh` (suggest-only; no apply) |
 | `adlc5 pilot` | `scripts/pilot-autopilot.sh` |
 | `adlc5 state get` | read `.adlc5/{feature}/state.json` |
-| `adlc5 state set` | merge/replace + validate `core/state-schema.json` + atomic write |
+| `adlc5 state set` | Schema-validated metadata edits; protected progress/results require dedicated operations |
+| `adlc5 transition TARGET` | Validate next canonical step and required gates; atomically write progression |
+| `adlc5 evidence build\|check\|review\|approve` | Record build results, run declared commands, bind review/approval to current inputs |
+| `adlc5 state repair` | Audited recovery without manufacturing verification or approval |
 | `adlc5 repo-spec init\|reconcile\|validate` | `scripts/repository-context.py` (tracked constitution under `.agents/`) |
 | `adlc5 repo-index build\|refresh\|check` | `scripts/repository-context.py` (gitignored intelligence) |
 | `adlc5 resolve-model` | `scripts/resolve-model.sh` |
@@ -129,7 +132,7 @@ Run: `./scripts/adlc5 --help`
 those entries with telemetry and consumer-owned results using
 `scripts/evaluate-runs.py`; see [evaluation.md](evaluation.md).
 
-**Phase apply:** `advance-phase.sh` does not mutate state. Confirm with `phase`, then apply via `state set --patch`.
+**Progression:** use `adlc5 transition TARGET`. The legacy `phase` suggestion adapter does not mutate state; generic `state set` cannot apply progression. See [evidence completion](evidence-completion.md).
 
 ## MCP (stdio)
 

@@ -151,11 +151,14 @@ def set_feature_state(
     replace: dict[str, Any] | None = None,
     dry_run: bool = False,
     schema_path: Path | None = None,
+    operation: str = "metadata",
 ) -> dict[str, Any]:
     """Merge or replace feature state after schema validation. Never writes on validation failure.
 
     Returns a result dict: {status, path, state?} or {status:error, error, errors?}.
     """
+    if operation not in ("metadata", "repair", "transition"):
+        return {"status": "error", "error": "invalid_operation"}
     if (patch is None) == (replace is None):
         return {
             "status": "error",
@@ -194,6 +197,39 @@ def set_feature_state(
             "error": "feature_mismatch",
             "message": f"state.feature must equal --feature ({feature!r})",
         }
+
+    def protected(value, prefix=""):
+        out = {}
+        if isinstance(value, dict):
+            for key, item in value.items():
+                name = prefix + "." + key
+                if key in ("current_stage", "current_step", "stage_status", "verification", "independence", "approved_by", "story_status", "current_substep") or key == "status" or key == "history" or key == "active" and prefix == ".persona":
+                    out[name] = item
+                else:
+                    out.update(protected(item, name))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                out.update(protected(item, prefix + str(index)))
+        return out
+    if operation == "metadata":
+        old, new = protected(current), protected(candidate)
+        changed = set(old) | set(new)
+        unsafe = [key for key in changed if old.get(key) != new.get(key) and not (key.endswith(".status") and new.get(key) in ("pending", "ready", "in_progress") and key not in old)]
+        if unsafe:
+            return {"status": "error", "error": "protected_state", "message": "use transition/evidence operations; recovery requires state repair", "fields": unsafe}
+    if operation == "repair":
+        # Recovery may rewind or mark work built, but never mint approval/verification.
+        old = protected(current)
+        for key, value in protected(candidate).items():
+            if value == old.get(key):
+                continue
+            forbidden = key.endswith((".verification", ".independence", ".approved_by", ".history", ".story_status"))
+            if key.endswith(".stage_status"):
+                forbidden = any(v in ("completed", "waived") and v != (old.get(key) or {}).get(k) for k, v in value.items())
+            elif isinstance(value, str) and value in ("verified", "completed", "waived"):
+                forbidden = True
+            if forbidden:
+                return {"status": "error", "error": "repair_cannot_certify", "message": key}
 
     schema = load_state_schema(schema_path)
     errors = validate_against_schema(candidate, schema)
@@ -279,3 +315,18 @@ V2_GATE_ALIASES: dict[str, str] = {
     "implement-4-qa": "assure-3-qa",
     "implement-5-pr": "assure-4-pr-reviewer",
 }
+
+
+def is_human_approver(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = value.strip().lower()
+    if normalized == "user":
+        return True
+    if normalized.startswith("human:"):
+        return bool(normalized.removeprefix("human:").strip())
+    if normalized.startswith("github:"):
+        return bool(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,38})", normalized.removeprefix("github:")))
+    if normalized.startswith("email:"):
+        return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized.removeprefix("email:")))
+    return False

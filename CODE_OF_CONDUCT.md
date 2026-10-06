@@ -32,7 +32,7 @@ project in public spaces.
 ## Enforcement
 
 Report unacceptable behavior by opening a
-[GitHub issue](https://github.com/dango85/adlc5/issues). If the report
+[GitHub issue](https://github.com/dango-tech/adlc5/issues). If the report
 involves sensitive content you don't want public, open an issue anyway and
 note that you need a private channel — a maintainer will follow up privately
 to continue the conversation off the public tracker.

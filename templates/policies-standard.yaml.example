@@ -1,9 +1,7 @@
-# ADLC5 — standard change autopilot profile
-# Ordinary brownfield feature: Specify → Tasks → Implement → Verify → PR
-# readiness (see docs/evaluation.md Task Classes). Skips the Plan-stage
-# craftsmanship/design substeps and implement-4-qa — for a feature that
-# needs those, use the default full profile (omit `profile:`) or
-# policies-high-risk.yaml.example instead.
+# ADLC5 — standard change profile
+# Specify → brief Plan (design/plan.md) → Tasks → Implement → Verify → PR.
+# Deep design and QA remain conditional; trust-boundary/data-safety changes
+# require the high-risk profile. See docs/evidence-completion.md.
 
 defaults:
   interaction_mode: autonomous
@@ -37,3 +35,8 @@ autopilot:
 # profile turns out to need reasoning-tier judgment during build.
 model_routing:
   execution_policy: explicit
+
+# Review must be independent of the coding session.
+persona_mode:
+  fresh_subagent_per_persona: true
+  verifier_different_model: false

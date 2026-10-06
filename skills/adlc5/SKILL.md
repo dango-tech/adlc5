@@ -77,14 +77,14 @@ WHILE true:
   2. OUT=$(./scripts/adlc5 pilot --feature F)
   3. Parse OUT.action:
      spawn   → invoke skill from OUT.skill; on completion ./scripts/adlc5 pilot --feature F --record-result pass|fail
-     advance → confirm via ./scripts/adlc5 phase --feature F; update state; continue
+     advance → ./scripts/adlc5 transition OUT.suggested_next --feature F; continue
      heal    → reworker / retry recipe; continue
      halt    → AskQuestion or STOP file; EXIT
-     done    → pr-ready handoff; EXIT
+     done    → ./scripts/adlc5 transition completed --feature F; pr-ready handoff; EXIT
 ```
 
 Cost-aware profiles in `.adlc5/{feature}/policies.yaml`: `tiny`, `standard`,
-`high_risk`. Legacy profiles remain valid and retain the full path.
+`high_risk`. Legacy features remain readable; select `full` or a canonical profile before validated progression.
 
 **Deprecated:** `@adlc5-pilot` — use `@adlc5` with autonomous mode.
 
@@ -110,7 +110,7 @@ For volatile technology facts, route Specify/Plan through [current-information.m
 
 ## Scripts (mantra)
 
-Skills route; **prefer kernel façade** `./scripts/adlc5` for spine ops (`gate`, `phase`, `pilot`, `state get|set`, `pack`, `clarity`, `resolve-model`) — see [ADLC5-kernel.md](../../docs/ADLC5-kernel.md) and [gates.yaml](../../core/gates.yaml). Apply phase changes with `state set --patch` after `phase` confirms ready (advance-phase is suggest-only).
+Skills route; **prefer kernel façade** `./scripts/adlc5` for spine ops (`gate`, `phase`, `pilot`, `state get|set`, `pack`, `clarity`, `resolve-model`) — see [ADLC5-kernel.md](../../docs/ADLC5-kernel.md) and [gates.yaml](../../core/gates.yaml). Use `transition TARGET` for progression and `evidence check|review|approve` for results. `state set` edits metadata only; `state repair` is audited recovery, never normal delivery.
 
 ## Cross-platform
 

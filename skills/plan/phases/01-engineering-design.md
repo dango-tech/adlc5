@@ -39,42 +39,13 @@ Required sections:
 
 ### plan-7-design-critique
 
-Check first whether a full critic pass is even warranted:
+For high-risk/full work, spawn `@adlc5-design-critic` with the spec handoff,
+design artifacts, explicit risk assessment, and scale NFRs. The critic records
+`critique_severity: none | minor | blocking`. Clarity score alone never waives
+independent critique. Rework blocking findings before advancing.
 
-```text
-clarity_score = state.clarity.score (from the latest Specify/Plan clarity check)
-low_risk = not state.scale_nfrs.applicable  # false/absent counts as low_risk
-
-if clarity_score >= 90 and low_risk:
-    skip the @adlc5-design-critic spawn
-else:
-    spawn @adlc5-design-critic (unchanged path below)
-```
-
-**Skip path** (clear spec, no scale NFRs): write `design/design-critique.md` yourself —
-no subagent, no reasoning-tier round-trip:
-
-```markdown
-# Design critique — self-check (subagent skipped)
-
-Skipped `@adlc5-design-critic`: clarity.score = {score} (>= 90) and no scale NFRs
-apply. Spec and design docs are unambiguous enough that a full critique pass
-would not surface new findings proportional to its cost.
-
-critique_severity: none
-```
-
-**Full path** (otherwise): spawn `@adlc5-design-critic` with `spec-handoff.md`,
-`design/1a-discovery.md`, `design/1b-contracts.md`, `design/1c-operations.md`, and
-`state.scale_nfrs` (code specs don't exist yet — Plan-scope critique). Critic
-writes `design/design-critique.md` ending in a `critique_severity` verdict.
-
-On `blocking`: route back to the cited substep (`plan-4`…`plan-6` or Specify handoff), fix, re-run the critic. Do not advance to Tasks.
-
-If you skipped the critic and a later stage (Tasks/Implement/QA) surfaces a
-design-level defect the critique would likely have caught, that's a signal the
-90/no-NFR bar was too permissive for that feature — flag it, don't silently
-raise the bar yourself.
+For standard work, use the compact `design/plan.md` route in the Plan skill;
+these detailed substeps are conditional.
 
 ## Exit
 

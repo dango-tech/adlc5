@@ -29,4 +29,4 @@ Downstream consumers:
 
 ## State
 
-- `current_step`: `specify-4-handoff`
+- Advance using `adlc5 transition specify-4-handoff --feature "{feature}"` after the step succeeds.

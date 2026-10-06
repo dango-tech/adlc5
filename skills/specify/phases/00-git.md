@@ -15,7 +15,7 @@ Options: `branch` | `worktree` | `current` | `skip` — map to `git.isolation`.
 ## State updates
 
 - `git.isolation`, `git.branch_name`, `git.base_branch`, `git.worktree_path`
-- `current_step`: `specify-1-discover` on success
+- Advance using `adlc5 transition specify-1-discover --feature "{feature}"` after the step succeeds.
 
 ## Gate
 

@@ -76,7 +76,8 @@ when that actor is in the threat model.
 
 ## State transition
 
-On pass: `stage_status.tasks`: `completed`, `current_stage`: `implement`, `current_step`: `implement-1-build`
+On pass: `./scripts/adlc5 transition implement-1-build --feature "{feature}"`.
+Never assert progression through `state set`.
 
 ## Parallel batches
 

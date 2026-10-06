@@ -6,8 +6,8 @@ ADLC5 optimizes cost only after independently checkable quality holds. It does n
 
 | Class | Typical scope | Minimum route |
 |---|---|---|
-| Tiny | Bounded, low-risk change with clear acceptance evidence | Spec confirmation → implement → tests → diff review |
-| Standard | Ordinary brownfield feature | Specify → Tasks → Implement → Verify → PR readiness |
+| Tiny | Bounded, low-risk change with clear acceptance evidence | Compact Specify/Plan/Tasks record → Implement → tests → diff review |
+| Standard | Ordinary brownfield feature | Specify → brief Plan → Tasks → Implement → Verify → PR readiness |
 | High-risk | Auth, money, secrets, destructive operations, schema migration, concurrency, public compatibility, or disputed requirements | Full Plan + anchored evidence + independent Verify + QA/security + human approval |
 
 ## Frozen case contract
@@ -39,8 +39,8 @@ A run is successful only when both frozen commands pass, no acceptance anchor
 changed, no human rejected it, and the recorded escaped-defect count is zero.
 Outcome records must explicitly include `anchors_passed`, `regression_passed`,
 `quality_gates_passed`, `anchor_changed`, `rework`, `human_rejected`, and a
-non-null integer `escaped_defects`; missing or unknown fields fail the quality
-floor rather than defaulting favorably. `quality_gates_passed` means every
+non-null nonnegative integer `escaped_defects`; `rework` is also a nonnegative
+integer count and boolean fields must be actual JSON booleans. Missing or unknown fields fail the quality floor rather than defaulting favorably. `quality_gates_passed` means every
 gate required by the selected profile passed, including QA/security for
 high-risk work.
 
@@ -88,3 +88,44 @@ Start with two cases per class. This six-case pilot is a smoke comparison, not s
 | Large analytical workloads | Parquet export, only after measured need | Analytical/object storage |
 
 Do not add Redis, tmpfs, Protobuf, Parquet/Lance, vector storage, or a graph database until profiling identifies the current representation as the bottleneck. Microsoft MarkItDown may be added later as an optional local-only Specify intake adapter when a frozen binary-document case justifies it; it is not a runtime dependency.
+
+## Reproducible six-case handoff
+
+The public case bank is `templates/evaluation/cases.json`; the stdlib consumer is
+`dogfood/consumer/`. `scripts/evaluation/run-case.py prepare` creates an isolated
+Git consumer with a deterministic starting commit, frozen independent checks,
+host/model metadata, budget, a manifest integrity hash, and a fresh-session handoff. Baseline preparations
+extract the framework revision recorded in `templates/evaluation/cases.json` into the run; candidate preparations record
+HEAD, whether local changes exist, and a content fingerprint. Freeze the candidate checkout throughout
+an experiment. No host-agent executor or subscription is needed to test setup.
+
+Run every case under `direct`, `baseline`, and `candidate` with new host sessions
+and distinct directories. Record the number of actual repetitions, not planned
+repetitions. Acceptance/regression commands and observation windows are identical
+across arms. Cases intentionally begin with failing acceptance checks. They cover
+label preservation, missing quantities, normalized search, CSV quoting, resolved
+path containment, and atomic replacement with failure preservation.
+
+After actual delivery/review, populate the run's `observations.json` with real
+telemetry and usage entries (matching run/node IDs). Include accounting source and
+model identities. High-risk approval is a real human step, not fixture data.
+`collect` executes consumer checks and calls the existing scorer. Its null
+escaped-defect value remains null until the frozen observation window is recorded
+as complete. Missing accounting is reported unavailable, including null spend
+buckets; it cannot enter the successful cohort. A report from preparation alone
+is a fixture smoke test, never a live agent comparison.
+
+Automated contract and isolated-install checks passed on Ubuntu and macOS.
+A small live consumer exercise passed acceptance/regression and separate agent
+review; it does not establish comparative quality or cost. Repeated comparisons,
+usage accounting, fresh-host resume, genuine high-risk approval, 24-hour defect
+observation and outside-contributor reproduction remain unqualified.
+No live pass-rate or cost advantage is claimed.
+
+The collector executes actual `pr-ready` and anchor gates for framework arms; a
+manual observation cannot assert their pass. Direct-arm review needs a local
+independent-review record with distinct execution identities and no blocking
+findings. Integrity protects against accidental changes through this procedure,
+not malicious edits to writable files. `demo-consumer.py` exercises real init,
+check evidence, a valid transition, completion rejection and process restoration
+without synthesizing review or approval; it is labeled a scripted contract demo.

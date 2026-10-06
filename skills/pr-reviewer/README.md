@@ -1,6 +1,6 @@
 # PR Review (`@pr-reviewer`) — ADLC5
 
-Pull request **Review, Respond, Resolve, and Open** — shipped inside [adlc5](https://github.com/dango85/adlc5) for the `@adlc5-implement` PR substep and autonomous `@adlc5` routing.
+Pull request **Review, Respond, Resolve, and Open** — shipped inside [adlc5](https://github.com/dango-tech/adlc5) for the `@adlc5-implement` PR substep and autonomous `@adlc5` routing.
 
 > **Not `@pr3`:** The legacy Bitbucket **PR3** skill (`@pr3`, `~/.cursor/skills/pr3`) is separate. Use **`@pr-reviewer`** for the ADLC5 lifecycle.
 

@@ -49,7 +49,7 @@ State: `.deploy/{feature}/state.json` (stage-local).
 
 ### deploy-0-gates
 
-Run the gate. If `deploy_approval` is missing, AskQuestion for sign-off naming the exact target environment and record it in `.adlc5/{feature}/state.json` `clarity.history` — never write this entry without an explicit user response. Approval is **per environment**: promoting staging → prod requires a new entry.
+Run the gate. If `deploy_approval` is missing, AskQuestion for sign-off naming the exact target environment and submit it with `adlc5 evidence approve --file approval.json` using `type: deploy_approval`, the actual human provenance label, and target `environment` — never write this entry without an explicit user response. Approval is **per environment**: promoting staging → prod requires a new entry.
 
 ### deploy-1-plan
 

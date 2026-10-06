@@ -36,15 +36,13 @@ def evidence_path(workspace: Path, value: str) -> Path:
 
 def relock_approved(state: dict, acceptance_id: str, old_digest: str, new_digest: str) -> bool:
     history = ((state.get("clarity") or {}).get("history") or [])
-    return any(
-        item.get("type") == "anchor_relock_approval"
-        and item.get("acceptance_id") == acceptance_id
-        and item.get("from_sha256") == old_digest
-        and item.get("to_sha256") == new_digest
-        and item.get("approved_by")
-        for item in history
-        if isinstance(item, dict)
-    )
+    matching = [item for item in history if isinstance(item, dict)
+                and item.get("type") == "anchor_relock_approval"
+                and item.get("acceptance_id") == acceptance_id
+                and item.get("from_sha256") == old_digest
+                and item.get("to_sha256") == new_digest]
+    latest = matching[-1] if matching else {}
+    return bool(latest.get("approved_by")) and latest.get("decision", "approve") == "approve"
 
 
 def manifest_entries(stories: list[dict]) -> list[dict]:

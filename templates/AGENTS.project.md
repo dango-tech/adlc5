@@ -48,4 +48,4 @@ read `repo-index.json` first, then only relevant symbol/module/dependency/test r
 | Autonomous route | `@adlc5` with autonomous mode |
 | Project wiki | `@adlc5-project-wiki` |
 
-Full index: [ADLC5 skill map](https://github.com/dango85/adlc5/blob/main/shared/docs/SKILL-MAP.md) or `AGENTS.md` in the installed ADLC5 clone.
+Full index: [ADLC5 skill map](https://github.com/dango-tech/adlc5/blob/main/shared/docs/SKILL-MAP.md) or `AGENTS.md` in the installed ADLC5 clone.

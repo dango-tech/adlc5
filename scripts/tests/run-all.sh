@@ -9,6 +9,35 @@ cd "$ROOT"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
+# Gate fixtures deliberately exercise otherwise unreachable/invalid states.
+# Write local JSON directly; normal API protection is tested below.
+fixture_state_patch() {
+  python3 - "$@" <<'PYFIXTURE'
+import argparse
+import json
+from pathlib import Path
+import sys
+sys.path.insert(0, "scripts")
+from lib.state_v2 import deep_merge
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--feature", required=True)
+parser.add_argument("--patch", required=True)
+args = parser.parse_args()
+path = Path(args.workspace) / ".adlc5" / args.feature / "state.json"
+path.write_text(json.dumps(deep_merge(json.loads(path.read_text()), json.loads(args.patch))))
+PYFIXTURE
+}
+
+for tool in git python3 jq; do
+  command -v "$tool" >/dev/null 2>&1 || fail "required tool '$tool' is missing; install Git, Python 3 and jq"
+done
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "ERROR: Python 3.10 or newer is required; upgrade python3, then retry." >&2
+  exit 1
+fi
+
+
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -208,11 +237,13 @@ cat >"${TMP}/.adlc5/${FEATURE}/state.json" <<'EOF'
 }
 EOF
 set +e
-./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate pr-ready >/dev/null
+./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate pr-ready >/tmp/legacy-pr-ready.json
 EC=$?
 set -e
-[[ "$EC" -eq 0 ]] || fail "pr-ready pass expected 0 got $EC"
-pass "check-gates pr-ready pass"
+[[ "$EC" -eq 1 ]] || fail "legacy pr-ready must fail without bound evidence, got $EC"
+jq -e 'any(.checks[]; .id == "completion_evidence" and .status == "fail") and all(.checks[] | select(.id != "completion_evidence" and .id != "code_specs_lint" and .id != "verifier_independence" and .id != "profile_risk"); .status == "pass")' \
+  /tmp/legacy-pr-ready.json >/dev/null || fail "legacy readiness checks must pass independently of new evidence requirements"
+pass "legacy readiness checks pass but missing evidence blocks completion"
 
 # pr-ready: require_human_pr_approval blocks until clarity.history pr_approval exists
 cat >"${TMP}/.adlc5/${FEATURE}/policies.yaml" <<'EOF'
@@ -255,10 +286,12 @@ cat >"${TMP}/.adlc5/${FEATURE}/state.json" <<'EOF'
 }
 EOF
 set +e
-./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate pr-ready >/dev/null
+./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate pr-ready >/tmp/hpa-recorded.json
 EC=$?
 set -e
-[[ "$EC" -eq 0 ]] || fail "pr-ready should pass with recorded pr_approval, got $EC"
+[[ "$EC" -eq 1 ]] || fail "historical approval without bound evidence must fail, got $EC"
+jq -e 'any(.checks[]; .id == "human_pr_approval" and .status == "pass") and any(.checks[]; .id == "completion_evidence" and .status == "fail")' \
+  /tmp/hpa-recorded.json >/dev/null || fail "historical approval handler or evidence requirement missing"
 pass "check-gates human approval recorded"
 rm -f "${TMP}/.adlc5/${FEATURE}/policies.yaml"
 
@@ -356,11 +389,13 @@ cat >"${TMP}/.adlc5/${FEATURE}/state.json" <<'EOF'
 }
 EOF
 set +e
-./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate deploy-ready >/dev/null
+./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate deploy-ready >/tmp/deploy-recorded.json
 EC=$?
 set -e
-[[ "$EC" -eq 0 ]] || fail "deploy-ready with approval expected pass, got $EC"
-pass "check-gates deploy-ready passes with approval"
+[[ "$EC" -eq 1 ]] || fail "historical deployment approval cannot replace bound completion evidence, got $EC"
+jq -e 'any(.checks[]; .id == "deploy_approval" and .status == "pass") and any(.checks[]; .id == "pr_published" and .status == "pass") and any(.checks[]; .id == "qa_deployment_clearance" and .status == "pass") and any(.checks[]; .id == "completion_evidence" and .status == "fail")' \
+  /tmp/deploy-recorded.json >/dev/null || fail "deployment publication/approval/clearance or fresh-evidence check missing"
+pass "deployment approval and publication pass but missing completion evidence blocks"
 
 # delivery-retry-classifier: class + retryable fields
 ./scripts/delivery-retry-classifier.py --feature "$FEATURE" --story-id story-a \
@@ -380,12 +415,17 @@ PILOT_JSON=$(./scripts/pilot.sh --feature "$FEATURE" --workspace "$TMP" 2>/dev/n
 echo "$PILOT_JSON" | jq -e '.action' >/dev/null || fail "pilot.sh invalid JSON"
 pass "pilot.sh JSON action"
 
-# pr-reviewer-detect on adlc5 repo
+# Provider detection is a fixture contract, independent of this clone's remote.
 chmod +x ./scripts/pr-reviewer-*.sh 2>/dev/null || true
-DETECT=$(./scripts/pr-reviewer-detect.sh --workspace "$ROOT" 2>/dev/null)
+DETECT_WS="${TMP}/provider-detect"
+mkdir -p "${DETECT_WS}/.github"
+git -C "$DETECT_WS" init -q
+git -C "$DETECT_WS" remote add origin https://github.com/example/repo.git
+cp "${ROOT}/.github/PULL_REQUEST_TEMPLATE.md" "${DETECT_WS}/.github/PULL_REQUEST_TEMPLATE.md"
+DETECT=$(./scripts/pr-reviewer-detect.sh --workspace "$DETECT_WS" 2>/dev/null)
 echo "$DETECT" | jq -e '.provider' >/dev/null || fail "pr-reviewer-detect invalid JSON"
 PROVIDER=$(echo "$DETECT" | jq -r '.provider')
-[[ "$PROVIDER" == "github" ]] || fail "adlc5 repo should detect github"
+[[ "$PROVIDER" == "github" ]] || fail "GitHub fixture should detect github"
 echo "$DETECT" | jq -e '.repo_slug | length > 0' >/dev/null || fail "repo_slug missing"
 echo "$DETECT" | jq -e '.pr_template_path == ".github/PULL_REQUEST_TEMPLATE.md"' >/dev/null \
   || fail "pr-reviewer-detect should find this repo's PR template"
@@ -719,17 +759,19 @@ EOF
 set +e
 ./scripts/sync-verification-report.sh --feature "$FEATURE" --workspace "$TMP" >/dev/null
 SEC=$?
-./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate assure-1-verification >/dev/null
+./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate assure-1-verification >/tmp/legacy-verification.json
 EC=$?
 set -e
 [[ "$SEC" -eq 0 ]] || fail "sync-verification-report expected 0 got $SEC"
-[[ "$EC" -eq 0 ]] || fail "assure-1-verification expected 0 got $EC"
+[[ "$EC" -eq 1 ]] || fail "legacy report cannot certify completion, got $EC"
+jq -e 'any(.checks[]; .id == "completion_evidence" and .status == "fail") and all(.checks[] | select(.id != "completion_evidence" and .id != "code_specs_lint" and .id != "verifier_independence" and .id != "profile_risk"); .status == "pass")' \
+  /tmp/legacy-verification.json >/dev/null || fail "report sync must still satisfy the original verification checks"
 pass "sync-verification-report + assure-1-verification pass"
 
 # canonical v3 verification sync must not require legacy delivery/state.json
 SYNC_V3_FEATURE="sync-v3-verification"
 ./scripts/init-feature.sh --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --mode brownfield >/dev/null
-./scripts/adlc5 state set --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
+fixture_state_patch --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
   '{"current_stage":"implement","current_step":"implement-2-verify","stage_status":{"specify":"completed","plan":"completed","tasks":"completed","implement":"in_progress"},"tasks":{"stories":[{"id":"US-1","title":"Verified v3 story","status":"verified","batch":1,"files":[],"depends_on":[]}],"parallel_batches":[{"batch":1,"story_ids":["US-1"]}]},"implement":{"verification":{"status":"completed","reports":{"US-1":".adlc5/sync-v3-verification/verify/verification-report.md"}}}}' >/dev/null
 mkdir -p "${TMP}/.adlc5/${SYNC_V3_FEATURE}/verify"
 printf '%s\n' '**Overall:** pass' >"${TMP}/.adlc5/${SYNC_V3_FEATURE}/verify/verification-report.md"
@@ -737,15 +779,17 @@ printf '%s\n' '**Overall:** pass' >"${TMP}/.adlc5/${SYNC_V3_FEATURE}/verify/veri
 set +e
 ./scripts/sync-verification-report.sh --feature "$SYNC_V3_FEATURE" --workspace "$TMP" >/dev/null
 SYNC_V3_EC=$?
-./scripts/check-gates.py --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --gate implement-2-verify >/dev/null
+./scripts/check-gates.py --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --gate implement-2-verify >/tmp/sync-v3-gate.json
 SYNC_V3_GATE_EC=$?
 set -e
 [[ "$SYNC_V3_EC" -eq 0 ]] || fail "v3 verification sync should use canonical state, got $SYNC_V3_EC"
-[[ "$SYNC_V3_GATE_EC" -eq 0 ]] || fail "v3 implement-2-verify should pass without legacy delivery state, got $SYNC_V3_GATE_EC"
+[[ "$SYNC_V3_GATE_EC" -eq 1 ]] || fail "v3 verification must require current evidence, got $SYNC_V3_GATE_EC"
+jq -e 'any(.checks[]; .id == "completion_evidence" and .status == "fail") and all(.checks[] | select(.id | startswith("assure_verification")); .status == "pass")' \
+  /tmp/sync-v3-gate.json >/dev/null || fail "canonical report sync or evidence checks missing"
 pass "canonical v3 verification report sync"
 
 printf '%s\n' '**Overall:** pass-with-warnings' >"${TMP}/.adlc5/${SYNC_V3_FEATURE}/verify/verification-report.md"
-./scripts/adlc5 state set --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
+fixture_state_patch --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
   '{"clarity":{"history":[{"type":"verifier_waiver","approved_by":"agent"}]}}' >/dev/null
 set +e
 ./scripts/sync-verification-report.sh --feature "$SYNC_V3_FEATURE" --workspace "$TMP" \
@@ -754,7 +798,7 @@ SYNC_AGENT_WAIVER_EC=$?
 set -e
 [[ "$SYNC_AGENT_WAIVER_EC" -eq 1 ]] || fail "agent-authored verifier waiver must fail sync"
 printf '%s\n' '**Overall:** pass' >"${TMP}/.adlc5/${SYNC_V3_FEATURE}/verify/verification-report.md"
-./scripts/adlc5 state set --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
+fixture_state_patch --feature "$SYNC_V3_FEATURE" --workspace "$TMP" --patch \
   '{"clarity":{"history":[]}}' >/dev/null
 pass "verification sync rejects agent waiver"
 
@@ -853,7 +897,9 @@ set +e
 ./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate pr-ready >/tmp/pr-custom.json
 EC=$?
 set -e
-[[ "$EC" -eq 0 ]] || fail "pr-ready with custom_gate expected 0 got $EC"
+[[ "$EC" -eq 1 ]] || fail "custom gate does not replace completion evidence, got $EC"
+jq -e 'any(.checks[]; .id == "completion_evidence" and .status == "fail")' /tmp/pr-custom.json >/dev/null \
+  || fail "custom-gate readiness must include completion evidence"
 echo "$(cat /tmp/pr-custom.json)" | jq -e '.checks[] | select(.id == "custom_gate_smoke_gate" and .status == "pass")' >/dev/null || fail "custom_gate check missing"
 pass "pr-ready custom_gates"
 
@@ -1103,13 +1149,13 @@ git -C "$ANCHOR_WS" init -q
 printf '%s\n' 'expected behavior' >"${ANCHOR_WS}/tests/acceptance.txt"
 ./scripts/init-feature.sh --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --mode brownfield --interaction autonomous >/dev/null
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$VALID_ACCEPTANCE" >/dev/null
 ./scripts/tasks/check-anchors.py lock --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   >/tmp/anchor-lock.json || fail "anchor lock should succeed"
 jq -e '.status == "pass" and .locked == 1 and .unlocked_commands == 1 and (.patch.tasks.stories[0].acceptance[0].evidence.sha256 | test("^[0-9a-f]{64}$"))' \
   /tmp/anchor-lock.json >/dev/null || fail "anchor lock output contract"
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -c '.patch' /tmp/anchor-lock.json)" >/dev/null
 [[ -f "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json" ]] \
   || fail "anchor lock should create a sealed manifest"
@@ -1136,7 +1182,7 @@ EC=$?
 set -e
 [[ "$EC" -eq 1 ]] || fail "changed locked anchor must not silently relock"
 
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" --patch \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" --patch \
   '{"clarity":{"history":[{"type":"anchor_relock_approval","acceptance_id":"AC-1","from_sha256":"wrong","to_sha256":"wrong","approved_by":"user"}]}}' >/dev/null
 set +e
 ./scripts/tasks/check-anchors.py lock --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
@@ -1154,10 +1200,10 @@ PY
 )
 APPROVAL_PATCH=$(jq -nc --arg old "$OLD_DIGEST" --arg new "$NEW_DIGEST" \
   '{clarity:{history:[{type:"anchor_relock_approval",acceptance_id:"AC-1",from_sha256:$old,to_sha256:$new,approved_by:"user"}]}}')
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" --patch "$APPROVAL_PATCH" >/dev/null
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" --patch "$APPROVAL_PATCH" >/dev/null
 ./scripts/tasks/check-anchors.py lock --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   >/tmp/anchor-approved-relock.json || fail "exact approved anchor relock should succeed"
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -c '.patch' /tmp/anchor-approved-relock.json)" >/dev/null
 ./scripts/tasks/check-anchors.py check --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   >/dev/null || fail "approved relocked anchor should verify"
@@ -1165,7 +1211,7 @@ APPROVAL_PATCH=$(jq -nc --arg old "$OLD_DIGEST" --arg new "$NEW_DIGEST" \
 LOCKED_ACCEPTANCE=$(jq -c '.tasks.stories[0].acceptance' \
   "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/state.json")
 REMAINING_ACCEPTANCE=$(echo "$LOCKED_ACCEPTANCE" | jq -c 'map(select(.id == "AC-2"))')
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -nc --argjson acceptance "$REMAINING_ACCEPTANCE" '{tasks:{stories:[{id:"US-1",acceptance:$acceptance}]}}')" >/dev/null
 set +e
 ./scripts/tasks/check-anchors.py check --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
@@ -1175,11 +1221,11 @@ set -e
 [[ "$EC" -eq 1 ]] || fail "deleted locked anchor should fail"
 jq -e '.checks[] | select(.id == "AC-1" and .status == "fail" and .reason == "manifest_mismatch")' \
   /tmp/anchor-deleted.json >/dev/null || fail "deleted locked anchor failure details"
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -nc --argjson acceptance "$LOCKED_ACCEPTANCE" '{tasks:{stories:[{id:"US-1",acceptance:$acceptance}]}}')" >/dev/null
 
 MUTATED_COMMAND=$(echo "$LOCKED_ACCEPTANCE" | jq -c 'map(if .id == "AC-2" then .evidence.value = "./scripts/changed.sh" else . end)')
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -nc --argjson acceptance "$MUTATED_COMMAND" '{tasks:{stories:[{id:"US-1",acceptance:$acceptance}]}}')" >/dev/null
 cp "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json" /tmp/anchor-manifest-before-tamper.json
 python3 - "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json" <<'PY'
@@ -1204,11 +1250,11 @@ set -e
 jq -e '.checks[] | select(.id == "AC-2" and .status == "fail" and .reason == "manifest_mismatch")' \
   /tmp/anchor-command-mutated.json >/dev/null || fail "changed command failure details"
 cp /tmp/anchor-manifest-before-tamper.json "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json"
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -nc --argjson acceptance "$LOCKED_ACCEPTANCE" '{tasks:{stories:[{id:"US-1",acceptance:$acceptance}]}}')" >/dev/null
 
 cp "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json" /tmp/anchor-manifest-before-delete.json
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch '{"tasks":{"stories":[{"id":"US-1","acceptance":[]}]}}' >/dev/null
 rm "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json"
 set +e
@@ -1218,7 +1264,7 @@ EC=$?
 set -e
 [[ "$EC" -eq 1 ]] || fail "deleting state anchors and local manifest should fail"
 cp /tmp/anchor-manifest-before-delete.json "${ANCHOR_WS}/.adlc5/${ANCHOR_FEATURE}/acceptance-lock.json"
-./scripts/adlc5 state set --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
+fixture_state_patch --feature "$ANCHOR_FEATURE" --workspace "$ANCHOR_WS" \
   --patch "$(jq -nc --argjson acceptance "$LOCKED_ACCEPTANCE" '{tasks:{stories:[{id:"US-1",acceptance:$acceptance}]}}')" >/dev/null
 
 rm "${ANCHOR_WS}/tests/acceptance.txt"
@@ -1236,7 +1282,7 @@ ANCHOR_FACADE_FEATURE="anchor-facade"
 printf '%s\n' 'facade behavior' >"${ANCHOR_WS}/tests/facade.txt"
 ./scripts/init-feature.sh --feature "$ANCHOR_FACADE_FEATURE" --workspace "$ANCHOR_WS" \
   --mode brownfield --interaction autonomous >/dev/null
-./scripts/adlc5 state set --feature "$ANCHOR_FACADE_FEATURE" --workspace "$ANCHOR_WS" --patch \
+fixture_state_patch --feature "$ANCHOR_FACADE_FEATURE" --workspace "$ANCHOR_WS" --patch \
   '{"tasks":{"stories":[{"id":"US-F","batch":1,"files":[],"depends_on":[],"acceptance":[{"id":"AC-F","owner":"product","evidence":{"type":"file","value":"tests/facade.txt"}}]}]}}' >/dev/null
 ./scripts/adlc5 anchors lock --feature "$ANCHOR_FACADE_FEATURE" --workspace "$ANCHOR_WS" \
   >/tmp/anchor-facade-lock.json || fail "adlc5 anchors lock should apply the lock"
@@ -1284,7 +1330,7 @@ for feature in anchor-unlocked-implement anchor-duplicate-id; do
 done
 printf '%s\n' 'one' >"${ANCHOR_WS}/tests/one.txt"
 printf '%s\n' 'two' >"${ANCHOR_WS}/tests/two.txt"
-./scripts/adlc5 state set --feature anchor-unlocked-implement --workspace "$ANCHOR_WS" --patch \
+fixture_state_patch --feature anchor-unlocked-implement --workspace "$ANCHOR_WS" --patch \
   '{"current_stage":"implement","current_step":"implement-1-build","tasks":{"stories":[{"id":"US-1","batch":1,"files":[],"depends_on":[],"acceptance":[{"id":"AC-1","owner":"product","evidence":{"type":"file","value":"tests/one.txt"}}]}]}}' >/dev/null
 set +e
 ./scripts/tasks/check-anchors.py lock --feature anchor-unlocked-implement --workspace "$ANCHOR_WS" \
@@ -1293,7 +1339,7 @@ EC=$?
 set -e
 [[ "$EC" -eq 1 ]] || fail "file anchor without digest must not be lockable after Implement starts"
 
-./scripts/adlc5 state set --feature anchor-duplicate-id --workspace "$ANCHOR_WS" --patch \
+fixture_state_patch --feature anchor-duplicate-id --workspace "$ANCHOR_WS" --patch \
   '{"tasks":{"stories":[{"id":"US-1","batch":1,"files":[],"depends_on":[],"acceptance":[{"id":"AC-DUP","owner":"product","evidence":{"type":"file","value":"tests/one.txt"}},{"id":"AC-DUP","owner":"qa","evidence":{"type":"file","value":"tests/two.txt"}}]}]}}' >/dev/null
 set +e
 ./scripts/tasks/check-anchors.py lock --feature anchor-duplicate-id --workspace "$ANCHOR_WS" \
@@ -1444,15 +1490,16 @@ EOF
 # planned (non-integration) story, so all three need one here.
 mkdir -p "${GRAPH_WS}/.adlc5/valid/tasks/code-spec"
 for sid in A B C; do
+  sid_lower=$(printf '%s' "$sid" | tr '[:upper:]' '[:lower:]')
   cat >"${GRAPH_WS}/.adlc5/valid/tasks/code-spec/US-${sid}.md" <<EOF
 ---
 story_id: ${sid}
 files_to_create:
-  - src/${sid,,}.py
+  - src/${sid_lower}.py
 files_to_modify: []
 tests:
-  - file: tests/test_${sid,,}.py
-    name: test_${sid,,}
+  - file: tests/test_${sid_lower}.py
+    name: test_${sid_lower}
 acceptance_criteria:
   - AC-1
 ---
@@ -1485,6 +1532,11 @@ pass "pilot-v2 fresh feature JSON action"
 
 # profile routing: explicit tiny, standard, and high-risk paths
 ROUTE_WS="${TMP}/profile-routing"
+mkdir -p "$ROUTE_WS"
+git -C "$ROUTE_WS" init -q
+printf '%s\n' 'Consumer contract fixture' >"${ROUTE_WS}/README.md"
+git -C "$ROUTE_WS" add README.md
+git -C "$ROUTE_WS" -c user.name='ADLC5 fixture' -c user.email='fixture@example.test' commit -qm 'fixture baseline'
 for profile in tiny standard high_risk; do
   feature="route-${profile//_/-}"
   mkdir -p "$ROUTE_WS"
@@ -1501,9 +1553,11 @@ persona_mode:
   fresh_subagent_per_persona: true
   forbid_orchestrator_implement: true
 EOF
-  ./scripts/adlc5 state set --feature "$feature" --workspace "$ROUTE_WS" --patch \
+  fixture_state_patch --feature "$feature" --workspace "$ROUTE_WS" --patch \
     '{"current_stage":"specify","current_step":"specify-4-handoff","git":{"isolation":"current"},"clarity":{"score":100}}' >/dev/null
   echo "# Spec handoff" >"${ROUTE_WS}/.adlc5/${feature}/spec-handoff.md"
+  printf '%s\n' '{"categories":[],"uncertain":false,"rationale":"bounded routing fixture"}' \
+    >"${ROUTE_WS}/.adlc5/${feature}/risk.json"
 done
 
 ./scripts/pilot-autopilot.sh --feature route-tiny --workspace "$ROUTE_WS" >/tmp/route-tiny.json
@@ -1511,8 +1565,8 @@ done
 ./scripts/pilot-autopilot.sh --feature route-high-risk --workspace "$ROUTE_WS" >/tmp/route-high-risk.json
 jq -e '.action == "advance" and .suggested_next == "implement-1-build"' /tmp/route-tiny.json >/dev/null \
   || fail "tiny profile should route from Specify to Implement"
-jq -e '.action == "advance" and .suggested_next == "tasks-1-stories"' /tmp/route-standard.json >/dev/null \
-  || fail "standard profile should route from Specify to Tasks"
+jq -e '.action == "advance" and .suggested_next == "plan-4-design-discovery"' /tmp/route-standard.json >/dev/null \
+  || fail "standard profile should retain brief Plan"
 jq -e '.action == "advance" and .suggested_next == "plan-1-engineering-architecture"' /tmp/route-high-risk.json >/dev/null \
   || fail "high-risk profile should retain Plan"
 
@@ -1523,7 +1577,7 @@ mkdir -p "$QUOTE_WS"
 mkdir -p "${QUOTE_WS}/.adlc5/route-quote"
 printf '%s\n' 'autopilot:' '  interaction_mode: autonomous' '  profile: tiny' \
   >"${QUOTE_WS}/.adlc5/route-quote/policies.yaml"
-./scripts/adlc5 state set --feature route-quote --workspace "$QUOTE_WS" --patch \
+fixture_state_patch --feature route-quote --workspace "$QUOTE_WS" --patch \
   '{"current_stage":"specify","current_step":"specify-4-handoff","git":{"isolation":"current"},"clarity":{"score":100}}' >/dev/null
 printf '%s\n' '# Spec handoff' >"${QUOTE_WS}/.adlc5/route-quote/spec-handoff.md"
 ./scripts/pilot-autopilot.sh --feature route-quote --workspace "$QUOTE_WS" >/tmp/route-quote.json \
@@ -1531,7 +1585,7 @@ printf '%s\n' '# Spec handoff' >"${QUOTE_WS}/.adlc5/route-quote/spec-handoff.md"
 jq -e '.action == "advance" and .suggested_next == "implement-1-build"' /tmp/route-quote.json >/dev/null \
   || fail "quoted workspace profile route"
 
-./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
   '{"current_stage":"implement","current_step":"implement-2-verify","persona":{"active":"tester"},"tasks":{"stories":[{"id":"US-1","title":"Risky","status":"implementation_complete","batch":1,"files":[],"depends_on":[]}]}}' >/dev/null
 ./scripts/pilot-autopilot.sh --feature route-high-risk --workspace "$ROUTE_WS" >/tmp/route-high-risk-verify.json
 jq -e '.action == "spawn" and .persona == "tester" and .fresh_session == true and .verifier_different_model == true' \
@@ -1544,7 +1598,7 @@ set -e
 jq -e '.checks[] | select(.id == "verifier_independence" and .status == "fail")' \
   /tmp/route-high-risk-independence-missing.json >/dev/null \
   || fail "high-risk verification should fail without independence evidence"
-./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
   '{"clarity":{"history":[{"type":"verifier_waiver","approved_by":"agent"}]}}' >/dev/null
 set +e
 ./scripts/check-gates.py --feature route-high-risk --workspace "$ROUTE_WS" --gate implement-2-verify \
@@ -1554,7 +1608,7 @@ jq -e '.checks[] | select(.id == "verifier_independence" and .status == "fail")'
   /tmp/route-high-risk-agent-waiver.json >/dev/null \
   || fail "agent-authored verifier waiver should not bypass independence"
 for empty_approver in 'human:' 'github:' 'email:'; do
-  ./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+  fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
     "$(jq -nc --arg approved_by "$empty_approver" '{clarity:{history:[{type:"verifier_waiver",approved_by:$approved_by}]}}')" >/dev/null
   set +e
   ./scripts/check-gates.py --feature route-high-risk --workspace "$ROUTE_WS" --gate implement-2-verify \
@@ -1564,7 +1618,7 @@ for empty_approver in 'human:' 'github:' 'email:'; do
     /tmp/route-high-risk-empty-waiver.json >/dev/null \
     || fail "empty human waiver identifier should not bypass independence: $empty_approver"
 done
-./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
   '{"clarity":{"history":[]},"implement":{"verification":{"independence":{"fresh_session":true,"coder_session_id":"coder-1","verifier_session_id":"verifier-1","coder_model_id":"model-a","verifier_model_id":"model-b"}}}}' >/dev/null
 set +e
 ./scripts/check-gates.py --feature route-high-risk --workspace "$ROUTE_WS" --gate implement-2-verify \
@@ -1583,14 +1637,14 @@ set +e
 QA_BLOCKED_EC=$?
 set -e
 [[ "$QA_BLOCKED_EC" -eq 1 ]] || fail "BLOCKED QA status must dominate incidental CLEARED text"
-./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
   '{"implement":{"qa":{"status":"pending","clearance_path":""}}}' >/dev/null
 printf '%s\n' 'STATUS: CLEARED' >"${ROUTE_WS}/.qa/route-high-risk/deployment-clearance.md"
 ./scripts/check-gates.py --feature route-high-risk --workspace "$ROUTE_WS" --gate implement-4-qa \
   >/tmp/route-high-risk-qa.json || fail "canonical implement-4-qa gate should reach QA handler"
 jq -e '.status == "pass" and any(.checks[]; .id == "qa_deployment_clearance" and .status == "pass")' \
   /tmp/route-high-risk-qa.json >/dev/null || fail "canonical QA gate output"
-./scripts/adlc5 state set --feature route-high-risk --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-high-risk --workspace "$ROUTE_WS" --patch \
   '{"implement":{"pr":{"status":"completed","url":"https://example.test/pr/2"}}}' >/dev/null
 ./scripts/check-gates.py --feature route-high-risk --workspace "$ROUTE_WS" --gate implement-5-pr \
   >/tmp/route-high-risk-pr.json || fail "canonical implement-5-pr gate should reach PR handler"
@@ -1650,8 +1704,8 @@ cat >"${ROUTE_WS}/.adlc5/route-tiny/delivery/state.json" <<'EOF'
 {"current_phase":"completed","stories":{"US-1":{"type":"component","status":"verified"}},"verification_summary":{"overall":"pass"},"integration":{"status":"pending"}}
 EOF
 printf '%s\n' '**Overall:** pass' >"${ROUTE_WS}/.adlc5/route-tiny/verify/verification-report.md"
-./scripts/adlc5 state set --feature route-tiny --workspace "$ROUTE_WS" --patch \
-  '{"current_stage":"implement","current_step":"implement-5-pr","stage_status":{"specify":"completed","plan":"waived","tasks":"waived","implement":"completed"},"persona":{"active":"tester"},"tasks":{"stories":[{"id":"US-1","title":"Tiny","status":"verified","batch":1,"files":[],"depends_on":[]}]},"implement":{"verification":{"status":"completed"},"integration":{"status":"pending"},"qa":{"status":"pending","clearance_path":""},"pr":{"status":"completed","url":"https://example.test/pr/1"}}}' >/dev/null
+fixture_state_patch --feature route-tiny --workspace "$ROUTE_WS" --patch \
+  '{"current_stage":"implement","current_step":"implement-5-pr","stage_status":{"specify":"completed","plan":"waived","tasks":"waived","implement":"completed"},"persona":{"active":"tester"},"tasks":{"stories":[]},"implement":{"verification":{"status":"completed"},"integration":{"status":"pending"},"qa":{"status":"pending","clearance_path":""},"pr":{"status":"completed","url":"https://example.test/pr/1"}}}' >/dev/null
 set +e
 ./scripts/check-gates.py --feature route-tiny --workspace "$ROUTE_WS" --gate pr-ready \
   >/tmp/route-tiny-no-runner.json
@@ -1661,6 +1715,9 @@ set -e
 jq -e 'any(.checks[]; .id == "quality_gate_tests" and .status == "fail") and any(.checks[]; .id == "quality_gate_lint" and .status == "fail")' \
   /tmp/route-tiny-no-runner.json >/dev/null || fail "skipped quality runner failures missing"
 
+# Freeze generated scaffold before the bounded source change fixture.
+git -C "$ROUTE_WS" add .
+git -C "$ROUTE_WS" -c user.name='ADLC5 fixture' -c user.email='fixture@example.test' commit -qm 'fixture scaffold'
 FAKE_BIN="${ROUTE_WS}/fake-bin"
 mkdir -p "$FAKE_BIN"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${FAKE_BIN}/npm"
@@ -1670,7 +1727,7 @@ printf '%s\n' '{"scripts":{"test":"true","lint":"true"}}' >"${ROUTE_WS}/package.
 ./scripts/init-feature.sh --feature route-tiny-direct --workspace "$ROUTE_WS" \
   --mode brownfield --interaction autonomous >/dev/null
 cp templates/policies-tiny.yaml.example "${ROUTE_WS}/.adlc5/route-tiny-direct/policies.yaml"
-./scripts/adlc5 state set --feature route-tiny-direct --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-tiny-direct --workspace "$ROUTE_WS" --patch \
   '{"current_stage":"implement","current_step":"implement-1-build","stage_status":{"specify":"completed","plan":"waived","tasks":"waived","implement":"in_progress"},"tasks":{"stories":[]}}' >/dev/null
 PATH="${FAKE_BIN}:$PATH" ./scripts/check-gates.py --feature route-tiny-direct --workspace "$ROUTE_WS" \
   --gate implement-1-build >/tmp/route-tiny-direct-build.json \
@@ -1678,6 +1735,21 @@ PATH="${FAKE_BIN}:$PATH" ./scripts/check-gates.py --feature route-tiny-direct --
 jq -e '.status == "pass" and any(.checks[]; .id == "quality_gate_tests" and .status == "pass")' \
   /tmp/route-tiny-direct-build.json >/dev/null || fail "tiny direct build quality evidence"
 
+cat >"${ROUTE_WS}/.adlc5/route-tiny/change.md" <<'EOF'
+---
+files_to_modify: [package.json, fake-bin/npm]
+---
+# Bounded change
+Exercise runnable test/lint declarations in this disposable consumer fixture.
+EOF
+mkdir -p "${ROUTE_WS}/.adlc5/route-tiny/evidence"
+cat >"${ROUTE_WS}/.adlc5/route-tiny/evidence/checks.json" <<'EOF'
+[{"id":"tests","command":"python3 -c \"assert 1 + 1 == 2\""},{"id":"lint","command":"python3 -c \"compile('pass', 'fixture', 'exec')\""}]
+EOF
+printf '%s\n' '{"coder_session_id":"fixture-coder","verifier_session_id":"fixture-reviewer","coder_model_id":"fixture-model","verifier_model_id":"fixture-model","disposition":"pass","blocking_findings":[]}' \
+  >"${TMP}/tiny-review.json"
+./scripts/adlc5 evidence check --feature route-tiny --workspace "$ROUTE_WS" >/dev/null
+./scripts/adlc5 evidence review --feature route-tiny --workspace "$ROUTE_WS" --file "${TMP}/tiny-review.json" >/dev/null
 set +e
 PATH="${FAKE_BIN}:$PATH" \
 ./scripts/check-gates.py --feature route-tiny --workspace "$ROUTE_WS" --gate pr-ready \
@@ -1686,7 +1758,7 @@ TINY_EC=$?
 set -e
 [[ "$TINY_EC" -eq 0 ]] || fail "complete tiny profile should pass pr-ready"
 jq -e '.status == "pass"' /tmp/route-tiny-complete.json >/dev/null || fail "tiny pr-ready pass JSON"
-./scripts/adlc5 state set --feature route-tiny --workspace "$ROUTE_WS" --patch \
+fixture_state_patch --feature route-tiny --workspace "$ROUTE_WS" --patch \
   '{"stage_status":{"implement":"in_progress"}}' >/dev/null
 set +e
 PATH="${FAKE_BIN}:$PATH" \
@@ -1853,8 +1925,21 @@ cat >"${TMP}/.adlc5/${PACK_FEATURE}/state.json" <<'EOF'
   }
 }
 EOF
-echo "# code spec for story-a" >"${TMP}/.adlc5/${PACK_FEATURE}/tasks/code-spec/story-a.md"
-echo "# handoff" >"${TMP}/.adlc5/${PACK_FEATURE}/spec-handoff.md"
+cat >"${TMP}/.adlc5/${PACK_FEATURE}/tasks/code-spec/story-a.md" <<'EOF'
+---
+story_id: story-a
+files_to_create: [src/item.py]
+files_to_modify: []
+tests:
+  - file: tests/test_item.py
+    name: test_create
+acceptance_criteria: [AC-1]
+---
+# Implementation
+Create an item and preserve existing behavior.
+EOF
+printf '%s\n' '# Acceptance' 'AC-1: Creating an item returns its identifier.' \
+  >"${TMP}/.adlc5/${PACK_FEATURE}/spec-handoff.md"
 set +e
 ./scripts/memory/generate-pack.sh --feature "$PACK_FEATURE" --story-id story-a --workspace "$TMP" >/tmp/adlc5-pack-direct.json
 EC_DIRECT=$?
@@ -1863,7 +1948,7 @@ rm -f "${TMP}/.adlc5/${PACK_FEATURE}/memory/context-packs/story-story-a.md"
 ./scripts/adlc5 pack --feature "$PACK_FEATURE" --story-id story-a --workspace "$TMP" >/tmp/adlc5-pack-facade.json
 EC_FACADE=$?
 set -e
-[[ "$EC_DIRECT" -eq "$EC_FACADE" ]] || fail "adlc5 pack exit mismatch direct=$EC_DIRECT facade=$EC_FACADE"
+[[ "$EC_DIRECT" -eq 0 && "$EC_FACADE" -eq 0 ]] || fail "adlc5 pack must succeed direct=$EC_DIRECT facade=$EC_FACADE"
 diff -u /tmp/adlc5-pack-direct.json /tmp/adlc5-pack-facade.json >/dev/null \
   || fail "adlc5 pack stdout mismatch vs generate-pack.sh"
 pass "adlc5 pack parity"
@@ -2066,7 +2151,7 @@ set -e
 cp "${V2_TMP}/.adlc5/${FEATURE_V2}/state.json" /tmp/adlc5-state-before.json
 set +e
 ./scripts/adlc5 state set --feature "$FEATURE_V2" --workspace "$V2_TMP" \
-  --patch '{"current_stage":"not-a-stage"}' >/tmp/adlc5-state-set-bad.json
+  --patch '{"git":{"isolation":"not-an-isolation"}}' >/tmp/adlc5-state-set-bad.json
 EC=$?
 set -e
 [[ "$EC" -eq 2 ]] || fail "adlc5 state set invalid expected exit 2 got $EC"
@@ -2076,16 +2161,24 @@ diff -u /tmp/adlc5-state-before.json "${V2_TMP}/.adlc5/${FEATURE_V2}/state.json"
   || fail "adlc5 state set invalid corrupted state.json"
 # valid patch + dry-run then apply
 ./scripts/adlc5 state set --feature "$FEATURE_V2" --workspace "$V2_TMP" \
-  --patch '{"current_step":"specify-1-scope"}' --dry-run >/tmp/adlc5-state-set-dry.json
+  --patch '{"git":{"isolation":"current"}}' --dry-run >/tmp/adlc5-state-set-dry.json
 jq -e '.status == "ok" and .dry_run == true' /tmp/adlc5-state-set-dry.json >/dev/null \
   || fail "adlc5 state set dry-run"
 [[ "$(jq -r '.current_step' "${V2_TMP}/.adlc5/${FEATURE_V2}/state.json")" == "$BEFORE_STEP" ]] \
   || fail "adlc5 state set dry-run mutated state"
 ./scripts/adlc5 state set --feature "$FEATURE_V2" --workspace "$V2_TMP" \
-  --patch '{"current_step":"specify-1-scope"}' >/tmp/adlc5-state-set-ok.json
+  --patch '{"git":{"isolation":"current"}}' >/tmp/adlc5-state-set-ok.json
 jq -e '.status == "ok"' /tmp/adlc5-state-set-ok.json >/dev/null || fail "adlc5 state set ok status"
-[[ "$(jq -r '.current_step' "${V2_TMP}/.adlc5/${FEATURE_V2}/state.json")" == "specify-1-scope" ]] \
-  || fail "adlc5 state set did not apply current_step"
+[[ "$(jq -r '.git.isolation' "${V2_TMP}/.adlc5/${FEATURE_V2}/state.json")" == "current" ]] \
+  || fail "adlc5 state set did not apply metadata"
+set +e
+./scripts/adlc5 state set --feature "$FEATURE_V2" --workspace "$V2_TMP" \
+  --patch '{"current_step":"specify-1-scope"}' >/tmp/adlc5-state-protected.json
+EC=$?
+set -e
+[[ "$EC" -eq 2 ]] || fail "generic state set must reject progression"
+jq -e '.error == "protected_state"' /tmp/adlc5-state-protected.json >/dev/null \
+  || fail "protected progression error missing"
 # feature mismatch refused
 set +e
 ./scripts/adlc5 state set --feature "$FEATURE_V2" --workspace "$V2_TMP" \
@@ -2578,10 +2671,12 @@ cat >"${LEVER3_LEGACY_WS}/.adlc5/${LEVER3_LEGACY_FEATURE}/state.json" <<'EOF'
   "tasks": {"stories": [{"id": "US-001", "title": "t", "status": "verified", "type": "component", "batch": 1, "files": []}]}
 }
 EOF
-LEVER3_LEGACY_OUT=$(./scripts/check-gates.py --feature "$LEVER3_LEGACY_FEATURE" --workspace "$LEVER3_LEGACY_WS" --gate implement-2-verify)
+LEVER3_LEGACY_OUT=$(./scripts/check-gates.py --feature "$LEVER3_LEGACY_FEATURE" --workspace "$LEVER3_LEGACY_WS" --gate implement-2-verify || true)
 jq -e '[.checks[] | select(.id | startswith("deterministic_verify_"))] | length == 0' <<<"$LEVER3_LEGACY_OUT" >/dev/null \
   || fail "a feature with no lever-2 frontmatter should get zero deterministic_verify_* checks"
-pass "check-gates: deterministic_verify_* is a no-op for legacy features"
+jq -e 'any(.checks[]; .id == "strict_spec_US-001" and .status == "fail")' <<<"$LEVER3_LEGACY_OUT" >/dev/null \
+  || fail "legacy frontmatter limitation must surface before completion"
+pass "legacy features remain readable but require upgraded specs before completion"
 rm -rf "$LEVER3_WS" "$LEVER3_LEGACY_WS"
 
 # Lever 9: priced usage ledger
@@ -2770,5 +2865,10 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
   || fail "spec-lint should not extract a story_id out of malformed frontmatter"
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
+
+for test in test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py; do
+  python3 "./scripts/tests/$test" || fail "$test"
+  pass "$test"
+done
 
 echo "All script contract tests passed."

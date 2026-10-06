@@ -34,7 +34,7 @@ Create a PR for the feature branch after the profile's Implement/pr-ready gates.
 ```
 
 4. Parse JSON stdout:
-   - `status: opened` → record `status: completed` and `url` under `implement.pr`
+   - `status: opened` → record the actual `url` and `published: true` metadata under `implement.pr`
    - `status: exists` → PR already open for branch; record it under `implement.pr` and skip create
    - `status: manual` → non-GitHub or missing `gh`; show `body_file`, `branch`, `base`
    - `status: failed` → report error (`gh auth login` if unauthenticated)
@@ -44,4 +44,5 @@ Create a PR for the feature branch after the profile's Implement/pr-ready gates.
 ## Exit criteria
 
 - [ ] PR URL recorded or user confirmed manual open
-- [ ] `implement.pr.status` → `completed` and URL recorded in canonical state
+- [ ] Actual PR URL and `published: true` recorded in canonical state;
+  local `pr-ready` completion remains a separate validated transition

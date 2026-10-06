@@ -41,7 +41,13 @@ REQUIRED_OUTCOME_FIELDS = {
 
 
 def complete_outcome(outcome: dict[str, Any]) -> bool:
-    return REQUIRED_OUTCOME_FIELDS <= outcome.keys()
+    boolean_fields = REQUIRED_OUTCOME_FIELDS - {"rework", "escaped_defects"}
+    return bool(
+        REQUIRED_OUTCOME_FIELDS <= outcome.keys()
+        and all(type(outcome.get(field)) is bool for field in boolean_fields)
+        and all(type(outcome.get(field)) is int and outcome[field] >= 0
+                for field in ("rework", "escaped_defects"))
+    )
 
 
 def successful(outcome: dict[str, Any]) -> bool:

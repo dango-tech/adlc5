@@ -25,6 +25,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Check kernel prerequisites before writing configuration or install targets.
+for tool in git python3 jq; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "ERROR: required tool '$tool' is missing. Install Git, Python 3 and jq, then retry." >&2
+    exit 1
+  }
+done
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "ERROR: Python 3.10 or newer is required; upgrade python3, then retry." >&2
+  exit 1
+fi
+
+
 CONFIG="${ROOT}/config.yaml"
 [[ -f "$CONFIG" ]] || CONFIG="${ROOT}/config.example.yaml"
 [[ -f "$CONFIG" ]] || { echo "ERROR: no config" >&2; exit 1; }
@@ -258,10 +271,11 @@ for s in scripts/advance-phase.sh scripts/check-gates.py scripts/delivery-retry-
   fi
 done
 if [[ -x "${ROOT}/scripts/tests/run-all.sh" ]]; then
-  if "${ROOT}/scripts/tests/run-all.sh" >/dev/null 2>&1; then
+  if contract_output=$("${ROOT}/scripts/tests/run-all.sh" 2>&1); then
     echo "  OK (contract tests): scripts/tests/run-all.sh"
   else
     echo "  FAIL (contract tests): scripts/tests/run-all.sh" >&2
+    printf '%s\n' "$contract_output" | tail -20 >&2
     errors=$((errors + 1))
   fi
 fi

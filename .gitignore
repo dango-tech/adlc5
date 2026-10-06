@@ -14,3 +14,18 @@ dogfood/fixtures/smoke-persona/.adlc5/
 credentials.json
 __pycache__/
 *.pyc
+
+# Local development material; never part of the distribution.
+docs/plans/
+.agents/
+.agent-cache/
+.codex/sessions/
+.codex/memories/
+.codex/config.toml
+.claude/settings.local.json
+.cursor/plans/
+.cursor/hooks/state/
+.env.*
+*.key
+marketing/
+PUBLIC-LAUNCH-PLAN.md

@@ -26,7 +26,7 @@ Requires `.adlc5/{feature}/policies.yaml` with `autopilot` section.
 | Substep | Skill | Policy field | Skip when |
 |---------|-------|--------------|-----------|
 | Specify | `@adlc5-specify` | profile | skipped substeps follow selected profile |
-| Plan | `@adlc5-plan` | profile | tiny profile; standard skips configured engineering/design steps |
+| Plan | `@adlc5-plan` | profile | tiny records decisions in change.md; standard retains brief design/plan.md |
 | Tasks | `@adlc5-tasks` | profile | tiny profile |
 | Design critic | `@adlc5-design-critic` | `interaction_mode: autonomous` | only after a non-blocking critique |
 | Implement build | `@build-implementer` via `@adlc5-implement` | `execution_mode` | |
@@ -59,4 +59,4 @@ Requires `.adlc5/{feature}/policies.yaml` with `autopilot` section.
 
 Autonomous mode uses the same questions and lifecycle state; there is no separate pilot invocation.
 
-Map option IDs to `state.json` / `policies.yaml` per the [AskQuestion convention](https://github.com/dango85/adlc5/blob/main/core/guides/askquestion-convention.md).
+Map option IDs to `state.json` / `policies.yaml` per the [AskQuestion convention](https://github.com/dango-tech/adlc5/blob/main/core/guides/askquestion-convention.md).

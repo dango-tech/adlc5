@@ -1,0 +1,6 @@
+# Review changes to the privacy gate and its enforcement.
+/.github/ @dango85
+/.githooks/ @dango85
+/scripts/check-publication.py @dango85
+/.gitattributes @dango85
+/.gitignore @dango85

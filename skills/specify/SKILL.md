@@ -34,7 +34,12 @@ generated navigation evidence, not human-approved intent.
 
 For the `tiny` profile, run `specify-0-git` and write a minimal,
 user-checkable `spec-handoff.md`; skip Discover, PRT, and scale-NFR ceremony.
-Other profiles retain the full Specify ladder.
+Write `change.md` for tiny work with reuse, boundary, acceptance and risks;
+create one bounded story entry for implementation/evidence, without a spec tree.
+Other profiles retain the Specify ladder. Record `risk.json` with known categories,
+`uncertain` and rationale; uncertainty or auth/money/secrets/migration/concurrency/
+destructive/public-compatibility/disputed requirements require `high_risk`.
+See [evidence completion](../../docs/evidence-completion.md).
 
 ## Current information
 
@@ -57,7 +62,8 @@ Before leaving Specify:
 
 Unified state (schema 3.0) only — see [core/state-schema.json](../../core/state-schema.json).
 
-Update `current_step`, `stage_status.specify`, `git`, `scale_nfrs`, `clarity`.
+Update `git`, `scale_nfrs`, `clarity` metadata. Use `adlc5 transition TARGET`
+for each enabled next step; the kernel owns stage/step completion.
 
 ## AskQuestion (mandatory on start)
 

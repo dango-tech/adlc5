@@ -1,38 +1,37 @@
 # Implement — Build through PR
 
-## implement-1-build
+## Build
 
-1. `tiny`: implement the bounded `spec-handoff.md` directly; no synthetic story
-   or empty batch scaffolding. Other profiles read
-   `state.tasks.parallel_batches`.
-2. For each planned story, spawn `@build-implementer` with its generated
-   context pack.
-3. Run `./scripts/run-tests.sh` and `./scripts/run-lint.sh` per story completion.
-4. Story status → `implementation_complete` only when tests pass.
+Tiny work uses the bounded `change.md` and spec handoff; avoid an artificial
+spec tree. Other profiles use planned stories and generated context packs.
+Inspect the existing flow/callers, implement the bounded change, then submit
+actual build results with `adlc5 evidence build --file build.json`.
 
-Gate: `./scripts/check-gates.py --gate implement-1-build`
+Configure consumer acceptance/regression and required quality commands in
+`evidence/checks.json`. Run `adlc5 evidence check`; selected required runners
+must exist and enforce the chosen policy. Use `transition implement-2-verify`
+after the build gate passes.
 
-## implement-2-verify
+## Verify and integrate
 
-Spawn `@assure-verifier` per story. `@assure-verifier` runs `./scripts/verify-story.py` first when the code spec has lever-2 frontmatter — it reasons about what that leaves, not the whole story from scratch. Rework via `@adlc5-assure-reworker` (max 3 attempts).
+Have the reviewer inspect the current diff against acceptance, using mechanical
+boundary/test/signature checks to narrow the work. Submit actual identities,
+disposition and blocking findings via `evidence review`. Rework blockers and
+rerun current evidence. Standard/high-risk need a fresh reviewer session.
 
-Sync report: `./scripts/sync-verification-report.sh --feature "{feature}"`
+When integration is enabled, declare a required named `integration` command
+and test cross-story wiring/E2E. The kernel certifies results; never set
+`implement.integration.status` manually.
 
-## implement-3-integrate
+## QA and PR readiness
 
-Integration story + E2E. Set `implement.integration.status: completed`.
+High-risk needs a required named `security` command that tests the applicable
+trust/data boundary or runs the appropriate scanner, plus the QA clearance
+artifact and explicit human approval. A `CLEARED` marker alone is insufficient.
 
-## implement-4-qa
+Advance through enabled steps with `adlc5 transition TARGET`. At
+`implement-5-pr`, `transition completed` requires fresh passing evidence and
+selected approvals. Opening a PR is separate: use `@pr-reviewer` when authorized
+and record its actual URL/publication metadata; never invent a PR to earn readiness.
 
-Invoke `@qa`. Require `.qa/{feature}/deployment-clearance.md` with `CLEARED`.
-
-## implement-5-pr
-
-Invoke `@pr-reviewer`. Record PR URL in state.
-
-## Terminal gate
-
-```bash
-./scripts/check-gates.py --feature "{feature}" --gate pr-ready
-./scripts/memory/compact-stage.sh --feature "{feature}" --stage implement
-```
+Compact memory after completion. See [completion commands](../../../docs/evidence-completion.md).

@@ -19,7 +19,10 @@ version: 4.1.0
 
 When `persona_mode.verifier_different_model: true`, spawn `@assure-verifier` on **reasoning** tier — do not inherit Coder model.
 
-For the high-risk profile, record the actual execution identities before running the Verify gate:
+Record actual execution identities in a review JSON and submit it with
+`adlc5 evidence review --feature "{feature}" --file review.json`. Standard/high-risk
+require a fresh review session; different models are required only when policy selects them.
+Example identity fields (alongside disposition and blocking findings):
 
 ```json
 "implement": { "verification": { "independence": {
@@ -29,7 +32,7 @@ For the high-risk profile, record the actual execution identities before running
 } } }
 ```
 
-`implement-2-verify` and `pr-ready` fail unless session and model IDs differ. A human may explicitly approve a `clarity.history` `verifier_waiver`; agents must not self-approve it.
+`implement-2-verify` and `pr-ready` enforce the selected session/model separation policy. A human may explicitly approve a `clarity.history` `verifier_waiver`; agents must not self-approve it.
 
 ## Substeps
 
@@ -67,16 +70,20 @@ Stories reach `verified` only with verification report citing code-spec line ref
 
 ## State
 
-Update `implement.current_substep`, `implement.story_status`, `tasks.stories[].status`.
-
-On `pr-ready`: `stage_status.implement`: `completed`, record PR URL in `implement.pr.url`.
+At Build, submit `evidence build --file build.json` with implemented `story_ids`.
+Configure required commands in `evidence/checks.json`, then run `adlc5 evidence check`.
+Submit the independent review via `evidence review`; use `transition TARGET` for
+progression and `transition completed` at the terminal gate. Do not patch verification
+or completion fields. Any relevant patch/acceptance/config change invalidates evidence.
+See [evidence completion](../../docs/evidence-completion.md) for command examples.
+Record a PR URL in `implement.pr.url` only when one actually exists.
 
 ## Human PR approval (policy)
 
-When `policies.yaml` sets `autopilot.require_human_pr_approval: true`, `pr-ready` fails until a human approves. At `implement-5-pr`, AskQuestion for sign-off and record it in `state.json`:
+When `policies.yaml` sets `autopilot.require_human_pr_approval: true`, `pr-ready` fails until a human approves. At `implement-5-pr`, AskQuestion for sign-off and submit it via `adlc5 evidence approve --file approval.json` after an explicit user response:
 
 ```json
-"clarity": { "history": [ { "ts": "ISO8601", "type": "pr_approval", "approved_by": "user" } ] }
+{"type": "pr_approval", "approved_by": "user"}
 ```
 
 Never write this entry without an explicit user response — autopilot halts here by design.
