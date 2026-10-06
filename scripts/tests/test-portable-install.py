@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Disposable install smoke test; never reads the contributor's host config."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,10 +30,13 @@ def main():
         shutil.copytree(ROOT, clone, ignore=shutil.ignore_patterns(
             ".git", ".adlc5", ".agent-cache", "__pycache__", "config.yaml"))
         subprocess.run(["git", "init", "-q", str(clone)], check=True)
-        # Retain the frozen baseline objects without changing copied candidate files.
-        subprocess.run(["git", "-C", str(clone), "fetch", "-q", str(ROOT), "HEAD"], check=True)
+        # Retain frozen baseline objects and named tags without changing candidate files.
+        subprocess.run(["git", "-C", str(clone), "fetch", "-q", "--tags", str(ROOT), "HEAD"], check=True)
         subprocess.run(["git", "-C", str(clone), "symbolic-ref", "HEAD", "refs/heads/install-smoke"], check=True)
         subprocess.run(["git", "-C", str(clone), "update-ref", "refs/heads/install-smoke", "FETCH_HEAD"], check=True)
+        baseline = json.loads((clone / "templates/evaluation/cases.json").read_text())["baseline_framework_revision"]
+        expected = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", baseline])
+        assert subprocess.check_output(["git", "-C", str(clone), "rev-parse", baseline]) == expected
         home = base / "home"
         home.mkdir()
         env = dict(os.environ, HOME=str(home))
