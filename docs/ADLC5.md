@@ -13,8 +13,8 @@
 
 Not a style preference — each claim below points at the code that enforces it:
 
-- **Gates are enforced code, not convention.** [`check-gates.py`](../scripts/check-gates.py) runs the discrete checks listed per gate in [`core/gates.yaml`](../core/gates.yaml) and returns a non-zero exit on failure — HITL warns, autonomous mode fails closed. A stage can't be marked done by an agent asserting it's done.
-- **One state, one schema.** Every stage/skill reads and writes the same `.adlc5/{feature}/state.json`, schema-validated on every write ([`core/state-schema.json`](../core/state-schema.json) via [`scripts/lib/state_v2.py`](../scripts/lib/state_v2.py)) — orchestrator and subagents can't drift into disagreeing about lifecycle position.
+- **Gates are enforced code, not convention.** [`check-gates.py`](../scripts/check-gates.py) runs the discrete checks listed per gate in [`core/gates.yaml`](../core/gates.yaml) and returns a non-zero exit on failure. Canonical transitions reject missing required evidence; generic state edits cannot manufacture completion.
+- **One state, one schema.** Every stage/skill reads and writes the same `.adlc5/{feature}/state.json`, schema-validated on every write ([`core/state-schema.json`](../core/state-schema.json) via [`scripts/lib/state_v2.py`](../scripts/lib/state_v2.py)). Agents must use the canonical transition and evidence operations to update progress.
 - **Kernel/skill split.** Deterministic gate, state, and phase logic lives in scripts behind the `scripts/adlc5` façade; skills only exercise judgment when the kernel signals it's required. See [ADLC5-kernel.md](ADLC5-kernel.md) Principles.
 
 ## Flow
@@ -33,7 +33,7 @@ flowchart LR
     GateTasks -- pass --> Implement
     Implement -- check-gates.py --> GatePR{{"pr-ready?"}}
     GatePR -- fail --> Implement
-    GatePR -- pass --> Merge(["PR merged"])
+    GatePR -- pass --> Ready(["PR ready for review"])
 ```
 
 | Stage | Skill | Gate |

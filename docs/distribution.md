@@ -11,9 +11,8 @@ unqualified. See [evaluation](evaluation.md).
 `.cursor/hooks`, `.claude/hooks` and `.codex/hooks` plus their hook configuration
 files are product assets consumed by installers. They are intentionally retained.
 Local lifecycle trees, caches, sessions, credentials, editor state and development
-plans are ignored. Development plans are preserved locally but removed from tracking;
-public documentation does not depend on them. The root agent guide contains
-framework guidance only, without maintainer preferences.
+plans are excluded from distribution. Public documentation does not depend on
+local development material.
 
 Native `git archive` and GitHub source archives honor `.gitattributes`: development
 plans, root developer instructions, GitHub maintenance configuration and local
@@ -29,19 +28,10 @@ Do not package a working directory with `tar` or ZIP: ignored local files may
 contain credentials or session data. A source archive is not a standalone Git
 checkout; baseline-comparison preparation needs the documented repository history.
 
-## Before changing repository visibility
+## Publication checks
 
-Check the complete Git history, not only the current tree, for secrets, personal
-paths/emails, private consumer material and redistribution rights. Ignoring or
-untracking a file does not remove previous commits, PRs or hosted artifacts.
-If an actual secret is found, revoke it and remove exposed copies before publishing.
-History rewriting and repository visibility changes require a separate explicit
-action; this cleanup does neither. Choose a release version/tag and publish notes
-that retain the preview qualification.
-
-This repository uses independently authored snapshots: a sanitized evaluation
-baseline and the current framework. No original commit ancestry, PRs or private
-commit-email metadata were imported. The original repository remains private.
-
-See [publication guardrails](publication-guardrails.md). These checks are bounded
-heuristics; human review and native secret scanning remain necessary.
+Review the complete Git history and release archive for private material and
+redistribution rights before publishing. Ignoring or untracking a file does not
+remove previous commits or hosted artifacts. Revoke any exposed credentials.
+See [publication guardrails](publication-guardrails.md) for contributor checks
+and their limitations.
