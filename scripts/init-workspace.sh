@@ -25,6 +25,7 @@ WITH_HOOKS=0
 HOOKS_PLATFORMS="cursor"
 WITH_PROJECT_WIKI=0
 WITH_PR_TEMPLATE=0
+SHARED_IGNORE=0
 DRY_RUN=0
 FORCE=0
 SHARE_STATIC=1
@@ -46,9 +47,9 @@ ADLC5 installs in three layers — this script is layer 2:
      The .adlc5/ scaffold: workspace.json, config.yaml, governance/ and
      policies.yaml.example. These are static per repository, so in a linked
      git worktree they are symlinked to one shared copy under the repo's
-     common .git dir instead of being duplicated. .adlc5/ is gitignored and
-     git never shares untracked files between worktrees, which is why a new
-     worktree used to look like a fresh, duplicated install.
+     common .git dir instead of being duplicated. Lifecycle state is excluded
+     locally by default; git never shares untracked files between worktrees,
+     which is why a new worktree used to look like a fresh, duplicated install.
 
   3. Per-feature (init-feature.sh / @adlc5, once per feature)
      .adlc5/{feature}/ — state.json, design docs, code specs, memory. This
@@ -63,6 +64,8 @@ ADLC5 installs in three layers — this script is layer 2:
   --hooks-platform LIST  Comma-separated platforms for --with-hooks: cursor,claude,codex or all
                     (default: cursor — only installs hooks for the platform(s) named)
   --with-project-wiki  Scaffold team-shared wiki/ and sources/ (tracked; not gitignored)
+  --shared-ignore    Put ADLC5 lifecycle exclusions in the repository .gitignore
+                     (default: target repo's local Git exclude; no tracked diff)
   --with-pr-template  Copy ADLC5's starter PR body template to .github/PULL_REQUEST_TEMPLATE.md
                       (skipped if the project already has one at any conventional path)
   --force           Overwrite .adlc5/workspace.json and refresh skill links
@@ -90,7 +93,7 @@ Creates:
   .agent-cache/ (generated, gitignored repository intelligence)
   .agents/skills/ → symlinks to adlc5 skills (unless --no-skills)
   .cursor/agents/discover-council-* → council model routing for @discover
-  .gitignore entries for lifecycle artifacts
+  Local Git exclusions for lifecycle artifacts (unless --shared-ignore)
   .github/PULL_REQUEST_TEMPLATE.md (only with --with-pr-template, and only if missing)
 EOF
 }
@@ -105,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --hooks-platform) HOOKS_PLATFORMS="${2:?}"; shift 2 ;;
     --with-project-wiki) WITH_PROJECT_WIKI=1; shift ;;
     --with-pr-template) WITH_PR_TEMPLATE=1; shift ;;
+    --shared-ignore) SHARED_IGNORE=1; shift ;;
     --force) FORCE=1; shift ;;
     --no-shared-worktree) SHARE_STATIC=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -224,27 +228,55 @@ link_skill() {
   echo "  Linked: ${name}"
 }
 
-append_gitignore() {
+append_ignore_rules() {
   local gi="${PROJECT}/.gitignore"
-  local marker="# ADLC5 lifecycle artifacts"
-  if [[ -f "$gi" ]] && grep -qF "$marker" "$gi" 2>/dev/null; then
-    echo "  .gitignore already has ADLC5 section"
-    return 0
+  local target marker tracked path
+  if [[ "$SHARED_IGNORE" -eq 1 ]]; then
+    target="$gi"
+    marker="# ADLC5 shared lifecycle artifacts"
+  else
+    local exclude
+    exclude="$(git -C "$PROJECT" rev-parse --git-path info/exclude 2>/dev/null || true)"
+    if [[ -z "$exclude" ]]; then
+      target="$gi"
+      marker="# ADLC5 lifecycle artifacts (before git init)"
+      echo "  No Git repository found; writing lifecycle exclusions to .gitignore for future git init"
+    else
+      [[ "$exclude" == /* ]] || exclude="${PROJECT}/${exclude}"
+      target="$exclude"
+      marker="# ADLC5 local lifecycle artifacts"
+    fi
   fi
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "  [dry-run] append ADLC5 section to .gitignore"
-    return 0
+  if [[ -f "$target" ]] && grep -qF "$marker" "$target" 2>/dev/null; then
+    echo "  ADLC5 lifecycle exclusions already configured in ${target}"
+  else
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "  [dry-run] append ADLC5 lifecycle exclusions to ${target}"
+    else
+      printf '\n%s\n!.adlc5/\n.adlc5/*\n!.adlc5/governance/\n.discover/\n.prt/\n.qa/\n.worktrees/\n' "$marker" >>"$target"
+      if [[ "$SHARED_IGNORE" -eq 1 ]]; then
+        echo "  Updated .gitignore — review and commit if the team should share these exclusions"
+      elif [[ "$target" == "$gi" ]]; then
+        echo "  Updated .gitignore; keep or commit it after git init"
+      else
+        echo "  Updated local Git exclusions (not part of the repository diff)"
+      fi
+    fi
   fi
-  cat >>"$gi" <<'EOF'
 
-# ADLC5 lifecycle artifacts
-.adlc5/
-.discover/
-.prt/
-.qa/
-.worktrees/
-EOF
-  echo "  Updated .gitignore"
+  tracked="$(git -C "$PROJECT" ls-files -- '.adlc5/*' '.discover/*' '.prt/*' '.qa/*' '.worktrees/*' 2>/dev/null || true)"
+  if [[ -n "$tracked" ]]; then
+    while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
+      case "$path" in .adlc5/governance/*) continue ;; esac
+      echo "  WARNING: ${path} is already tracked; ignore rules do not untrack it" >&2
+    done <<<"$tracked"
+  fi
+
+  if [[ "$SHARED_IGNORE" -ne 1 && "$target" != "$gi" && -f "$gi" ]] \
+    && git -C "$PROJECT" check-ignore -q --no-index .adlc5/governance/production-ready.md 2>/dev/null; then
+    echo "  WARNING: .gitignore still excludes .adlc5/governance/; run init-workspace.sh --shared-ignore to add a same-file exception, or force-add approved governance files" >&2
+  fi
 }
 
 echo "Initializing ADLC5 workspace: ${PROJECT}"
@@ -312,7 +344,7 @@ else
   echo "AGENTS.md already exists — not overwritten"
 fi
 
-append_gitignore
+append_ignore_rules
 
 # Repository context: tracked constitution + generated, gitignored intelligence.
 REPOSITORY_CONTEXT="${ADLC5_ROOT}/scripts/repository-context.py"

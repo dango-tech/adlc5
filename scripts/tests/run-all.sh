@@ -471,7 +471,48 @@ mkdir -p "$IW_WS2"
 ./scripts/init-workspace.sh --project "$IW_WS2" --no-skills >/tmp/iw-suggest.txt
 grep -q "no PR template found" /tmp/iw-suggest.txt || fail "init-workspace should suggest a PR template when none exists"
 [[ -f "${IW_WS2}/.github/PULL_REQUEST_TEMPLATE.md" ]] && fail "init-workspace must not create a template without --with-pr-template"
+grep -qF '# ADLC5 lifecycle artifacts (before git init)' "${IW_WS2}/.gitignore" \
+  || fail "init-workspace before git init should persist lifecycle exclusions for later"
 pass "init-workspace suggests PR template when missing"
+
+# Git repositories get local exclusions without changing their tracked .gitignore.
+IW_IGNORE_WS="${TMP}/init-workspace-ignore-ws"
+mkdir -p "$IW_IGNORE_WS"
+(cd "$IW_IGNORE_WS" && git init -q -b main && printf '%s\n' '# project rules' >.gitignore)
+./scripts/init-workspace.sh --project "$IW_IGNORE_WS" --no-skills >/tmp/iw-local-ignore.txt
+grep -qF '# project rules' "${IW_IGNORE_WS}/.gitignore" \
+  || fail "default init-workspace must preserve project .gitignore content"
+if grep -qF '# ADLC5 local lifecycle artifacts' "${IW_IGNORE_WS}/.gitignore"; then
+  fail "default init-workspace must not add lifecycle exclusions to .gitignore"
+fi
+git -C "$IW_IGNORE_WS" check-ignore -q .adlc5/feature/state.json \
+  || fail "local exclusions should hide lifecycle state"
+if git -C "$IW_IGNORE_WS" check-ignore -q .adlc5/governance/production-ready.md; then
+  fail "new local exclusions should leave governance available for tracking"
+fi
+pass "init-workspace keeps lifecycle exclusions local and governance trackable"
+
+# A prior .adlc5/ rule has higher precedence than local excludes; opt-in shared
+# rules add the same-file exception without removing unrelated user rules.
+IW_LEGACY_WS="${TMP}/init-workspace-legacy-ignore-ws"
+mkdir -p "$IW_LEGACY_WS"
+(cd "$IW_LEGACY_WS" && git init -q -b main && printf '%s\n' '# project rules' '.adlc5/' >.gitignore)
+./scripts/init-workspace.sh --project "$IW_LEGACY_WS" --no-skills \
+  >/tmp/iw-legacy-ignore.txt 2>/tmp/iw-legacy-ignore.err
+grep -qF 'run init-workspace.sh --shared-ignore' /tmp/iw-legacy-ignore.err \
+  || fail "legacy ignore warning should recommend --shared-ignore"
+if git -C "$IW_LEGACY_WS" check-ignore -q .adlc5/governance/production-ready.md; then
+  : # Expected: the existing repository .gitignore takes precedence.
+else
+  fail "legacy .adlc5/ ignore should remain visible as a migration case"
+fi
+./scripts/init-workspace.sh --project "$IW_LEGACY_WS" --no-skills --shared-ignore >/tmp/iw-shared-ignore.txt
+if git -C "$IW_LEGACY_WS" check-ignore -q .adlc5/governance/production-ready.md; then
+  fail "--shared-ignore should override the legacy .adlc5/ rule for governance"
+fi
+grep -qF '# project rules' "${IW_LEGACY_WS}/.gitignore" \
+  || fail "--shared-ignore must preserve existing .gitignore content"
+pass "init-workspace migrates legacy ignore behavior through explicit shared rules"
 
 # init-workspace.sh --with-hooks is platform-aware: bare flag defaults to
 # cursor only; --hooks-platform selects the matching config + hook scripts.

@@ -21,6 +21,17 @@ cp config.example.yaml config.yaml
 ./scripts/verify-install.sh 
 ```
 
+Workspace initialization keeps lifecycle exclusions in the target repository's
+local Git `info/exclude` by default, so it does not add a `.gitignore` diff. If
+Git has not been initialized yet, it writes a `.gitignore` fallback that will
+protect files after `git init`. Pass `--shared-ignore` when the team wants
+these exclusions tracked in `.gitignore`; review and commit that file with the
+repository's other project conventions. The rules leave `.adlc5/governance/`
+available for intentional tracking. Older `.gitignore` files may already
+exclude all of `.adlc5/`; init warns when that prevents governance tracking.
+Use `--shared-ignore` to add a same-file exception, or force-add approved
+governance files. Ignore rules do not untrack files already in Git.
+
 **Consumer app repo:**
 
 ```bash
@@ -30,6 +41,34 @@ cp config.example.yaml config.yaml
 ```
 
 Invoke: `@adlc5 for my-feature`
+
+## Migrating an existing private installation
+
+The maintained distribution is [dango-tech/adlc5](https://github.com/dango-tech/adlc5).
+The retired repository has independent history. Keep old clones and worktrees as
+private backups; do not merge their history into the maintained repository or
+push old branches and tags to it. Changing `origin` alone is not a migration.
+
+Clone the maintained repository into a separate directory:
+
+```bash
+git clone https://github.com/dango-tech/adlc5.git /path/to/adlc5-new
+cd /path/to/adlc5-new
+cp config.example.yaml config.yaml
+./scripts/install.sh --platform all
+./scripts/verify-install.sh
+```
+
+Review and transfer only the settings you need from the old private `config.yaml`.
+Keep credentials, sessions, caches, and development plans out of the new clone.
+Update any `ADLC5_ROOT` environment variables, MCP commands, scheduled collectors,
+and custom script paths to the new location. Re-run `init-workspace.sh --project
+/path/to/app` from the new clone for each consumer workspace to refresh local
+skill links; retain consumer feature state and constitution files. Back up custom
+hook configurations and merge them separately rather than overwriting them.
+
+The new repository may require access while it remains private. Retain the old
+installation until the new host setup has been verified.
 
 ## Config (`config.yaml`)
 
@@ -88,7 +127,14 @@ ADLC5 installs at three different scopes. Knowing which layer owns an artifact a
 
 ### Why worktrees used to look like duplicate installs
 
-`.adlc5/` is gitignored, and git never shares untracked files between worktrees — each linked worktree starts with an empty `.adlc5/`. Re-running `init-workspace.sh` there previously re-copied the whole layer-2 scaffold, so a repo with three worktrees carried three independent copies of files that are identical by definition.
+Lifecycle artifacts are excluded by default through the target repository's
+local Git `info/exclude`; `--shared-ignore` writes exclusions to `.gitignore`
+for teams that want the rule committed. When initialized before Git, a `.gitignore`
+fallback keeps artifacts ignored after `git init`. Git never shares untracked
+files between worktrees — each linked worktree starts with its own lifecycle
+state. Re-running `init-workspace.sh` there previously re-copied the whole
+layer-2 scaffold, so a repo with three worktrees carried three independent
+copies of files that are identical by definition.
 
 `init-workspace.sh` is now worktree-aware. In a **linked** worktree it materializes the static layer-2 artifacts once at `<git-common-dir>/adlc5-shared/` — the same directory from every worktree, since `git rev-parse --git-common-dir` resolves to the one real `.git` — and symlinks the worktree's `.adlc5/config.yaml`, `.adlc5/governance/`, and `.adlc5/policies.yaml.example` at it. The shared store lives under the common `.git` dir rather than inside the first worktree, so it survives that worktree being removed. Existing real files are never converted, the main worktree keeps ordinary files, and `--no-shared-worktree` opts out.
 
