@@ -1,7 +1,5 @@
 # Agent-agnostic token usage collection
 
-**Last verified:** 2026-09-17
-
 ADLC5 tracks token spend and model choice per feature in a single normalized
 ledger — `.adlc5/{feature}/memory/usage-ledger.jsonl` — no matter which AI
 coding agent produced the work. `usage-ledger.py` and `adlc5 usage summary` /
@@ -30,21 +28,15 @@ CLI rolls up into one number instead of three incompatible ones.
 | Platform | Exact tokens? | Source of tokens | Model field | Collector | Docs |
 |---|---|---|---|---|---|
 | Cursor Cloud Agents | Yes | `GET /v1/agents/{id}/usage` (delta-tracked) | `model_id` on the binding | `scripts/cursor-usage.py` | [docs/cursor-usage.md](cursor-usage.md) |
-| Cursor IDE sessions | Only with a Team/Org Admin key | Admin API `filtered-usage-events` | hook `model`/`model_id` | `scripts/cursor-usage.py` | [docs/cursor-usage.md](cursor-usage.md) |
+| Cursor IDE sessions | Requires Admin API access | Admin API `filtered-usage-events` | hook `model`/`model_id` | `scripts/cursor-usage.py` | [docs/cursor-usage.md](cursor-usage.md) |
 | Claude Code | Yes | `message.usage` in the on-disk transcript JSONL | `message.model` in the transcript | `scripts/claude-usage.py` | [docs/claude-usage.md](claude-usage.md) |
-| Codex CLI | Yes, when hooks actually fire (unconfirmed on all builds — see doc) | `token_usage_record` or `event_msg`/`token_count` in the on-disk rollout JSONL (both checked) | `Stop`/`SubagentStop` hook `model` field | `scripts/codex-usage.py` | [docs/codex-usage.md](codex-usage.md) |
-| Gemini CLI / Antigravity | Yes (not wired) | `AfterModel` hook `llm_response.usageMetadata.totalTokenCount` | `AfterModel` hook `llm_request.model` | none yet | — |
-| OpenCode | Yes (not wired) | `chat.message` hook token fields, or `client.session.messages(sessionID)` | `chat.message` hook `model.modelID` | none yet | — |
-| Hermes | Unknown | No public hook/telemetry documentation found as of 2026-09-04 | Unknown | none | — |
+| Codex CLI | When supported records and hooks are available | `token_usage_record` or `event_msg`/`token_count` in the on-disk rollout JSONL (both checked) | `Stop`/`SubagentStop` hook `model` field | `scripts/codex-usage.py` | [docs/codex-usage.md](codex-usage.md) |
 
-Cursor IDE sessions are one gap where exact tokens require an Enterprise-only
-key most individual accounts don't have. Codex CLI is a second gap: a real
-smoke test found its documented `.codex/hooks.json` mechanism didn't fire on
-one tested build (see [docs/codex-usage.md](codex-usage.md#known-issue-hooks-may-not-fire))
-— the token-parsing logic is verified against real rollout output, but hook
-firing itself needs to be confirmed on your installed Codex CLI version
-before you rely on it. Every other row is either fully wired or has a
-confirmed, documented hook to wire against.
+Collectors depend on host hook delivery and supported usage records. Confirm
+collection in your own installation; missing records mean unavailable usage,
+not zero spend. Cursor API permissions vary by account. Codex hook delivery
+is version-sensitive; see [the verification steps](codex-usage.md#verify-hook-delivery).
+Other hosts can use manual `adlc5 usage record` entries.
 
 ## Installation
 

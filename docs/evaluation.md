@@ -28,7 +28,7 @@ Exclude cases without an independent acceptance command. Do not substitute an LL
 Run every case from equivalent disposable worktrees with fresh model sessions:
 
 1. direct coding agent,
-2. current standard ADLC5,
+2. frozen ADLC5 baseline,
 3. candidate tiny, standard, or high-risk policy.
 
 Private prompts, repository paths, and raw results stay local. Only product-agnostic schemas and anonymized aggregates belong in this repository.
@@ -71,24 +71,6 @@ reported separately as `failed_tokens`/`failed_cost_usd`. Reject policies that
 lower the frozen-anchor pass rate, hide anchor changes, or increase unresolved
 rework.
 
-## Pilot
-
-Start with two cases per class. This six-case pilot is a smoke comparison, not statistical proof. Keep mandatory nodes that catch a real defect class; make repeatedly idle low-risk nodes conditional; downgrade a model only when the quality floor remains intact.
-
-## Formats and storage
-
-| Data | Canonical format | Storage |
-|---|---|---|
-| Human requirements, plans, code specs, skills | YAML frontmatter + Markdown | Git-backed files |
-| Mutable lifecycle state | Schema-validated JSON | Local filesystem with atomic replace |
-| Transitions, evidence, telemetry, usage | JSONL | Feature-local filesystem; archive with feature |
-| Generated context packs | Markdown | Disposable feature-local files |
-| Binary source documents | Original + derived Markdown + source hash | Feature-local inputs; original remains authoritative |
-| Current fleet analytics | JSONL + offline summaries | Local/archive storage |
-| Large analytical workloads | Parquet export, only after measured need | Analytical/object storage |
-
-Do not add Redis, tmpfs, Protobuf, Parquet/Lance, vector storage, or a graph database until profiling identifies the current representation as the bottleneck. Microsoft MarkItDown may be added later as an optional local-only Specify intake adapter when a frozen binary-document case justifies it; it is not a runtime dependency.
-
 ## Reproducible six-case handoff
 
 The public case bank is `templates/evaluation/cases.json`; the stdlib consumer is
@@ -115,12 +97,10 @@ as complete. Missing accounting is reported unavailable, including null spend
 buckets; it cannot enter the successful cohort. A report from preparation alone
 is a fixture smoke test, never a live agent comparison.
 
-Automated contract and isolated-install checks passed on Ubuntu and macOS.
-A small live consumer exercise passed acceptance/regression and separate agent
-review; it does not establish comparative quality or cost. Repeated comparisons,
-usage accounting, fresh-host resume, genuine high-risk approval, 24-hour defect
-observation and outside-contributor reproduction remain unqualified.
-No live pass-rate or cost advantage is claimed.
+The six-case bank tests the evaluation procedure; it is not statistical proof
+of coding quality. Contract tests and scripted demos do not establish live
+agent reliability or cost savings. Comparative quality, cost, and newcomer
+usability remain unqualified; no live pass-rate or cost advantage is claimed.
 
 The collector executes actual `pr-ready` and anchor gates for framework arms; a
 manual observation cannot assert their pass. Direct-arm review needs a local

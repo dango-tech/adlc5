@@ -1,4 +1,4 @@
-# ADLC5 — Evidence-Driven Fat Kernel (4.x)
+# ADLC5 — Kernel reference
 
 **Version:** [`core/VERSION`](../core/VERSION) · **Paths:** repo root (`core/`, `skills/`, `scripts/`, …) — single 4.x tree
 
@@ -8,8 +8,6 @@
 2. **Skills/LLM only when the kernel says judgment is required** — orchestration + prose, not gate logic.
 3. **Scripts over skill logic** — façade calls existing scripts; MCP wraps the same façade (transport only).
 4. **Packs not corpora** — story packs + budget; chat is ephemeral.
-5. **Ponytail = Build rule**, not a skill.
-6. **A2A optional later** — not the kernel.
 
 ## Evidence
 
@@ -79,8 +77,9 @@ sequenceDiagram
 
     Skill->>CLI: adlc5 state set --feature X --patch {...}
     CLI->>Lib: set_feature_state(patch)
+    Lib->>Lib: reject protected progress/result edits
     Lib->>Schema: validate_against_schema(candidate)
-    alt schema_version mismatch or validation fails
+    alt protected result changed, schema_version mismatch, or validation fails
         Lib-->>CLI: {status: error, error, errors?}
         CLI-->>Skill: non-zero exit, JSON error
     else valid
@@ -142,7 +141,7 @@ python3 ./scripts/adlc5-mcp.py --smoke  # tool list + version invoke
 ./.cursor-plugin/run-mcp.sh --smoke     # plugin shim (sets ADLC5_ROOT)
 ```
 
-Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`, `adlc5_clarity`, `adlc5_phase`, `adlc5_pilot`, `adlc5_state_get`, `adlc5_state_set`, `adlc5_repo_spec`, `adlc5_repo_index`, `adlc5_resolve_model`.
+Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`, `adlc5_clarity`, `adlc5_phase`, `adlc5_pilot`, `adlc5_state_get`, `adlc5_state_set`, `adlc5_transition`, `adlc5_evidence`, `adlc5_repo_spec`, `adlc5_repo_index`, `adlc5_resolve_model`.
 
 ## Agent Plugin packaging
 
@@ -163,22 +162,3 @@ Manifest paths are relative with **no `..` traversal**. Runtime shims resolve th
 | `facilitation_mode` | `ask_only` | No unsolicited suggestions; `collaborative` may propose after asking |
 | `assumption_policy` | `refuse` | No invented facts; `tagged` / `allow` only when explicit |
 | `council_enabled` | (user pref) | Orthogonal — council vs solo |
-
-## Checklist
-
-### Done
-
-- [x] Kernel façade + schema-validated `state set`
-- [x] Thin MCP stdio server over façade
-- [x] Smoke/parity tests in `scripts/tests/run-all.sh`
-- [x] Spine skills cite façade
-- [x] Discover `facilitation_mode` / `assumption_policy`
-- [x] Plugin packaging: Cursor manifests + shims + README; Codex metadata; install prints `ADLC5_ROOT`; verify checks kernel/MCP/shims
-- [x] `core/VERSION` on the 4.x line (no versioned parallel tree)
-
-### Next
-
-- [ ] Phase auto-apply only after a dedicated validated apply script exists
-- [ ] Optional: publish/copy tree into `~/.cursor/plugins/local/adlc5` without changing seven-host install
-- [ ] Full skill rewrites for judgment boundaries
-- [ ] A2A (optional; not the kernel)

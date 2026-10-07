@@ -1,11 +1,9 @@
 # Codex CLI token usage collection
 
-**Last verified:** 2026-09-17
-**Status:** Experimental / version-sensitive. Rollout token-count parsing is verified against real output; project-level `.codex/hooks.json` loading is **not independently confirmed working** on every Codex CLI build — see [Known issue: hooks may not fire](#known-issue-hooks-may-not-fire) before relying on this.
+**Status:** Experimental / version-sensitive. Rollout token-count parsing is verified against real output; project-level `.codex/hooks.json` loading is **not independently confirmed working** on every Codex CLI build — see [Verify hook delivery](#verify-hook-delivery) before relying on this.
 
-ADLC5 records exact, provider-reported token counts and the model used for
-every completed Codex CLI turn into that feature's
-`memory/usage-ledger.jsonl`. See [docs/agent-usage.md](agent-usage.md) for how
+When hooks deliver supported usage records, ADLC5 records provider-reported
+token counts and the model in the feature's `memory/usage-ledger.jsonl`. See [docs/agent-usage.md](agent-usage.md) for how
 this fits into the cross-platform, agent-agnostic ledger.
 
 ## Why no API key or network call
@@ -20,41 +18,20 @@ tries both, in this order:
    (`codex-rs` `RolloutItemWire::TokenUsageRecord`, structs
    `TokenUsageRecord`/`TokenUsage`). Matched by `turn_id`.
 2. `{"type": "event_msg", "payload": {"type": "token_count", "info": {...}}}`
-   — the shape actually observed on a real Codex CLI 0.144.0-alpha.4 rollout.
+   — session-level fallback.
    Carries **no** `turn_id`/`response_id` at all — only a session-wide
    `info.last_token_usage` delta and `info.total_token_usage` running total.
    The collector falls back to the most recent one in the file when (1) is
    absent, since `Stop` fires right after that turn's final update.
 
-Codex ships fast-moving alpha releases (10+ minor versions in the two weeks
-between this doc's prior and current verification), so which shape a given
-install actually writes is not guaranteed to stay fixed — hence checking both.
+## Verify hook delivery
 
-## Known issue: hooks may not fire
-
-A direct smoke test against Codex CLI 0.144.0-alpha.4, using the exact
-`.codex/hooks.json` structure this repo installs, produced **no**
-`SessionStart` or `UserPromptSubmit` hook invocation at all — even with
-`--dangerously-bypass-hook-trust` set (which only bypasses the per-hook
-review-and-trust step, not project trust itself). Per the official docs,
-project-local hooks load only when the project's `.codex/` layer is
-**trusted** — a separate, earlier gate than the per-hook `/hooks` review step
-below. If your hooks aren't firing:
-
-1. Confirm the project directory itself is trusted by Codex (not just the
-   individual hook definitions) — check whatever mechanism your Codex CLI
-   version uses to establish project trust before `.codex/hooks.json` is
-   even considered.
-2. Run `/hooks` in Codex CLI and confirm `UserPromptSubmit`/`Stop`/
-   `SubagentStop` from `.codex/hooks/codex-usage.sh` actually appear in the
-   list, not just that they're trusted.
-3. As a smoke test, run `@adlc5 for some-feature` once, then check whether
-   `.adlc5/some-feature/memory/codex-usage-bindings.jsonl` exists — if it
-   doesn't, the `UserPromptSubmit` hook never fired on your build.
-
-This is a real, version-sensitive gap, not a hypothetical — treat Codex
-support as best-effort until you've confirmed hooks actually invoke on your
-installed version.
+Hook support and project trust settings depend on the installed Codex version.
+Confirm the installed usage hooks are loaded and allowed using the vendor
+documentation below. After invoking `@adlc5 for some-feature`, check for
+`.adlc5/some-feature/memory/codex-usage-bindings.jsonl`. If it is absent,
+automatic collection has not been demonstrated; use manual usage recording
+until hook delivery works. Never interpret a missing ledger as zero usage.
 
 ## Install
 
@@ -67,9 +44,8 @@ This copies `.codex/hooks.json` (wiring `UserPromptSubmit`, `Stop`, and
 `SubagentStop` to `.codex/hooks/codex-usage.sh`) and the wrapper script into
 the target project.
 
-After install, run `/hooks` inside Codex CLI once to review and trust the new
-hook — Codex hashes each non-managed command hook and skips it until you
-explicitly trust it, even though the `hooks` feature itself is on by default.
+After install, review and trust the hooks using the mechanism supported by your
+installed Codex version. Confirm delivery as described above.
 
 If the project already has its own `.codex/hooks.json`, don't run
 `--with-hooks --hooks-platform codex` blindly — it overwrites the whole file.

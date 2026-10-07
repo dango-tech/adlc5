@@ -1,28 +1,18 @@
 # Cursor token usage collection
 
-**Last verified:** 2026-09-03  
-**Status:** Cursor SDK and Cloud Agents APIs are beta; Admin/Organization API is Enterprise-only.
+**Optional integration:** API availability and permissions depend on your Cursor
+account. Check the linked vendor documentation before configuring access.
 
 ADLC5 can reconcile official Cursor token counts and billed cost into each
 feature's `memory/usage-ledger.jsonl`. Secrets remain in
 `~/.adlc5/cursor-usage.env`, outside consumer repositories.
 
-## Cursor has three incompatible API key types
+## Collector credentials
 
-Confirmed 2026-09-03 against a real Enterprise account: these are **not**
-interchangeable, regardless of the "Admin" scope label shown in the dashboard.
-
-| Key type | Where created | Works for |
-|---|---|---|
-| **User API key** (personal) | Dashboard → API (your personal keys page) | Cloud Agent API (`/v1/agents/*`), SDK, headless CLI |
-| **Team API key** | Inside a specific Team's own settings — not always exposed to every team member | Admin API `/teams/*` (`filtered-usage-events`, `members`, `spend`) |
-| **Organization API key** | Organization-level settings (Enterprise, above teams) | `/organizations/*` (org-pooled counterpart of the above, plus org membership/groups) |
-
-If you only see a "User API Keys" page in your dashboard, you have a personal
-key. It returns `401 Invalid Team API Key` / `401 Invalid Organization API Key`
-on `/teams/*` and `/organizations/*` — that is expected, not a config bug.
-Use `sync-cloud` / `sync-cloud-all` below; `sync` / `sync-all` need a real
-Team or Org key from whoever holds that role.
+The collector uses `CURSOR_API_KEY` for Cloud Agent requests and
+`CURSOR_ADMIN_API_KEY` plus `CURSOR_USAGE_EMAIL` for Admin usage requests.
+Use credentials authorized for the selected endpoint; a personal key does not
+imply administrative access. Do not place credentials in project files or prompts.
 
 ## Configure this machine
 
@@ -31,23 +21,23 @@ Team or Org key from whoever holds that role.
 chmod 600 ~/.adlc5/cursor-usage.env
 ```
 
-Fill in at minimum (personal key, works with everyone's account):
+For Cloud Agent reconciliation, fill in:
 
 ```dotenv
 CURSOR_API_KEY=crsr_...
 ```
 
-Add `CURSOR_ADMIN_API_KEY` + `CURSOR_USAGE_EMAIL` only if you have a real Team
-or Organization key (see table above) and want `sync`/`sync-all` too.
+Add `CURSOR_ADMIN_API_KEY` + `CURSOR_USAGE_EMAIL` only if your account has administrative
+usage API access and you want `sync`/`sync-all` too.
 
-Then enable hourly reconciliation on macOS:
+Optionally enable hourly reconciliation on macOS (makes network requests):
 
 ```bash
 ./scripts/install-cursor-usage.sh --enable
 ```
 
 The installer creates `~/Library/LaunchAgents/com.adlc5.cursor-usage.plist`
-running `sync-cloud-all` hourly (the path that works with a personal key).
+running `sync-cloud-all` hourly.
 Disable it with:
 
 ```bash
@@ -59,7 +49,7 @@ Disable it with:
 Install project hooks in each consumer workspace:
 
 ```bash
-/path/to/adlc5/scripts/init-workspace.sh --project /path/to/app --with-hooks --force
+/path/to/adlc5/scripts/init-workspace.sh --project /path/to/app --with-hooks
 ```
 
 The hooks associate `@adlc5 for feature-name` and subsequent
@@ -67,7 +57,7 @@ The hooks associate `@adlc5 for feature-name` and subsequent
 (IDE sessions) or Cloud Agent `id` (`bc-...`). No API key is exposed to hooks
 or agent prompts.
 
-## Cloud agents (works with a personal User API key)
+## Cloud Agent reconciliation
 
 Bind a Cloud Agent to a feature once — same command as IDE binding, just pass
 the agent's `bc-...` id as the conversation ID:
@@ -100,15 +90,14 @@ You can also record a specific run directly without binding first:
   --model-id composer-...
 ```
 
-## IDE Composer sessions (needs a Team or Org Admin key)
+## IDE session reconciliation (requires Admin API access)
 
 ```bash
 ./scripts/adlc5 usage cursor sync --workspace /path/to/app --force
 ./scripts/adlc5 usage cursor sync-all --force
 ```
 
-Cursor aggregates Admin/Organization API usage hourly. The collector therefore
-polls no more than once per 55 minutes by default, uses a 48-hour overlap for
+The collector polls no more than once per 55 minutes by default, uses a 48-hour overlap for
 delayed events, and deduplicates each event before appending it to the ledger.
 Without a Team/Org key, IDE session cost stays a self-reported estimate in the
 ledger, same as ADLC5's default behavior before this collector existed.
