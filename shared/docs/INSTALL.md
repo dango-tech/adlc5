@@ -21,12 +21,16 @@ cp config.example.yaml config.yaml
 ./scripts/verify-install.sh 
 ```
 
-Workspace initialization keeps lifecycle exclusions in the target repository's local Git
-`info/exclude` by default, so it does not add a `.gitignore` diff. Pass
-`--shared-ignore` when the team wants these exclusions tracked in `.gitignore`;
-review and commit that file with the repository's other project conventions.
-The rules exclude local state while leaving `.adlc5/governance/` available for
-intentional tracking. Ignore rules do not untrack files already in Git.
+Workspace initialization keeps lifecycle exclusions in the target repository's
+local Git `info/exclude` by default, so it does not add a `.gitignore` diff. If
+Git has not been initialized yet, it writes a `.gitignore` fallback that will
+protect files after `git init`. Pass `--shared-ignore` when the team wants
+these exclusions tracked in `.gitignore`; review and commit that file with the
+repository's other project conventions. The rules leave `.adlc5/governance/`
+available for intentional tracking. Older `.gitignore` files may already
+exclude all of `.adlc5/`; init warns when that prevents governance tracking.
+Use `--shared-ignore` to add a same-file exception, or force-add approved
+governance files. Ignore rules do not untrack files already in Git.
 
 **Consumer app repo:**
 
@@ -123,13 +127,14 @@ ADLC5 installs at three different scopes. Knowing which layer owns an artifact a
 
 ### Why worktrees used to look like duplicate installs
 
-Lifecycle artifacts are excluded by default through the local clone's Git
-`info/exclude`; `--shared-ignore` writes exclusions to `.gitignore` for teams
-that want the rule committed. Git never shares untracked files between
-worktrees — each linked worktree starts with its own lifecycle state. Re-running
-`init-workspace.sh` there previously re-copied the whole layer-2 scaffold, so a
-repo with three worktrees carried three independent copies of files that are
-identical by definition.
+Lifecycle artifacts are excluded by default through the target repository's
+local Git `info/exclude`; `--shared-ignore` writes exclusions to `.gitignore`
+for teams that want the rule committed. When initialized before Git, a `.gitignore`
+fallback keeps artifacts ignored after `git init`. Git never shares untracked
+files between worktrees — each linked worktree starts with its own lifecycle
+state. Re-running `init-workspace.sh` there previously re-copied the whole
+layer-2 scaffold, so a repo with three worktrees carried three independent
+copies of files that are identical by definition.
 
 `init-workspace.sh` is now worktree-aware. In a **linked** worktree it materializes the static layer-2 artifacts once at `<git-common-dir>/adlc5-shared/` — the same directory from every worktree, since `git rev-parse --git-common-dir` resolves to the one real `.git` — and symlinks the worktree's `.adlc5/config.yaml`, `.adlc5/governance/`, and `.adlc5/policies.yaml.example` at it. The shared store lives under the common `.git` dir rather than inside the first worktree, so it survives that worktree being removed. Existing real files are never converted, the main worktree keeps ordinary files, and `--no-shared-worktree` opts out.
 

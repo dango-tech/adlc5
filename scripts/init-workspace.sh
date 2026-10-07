@@ -238,12 +238,14 @@ append_ignore_rules() {
     local exclude
     exclude="$(git -C "$PROJECT" rev-parse --git-path info/exclude 2>/dev/null || true)"
     if [[ -z "$exclude" ]]; then
-      echo "  No Git repository; local ignore rules are not needed"
-      return 0
+      target="$gi"
+      marker="# ADLC5 lifecycle artifacts (before git init)"
+      echo "  No Git repository found; writing lifecycle exclusions to .gitignore for future git init"
+    else
+      [[ "$exclude" == /* ]] || exclude="${PROJECT}/${exclude}"
+      target="$exclude"
+      marker="# ADLC5 local lifecycle artifacts"
     fi
-    [[ "$exclude" == /* ]] || exclude="${PROJECT}/${exclude}"
-    target="$exclude"
-    marker="# ADLC5 local lifecycle artifacts"
   fi
   if [[ -f "$target" ]] && grep -qF "$marker" "$target" 2>/dev/null; then
     echo "  ADLC5 lifecycle exclusions already configured in ${target}"
@@ -254,6 +256,8 @@ append_ignore_rules() {
       printf '\n%s\n!.adlc5/\n.adlc5/*\n!.adlc5/governance/\n.discover/\n.prt/\n.qa/\n.worktrees/\n' "$marker" >>"$target"
       if [[ "$SHARED_IGNORE" -eq 1 ]]; then
         echo "  Updated .gitignore — review and commit if the team should share these exclusions"
+      elif [[ "$target" == "$gi" ]]; then
+        echo "  Updated .gitignore; keep or commit it after git init"
       else
         echo "  Updated local Git exclusions (not part of the repository diff)"
       fi
@@ -267,6 +271,11 @@ append_ignore_rules() {
       case "$path" in .adlc5/governance/*) continue ;; esac
       echo "  WARNING: ${path} is already tracked; ignore rules do not untrack it" >&2
     done <<<"$tracked"
+  fi
+
+  if [[ "$SHARED_IGNORE" -ne 1 && "$target" != "$gi" && -f "$gi" ]] \
+    && git -C "$PROJECT" check-ignore -q --no-index .adlc5/governance/production-ready.md 2>/dev/null; then
+    echo "  WARNING: .gitignore still excludes .adlc5/governance/; run init-workspace.sh --shared-ignore to add a same-file exception, or force-add approved governance files" >&2
   fi
 }
 
