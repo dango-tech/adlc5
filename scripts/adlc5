@@ -141,13 +141,19 @@ def run(cmd: list[str], *, env: dict | None = None) -> int:
     return int(proc.returncode)
 
 
-def _workspace_arg(args: list[str]) -> str | None:
+def _workspace_args(args: list[str]) -> list[str | None]:
+    """Every workspace value on the command line (argparse and the shell scripts take the last
+    one, abbreviations included), so all of them must pass the guard. [None] = default (cwd)."""
+    found: list[str | None] = []
     for i, arg in enumerate(args):
-        if arg == "--workspace" and i + 1 < len(args):
-            return args[i + 1]
-        if arg.startswith("--workspace="):
-            return arg.split("=", 1)[1]
-    return None
+        flag, eq, value = arg.partition("=")
+        if len(flag) < 3 or not flag.startswith("--") or not "--workspace".startswith(flag):
+            continue
+        if eq:
+            found.append(value)
+        elif i + 1 < len(args):
+            found.append(args[i + 1])
+    return found or [None]
 
 
 def require_exec(script: Path) -> int | None:
@@ -741,10 +747,11 @@ def main(argv: list[str]) -> int:
         return 2
 
     if command != "version" and not any(a in ("-h", "--help") for a in rest):
-        problem = check_workspace(ROOT, resolve_workspace(_workspace_arg(rest)))
-        if problem:
-            print(f"ERROR: {problem}", file=sys.stderr)
-            return 2
+        for value in _workspace_args(rest):
+            problem = check_workspace(ROOT, resolve_workspace(value))
+            if problem:
+                print(f"ERROR: {problem}", file=sys.stderr)
+                return 2
 
     dispatch = {
         "transition": cmd_completion,
