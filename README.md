@@ -35,6 +35,37 @@ Then invoke **`@adlc5 for my-feature`**. Use the framework in consumer repositor
 this repository distributes the framework and its portable `dogfood/` example.
 See [installation](shared/docs/INSTALL.md) for other hosts and upgrades.
 
+## Start with an existing repository (brownfield)
+
+Run `init-workspace.sh --project .` in your existing application repository before
+the first feature. It preserves existing constitution files, creates missing
+drafts under `.agents/` and an ADR area under `docs/adr/`, and builds a local,
+gitignored `.agent-cache/`. Review the architecture, boundaries, and commands in
+`.agents/`, then validate them with:
+
+```bash
+/path/to/adlc5/scripts/adlc5 repo-spec validate --workspace .
+/path/to/adlc5/scripts/adlc5 repo-index check --workspace .
+```
+
+The codebase is **indexed into JSON**, rather than copied into JSON: `manifest.json`,
+`repo-index.json`, `module-map.json`, `symbols.json`, `dependency-graph.json`, and
+`test-map.json` record the snapshot, file/module structure, supported symbols and
+imports, and test locations/matches. The scan covers eligible source files and
+workspace manifests across the repository, excluding generated/dependency folders,
+symlinks, and recognized secret files. Extraction varies by language; this is
+structural context, not a complete semantic model. Agents query relevant records,
+then read source to resolve remaining questions.
+
+Feature initialization refreshes the index; after other edits, use
+`adlc5 repo-index refresh --workspace .` when the check reports it stale.
+Commit reviewed `.agents/` files and ADRs; leave `.agent-cache/` ignored.
+For optional team-shared codebase knowledge, add `--with-project-wiki` and review
+ingest drafts before promotion. Feature initialization also bootstraps the wiki
+when the brownfield repository profile warrants it. See
+[repository context](core/guides/repository-context.md) and the
+[project wiki workflow](shared/docs/project-wiki.md).
+
 ## Four stages, proportionate depth
 
 | Stage | Useful output |
