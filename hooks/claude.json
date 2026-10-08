@@ -1,0 +1,54 @@
+{
+  "description": "ADLC5 plugin hooks: session runtime context, engagement gate (warn by default), real-token usage ledger.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/plugin-session-start.py"],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/.claude/hooks/claude-usage.sh",
+            "args": ["user-prompt-submit"],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/.claude/hooks/engagement-gate.sh",
+            "args": ["pre-tool-use"],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/.claude/hooks/claude-usage.sh",
+            "args": ["stop"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

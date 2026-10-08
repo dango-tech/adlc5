@@ -7,6 +7,14 @@ Run (stdio):
 Smoke (no MCP client):
   python3 ./scripts/adlc5-mcp.py --smoke
 
+Transport: MCP stdio — newline-delimited JSON-RPC 2.0 on stdin/stdout; stdout
+carries protocol messages only (diagnostics go to stderr).
+
+Consumer workspace: every tool that touches lifecycle state resolves `workspace`
+(argument → $ADLC5_WORKSPACE → $CLAUDE_PROJECT_DIR → server cwd) to an absolute
+directory, runs the kernel from there, and refuses a workspace inside an
+installed package. Relative file arguments resolve against that workspace.
+
 Cursor / Claude MCP config example:
   {
     "mcpServers": {
@@ -23,14 +31,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
+
 ADLC5 = ROOT / "scripts" / "adlc5"
-PROTOCOL_VERSION = "2024-11-05"
+SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+PROTOCOL_VERSION = SUPPORTED_PROTOCOLS[0]
+FEATURE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+PATH_ARGS = ("file", "file_path")
 SERVER_NAME = "adlc5-kernel"
 SERVER_VERSION_FILE = ROOT / "core" / "VERSION"
 
@@ -78,6 +93,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "properties": {
                 "file_path": {"type": "string"},
                 "step_id": {"type": "string"},
+                "workspace": {"type": "string", "description": "Resolves a relative file_path"},
             },
             "required": ["file_path"],
             "additionalProperties": False,
@@ -142,7 +158,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "properties": {
                 "feature": {"type": "string"},
                 "workspace": {"type": "string"},
-                "patch": {"type": "string", "description": "JSON object string to merge"},
+                "patch": {"type": ["string", "object"], "description": "JSON object (or JSON string) to merge"},
                 "file": {"type": "string", "description": "Path to JSON file"},
                 "replace": {"type": "boolean"},
                 "dry_run": {"type": "boolean"},
@@ -285,12 +301,20 @@ def read_version() -> str:
     return "0.0.0"
 
 
-def invoke_adlc5(argv: list[str]) -> dict[str, Any]:
+def default_workspace() -> Path:
+    for var in ("ADLC5_WORKSPACE", "CLAUDE_PROJECT_DIR"):
+        if os.environ.get(var):
+            return resolve_workspace(os.environ[var])
+    return Path.cwd().resolve()
+
+
+def invoke_adlc5(argv: list[str], cwd: Path | None = None) -> dict[str, Any]:
     if not ADLC5.is_file():
-        return {"ok": False, "exit_code": 2, "stdout": "", "stderr": f"missing façade: {ADLC5}"}
+        return {"ok": False, "exit_code": 2, "stdout": "", "stderr": f"missing façade: {ADLC5}", "argv": ["adlc5", *argv]}
     proc = subprocess.run(
         [sys.executable, str(ADLC5), *argv],
-        cwd=str(ROOT),
+        cwd=str(cwd or default_workspace()),
+        stdin=subprocess.DEVNULL,  # never let a child consume the protocol stream
         capture_output=True,
         text=True,
         env=os.environ.copy(),
@@ -315,150 +339,158 @@ def list_tools() -> list[dict[str, Any]]:
     ]
 
 
+def _type_ok(value: Any, expected: Any) -> bool:
+    kinds = expected if isinstance(expected, list) else [expected]
+    checks = {
+        "string": lambda v: isinstance(v, str),
+        "boolean": lambda v: isinstance(v, bool),
+        "object": lambda v: isinstance(v, dict),
+    }
+    return any(checks.get(k, lambda _v: True)(value) for k in kinds)
+
+
+def validate_arguments(schema: dict[str, Any], args: dict[str, Any]) -> list[str]:
+    errors = [f"missing required argument: {k}" for k in schema.get("required", []) if k not in args]
+    props = schema.get("properties", {})
+    for key, value in args.items():
+        spec = props.get(key)
+        if spec is None:
+            if schema.get("additionalProperties") is False:
+                errors.append(f"unknown argument: {key}")
+            continue
+        if "type" in spec and not _type_ok(value, spec["type"]):
+            errors.append(f"{key} must be of type {spec['type']}")
+        elif "enum" in spec and value not in spec["enum"]:
+            errors.append(f"{key} must be one of {spec['enum']}")
+        elif value == "" and key in schema.get("required", []):
+            errors.append(f"{key} must not be empty")
+    if isinstance(args.get("feature"), str) and not FEATURE_RE.fullmatch(args["feature"]):
+        errors.append("feature must be a kebab-case label (letters, digits, '.', '_', '-')")
+    return errors
+
+
+def _tool_error(text: str) -> dict[str, Any]:
+    return {"isError": True, "content": [{"type": "text", "text": text}]}
+
+
 def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
-    if name not in TOOL_SPECS:
-        return {
-            "isError": True,
-            "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
-        }
-    args = arguments or {}
+    spec = TOOL_SPECS[name]
+    args = dict(arguments or {})
+    errors = validate_arguments(spec["inputSchema"], args)
+    if errors:
+        return _tool_error("Invalid arguments: " + "; ".join(errors))
+
+    workspace = resolve_workspace(args.get("workspace") or default_workspace())
+    if "workspace" in spec["inputSchema"]["properties"]:
+        problem = check_workspace(ROOT, workspace)
+        if problem:
+            return _tool_error(f"Invalid workspace: {problem}")
+        args["workspace"] = str(workspace)
+        for key in PATH_ARGS:
+            if args.get(key) and not Path(args[key]).is_absolute():
+                args[key] = str(workspace / args[key])
     try:
-        argv = TOOL_SPECS[name]["build"](args)
+        argv = spec["build"](args)
     except (KeyError, TypeError, ValueError) as exc:
-        return {
-            "isError": True,
-            "content": [{"type": "text", "text": f"Invalid arguments: {exc}"}],
-        }
-    result = invoke_adlc5(argv)
+        return _tool_error(f"Invalid arguments: {exc}")
+    result = invoke_adlc5(argv, cwd=workspace)
     payload = {
         "exit_code": result["exit_code"],
         "argv": result["argv"],
         "stdout": result["stdout"],
         "stderr": result["stderr"],
     }
-    text = json.dumps(payload, indent=2)
     return {
         "isError": not result["ok"],
-        "content": [{"type": "text", "text": text}],
+        "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
     }
 
 
-# --- Minimal JSON-RPC MCP (Content-Length framing) ---
+# --- Minimal JSON-RPC MCP over stdio (newline-delimited messages) ---
 
 
-def _read_message() -> dict[str, Any] | None:
-    headers: dict[str, str] = {}
-    while True:
-        line = sys.stdin.buffer.readline()
-        if not line:
-            return None
-        if line in (b"\r\n", b"\n"):
-            break
-        decoded = line.decode("utf-8").strip()
-        if ":" in decoded:
-            k, v = decoded.split(":", 1)
-            headers[k.strip().lower()] = v.strip()
-    length = int(headers.get("content-length", "0"))
-    if length <= 0:
+def _error(req_id: Any, code: int, message: str) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+
+def handle_message(msg: Any) -> dict[str, Any] | None:
+    """Return the JSON-RPC response for one message, or None (notification/ignored)."""
+    if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+        return _error(msg.get("id") if isinstance(msg, dict) else None, -32600, "Invalid Request")
+    method, req_id = msg["method"], msg.get("id")
+    params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+
+    if "id" not in msg:  # notification (notifications/initialized, cancelled, ...)
         return None
-    body = sys.stdin.buffer.read(length)
-    if not body:
-        return None
-    return json.loads(body.decode("utf-8"))
-
-
-def _write_message(msg: dict[str, Any]) -> None:
-    body = json.dumps(msg, separators=(",", ":")).encode("utf-8")
-    sys.stdout.buffer.write(f"Content-Length: {len(body)}\r\n\r\n".encode("ascii"))
-    sys.stdout.buffer.write(body)
-    sys.stdout.buffer.flush()
-
-
-def _respond(req_id: Any, result: Any) -> None:
-    _write_message({"jsonrpc": "2.0", "id": req_id, "result": result})
-
-
-def _respond_error(req_id: Any, code: int, message: str) -> None:
-    _write_message(
-        {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
-    )
-
-
-def handle_request(msg: dict[str, Any]) -> None:
-    method = msg.get("method")
-    req_id = msg.get("id")
-    params = msg.get("params") or {}
-
-    # Notifications have no id
-    if req_id is None:
-        return
 
     if method == "initialize":
-        _respond(
-            req_id,
-            {
-                "protocolVersion": PROTOCOL_VERSION,
+        requested = params.get("protocolVersion")
+        version = requested if requested in SUPPORTED_PROTOCOLS else PROTOCOL_VERSION
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "protocolVersion": version,
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": SERVER_NAME, "version": read_version()},
             },
-        )
-        return
-
+        }
     if method == "ping":
-        _respond(req_id, {})
-        return
-
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
     if method == "tools/list":
-        _respond(req_id, {"tools": list_tools()})
-        return
-
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": list_tools()}}
     if method == "tools/call":
         name = params.get("name")
-        arguments = params.get("arguments") or {}
-        if not isinstance(name, str):
-            _respond_error(req_id, -32602, "tools/call requires name")
-            return
-        _respond(req_id, call_tool(name, arguments if isinstance(arguments, dict) else {}))
-        return
+        arguments = params.get("arguments", {})
+        if not isinstance(name, str) or name not in TOOL_SPECS:
+            return _error(req_id, -32602, f"Unknown tool: {name}")
+        if not isinstance(arguments, dict):
+            return _error(req_id, -32602, "tools/call arguments must be an object")
+        try:
+            return {"jsonrpc": "2.0", "id": req_id, "result": call_tool(name, arguments)}
+        except Exception as exc:  # keep the server alive on any tool failure
+            print(f"adlc5-mcp: tool {name} failed: {exc!r}", file=sys.stderr)
+            return {"jsonrpc": "2.0", "id": req_id, "result": _tool_error(f"Internal error: {exc}")}
+    return _error(req_id, -32601, f"Method not found: {method}")
 
-    _respond_error(req_id, -32601, f"Method not found: {method}")
+
+def _emit(msg: Any) -> None:
+    sys.stdout.write(json.dumps(msg, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
 
 
 def serve_stdio() -> int:
-    while True:
-        try:
-            msg = _read_message()
-        except (json.JSONDecodeError, ValueError) as exc:
-            _write_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": -32700, "message": f"Parse error: {exc}"},
-                }
-            )
+    for raw in sys.stdin.buffer:
+        line = raw.strip()
+        if not line:
             continue
-        if msg is None:
-            return 0
-        handle_request(msg)
+        try:
+            msg = json.loads(line.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            _emit(_error(None, -32700, f"Parse error: {exc}"))
+            continue
+        if isinstance(msg, list):  # JSON-RPC batch
+            replies = [r for r in (handle_message(m) for m in msg) if r is not None]
+            if replies:
+                _emit(replies)
+        else:
+            reply = handle_message(msg)
+            if reply is not None:
+                _emit(reply)
+    return 0
 
 
 def smoke() -> int:
-    tools = list_tools()
-    names = {t["name"] for t in tools}
-    expected = set(TOOL_SPECS)
-    if names != expected:
-        print(f"FAIL: tool set mismatch missing={expected - names} extra={names - expected}", file=sys.stderr)
+    names = {t["name"] for t in list_tools()}
+    if names != set(TOOL_SPECS):
+        print(f"FAIL: tool set mismatch {names ^ set(TOOL_SPECS)}", file=sys.stderr)
         return 1
-    ver = invoke_adlc5(["version"])
-    if ver["exit_code"] != 0 or "adlc5 " not in ver["stdout"]:
-        print(f"FAIL: version invoke: {ver}", file=sys.stderr)
+    init = handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": PROTOCOL_VERSION}})
+    call = handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "adlc5_version", "arguments": {}}})
+    if not init or "result" not in init or not call or call["result"].get("isError"):
+        print(f"FAIL: protocol smoke: {init} {call}", file=sys.stderr)
         return 1
-    # JSON-RPC tools/list roundtrip via framing helpers (in-process)
-    listed = call_tool("adlc5_version", {})
-    if listed.get("isError"):
-        print(f"FAIL: adlc5_version tool: {listed}", file=sys.stderr)
-        return 1
-    print(json.dumps({"status": "ok", "tools": sorted(names), "version": ver["stdout"].strip()}))
+    print(json.dumps({"status": "ok", "tools": sorted(names), "version": f"adlc5 {read_version()}"}))
     return 0
 
 

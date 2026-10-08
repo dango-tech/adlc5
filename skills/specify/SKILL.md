@@ -1,7 +1,7 @@
 ---
 name: adlc5-specify
 description: ADLC5 Stage 1 Specify — git isolation, optional @discover/@prt, NFR capture, spec-handoff. Invoke via @adlc5-specify.
-version: 4.1.0
+version: 5.0.0
 ---
 
 # ADLC5 — Specify

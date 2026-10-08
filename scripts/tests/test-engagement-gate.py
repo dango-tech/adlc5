@@ -375,11 +375,24 @@ class EngagementGateTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            payload = json.loads(stdout.getvalue())
-            self.assertEqual(
-                payload["hookSpecificOutput"]["permissionDecision"], "allow"
-            )
+            # Fail open: no decision, so the host's own permission flow is untouched.
+            self.assertEqual(json.loads(stdout.getvalue()), {})
             self.assertIn("synthetic failure", stderr.getvalue())
+
+    def test_claude_emit_warn_adds_context_without_granting_permission(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self.module.emit("claude", self.module.MODE_WARN, "engage ADLC5")
+        specific = json.loads(buffer.getvalue())["hookSpecificOutput"]
+        self.assertEqual(specific["additionalContext"], "engage ADLC5")
+        self.assertNotIn("permissionDecision", specific)
+
+    def test_claude_emit_enforce_denies(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self.module.emit("claude", self.module.MODE_ENFORCE, "engage ADLC5")
+        specific = json.loads(buffer.getvalue())["hookSpecificOutput"]
+        self.assertEqual(specific["permissionDecision"], "deny")
 
     def test_check_branch_fails_open_on_non_git_directory(self):
         with tempfile.TemporaryDirectory() as temp:

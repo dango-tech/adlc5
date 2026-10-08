@@ -404,13 +404,15 @@ def emit(payload_format: str, mode: str, message: str | None) -> None:
         return
 
     if payload_format == "claude":
-        specific: dict[str, Any] = {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny" if (message and mode == MODE_ENFORCE) else "allow",
-        }
-        if message:
+        # Warn mode adds context only: an explicit "allow" would skip the user's own
+        # permission prompt for the edit. Only enforce mode returns a decision (deny).
+        if not message:
+            print("{}")
+            return
+        specific: dict[str, Any] = {"hookEventName": "PreToolUse", "additionalContext": message}
+        if mode == MODE_ENFORCE:
+            specific["permissionDecision"] = "deny"
             specific["permissionDecisionReason"] = message
-            specific["additionalContext"] = message
         print(json.dumps({"hookSpecificOutput": specific}))
         return
 

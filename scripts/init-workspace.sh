@@ -29,6 +29,8 @@ SHARED_IGNORE=0
 DRY_RUN=0
 FORCE=0
 SHARE_STATIC=1
+WITH_COUNCIL_AGENTS=1
+REFRESH_RUNTIME=0
 
 usage() {
   cat <<'EOF'
@@ -68,6 +70,11 @@ ADLC5 installs in three layers — this script is layer 2:
                      (default: target repo's local Git exclude; no tracked diff)
   --with-pr-template  Copy ADLC5's starter PR body template to .github/PULL_REQUEST_TEMPLATE.md
                       (skipped if the project already has one at any conventional path)
+  --no-council-agents  Skip the Cursor discover-council agents (.cursor/agents/); use for hosts
+                    that are not Cursor (default: installed, for classic compatibility)
+  --refresh-runtime Repoint a stale ADLC5-owned adlc5_root (workspace.json, config.yaml) at this
+                    root after a package cache/version move. Touches nothing else; keeps a valid
+                    source-clone binding. Safe to repeat (no --force needed)
   --force           Overwrite .adlc5/workspace.json and refresh skill links
   --no-shared-worktree  Scaffold private copies even in a linked worktree
                     (opt out of layer-2 sharing; rarely needed)
@@ -92,7 +99,7 @@ Creates:
   docs/adr/ (tracked architecture-decision record area)
   .agent-cache/ (generated, gitignored repository intelligence)
   .agents/skills/ → symlinks to adlc5 skills (unless --no-skills)
-  .cursor/agents/discover-council-* → council model routing for @discover
+  .cursor/agents/discover-council-* → council model routing for @discover (unless --no-council-agents)
   Local Git exclusions for lifecycle artifacts (unless --shared-ignore)
   .github/PULL_REQUEST_TEMPLATE.md (only with --with-pr-template, and only if missing)
 EOF
@@ -109,6 +116,8 @@ while [[ $# -gt 0 ]]; do
     --with-project-wiki) WITH_PROJECT_WIKI=1; shift ;;
     --with-pr-template) WITH_PR_TEMPLATE=1; shift ;;
     --shared-ignore) SHARED_IGNORE=1; shift ;;
+    --no-council-agents) WITH_COUNCIL_AGENTS=0; shift ;;
+    --refresh-runtime) REFRESH_RUNTIME=1; shift ;;
     --force) FORCE=1; shift ;;
     --no-shared-worktree) SHARE_STATIC=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -138,6 +147,11 @@ run() {
 
 if [[ -z "$PROJECT" ]]; then
   PROJECT="$(pwd)"
+fi
+# Installed packages are immutable: refuse before creating anything (physical-path compare).
+if adlc5_inside_package "$ADLC5_ROOT" "$PROJECT"; then
+  echo "ERROR: --project ${PROJECT} is inside the installed ADLC5 package ${ADLC5_ROOT}; pass your repository" >&2
+  exit 1
 fi
 if [[ "$DRY_RUN" -eq 1 ]]; then
   mkdir -p "$PROJECT" 2>/dev/null || true
@@ -513,7 +527,7 @@ fi
 
 # Project-local discover/ideate council agents (Cursor prefers .cursor/agents/ over ~/.cursor/agents/)
 COUNCIL_INSTALL="${ADLC5_ROOT}/scripts/install-council-agents.sh"
-if [[ -x "$COUNCIL_INSTALL" ]]; then
+if [[ "$WITH_COUNCIL_AGENTS" -eq 1 && -x "$COUNCIL_INSTALL" ]]; then
   COUNCIL_CONFIG="$CONFIG_YAML"
   [[ -f "$COUNCIL_CONFIG" ]] || COUNCIL_CONFIG="${ADLC5_ROOT}/config.example.yaml"
   echo
@@ -523,6 +537,14 @@ if [[ -x "$COUNCIL_INSTALL" ]]; then
   else
     "$COUNCIL_INSTALL" --target "${PROJECT}/.cursor/agents" --config "$COUNCIL_CONFIG"
   fi
+fi
+
+if [[ "$REFRESH_RUNTIME" -eq 1 ]]; then
+  echo
+  echo "Refreshing stale ADLC5 runtime binding"
+  rebind_args=(--workspace "$PROJECT" --adlc5-root "$ADLC5_ROOT")
+  [[ "$DRY_RUN" -eq 1 ]] && rebind_args+=(--dry-run)
+  python3 "${ADLC5_ROOT}/scripts/rebind-runtime.py" "${rebind_args[@]}"
 fi
 
 echo

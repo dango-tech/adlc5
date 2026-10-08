@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Kernel façade on the Bash tool PATH while the ADLC5 plugin is enabled.
+# Resolves the package root from this file's own (symlink-resolved) location, so it
+# never depends on exported plugin variables or on a stale workspace binding.
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
+export ADLC5_ROOT="$ROOT"
+exec python3 "$ROOT/scripts/adlc5" "$@"

@@ -16,6 +16,8 @@ Invoke reference for Specify → Plan → Tasks → Implement and auxiliary skil
 | `@adlc5-tasks` | Tasks | [skills/tasks](../../skills/tasks/SKILL.md) |
 | `@adlc5-implement` | Implement | [skills/implement](../../skills/implement/SKILL.md) |
 
+**Plugin setup:** `@adlc5-setup` — [skills/adlc5-setup](../../skills/adlc5-setup/SKILL.md) — host-plugin consumer setup (preflight, missing scaffolding, duplicate classic-install detection); repeat-safe.
+
 **Fifth pillar (cross-cutting):** `@adlc5-soul` — [skills/adlc5-soul](../../skills/adlc5-soul/SKILL.md) — evidence-driven five-guard reasoning for graph-routed work: preserve acceptance, choose the minimum sufficient profile, honor dependencies, require independent evidence, then optimize cost. Rule: [adlc5-soul.md](../rules/portable/adlc5-soul.md).
 
 State: `.adlc5/{feature}/state.json` (schema 3.0) · Memory: `.adlc5/{feature}/memory/INDEX.md` — [working-memory.md](../../core/guides/working-memory.md)

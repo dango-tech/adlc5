@@ -55,3 +55,7 @@ python3 scripts/claude-usage.py bind \
 
 - Claude Code hooks reference, `Stop`/`UserPromptSubmit` payload fields:
   <https://docs.claude.com/en/docs/claude-code/hooks>
+
+## Plugin install
+
+When ADLC5 runs as the Claude Code plugin, `hooks/claude.json` wires the same two wrappers (`claude-usage.sh`, `engagement-gate.sh`) with the plugin's own runtime (`CLAUDE_PLUGIN_ROOT`), so no `--with-hooks` copy is needed and a moved or updated package cache never leaves a stale path behind. Do not enable both the plugin hooks and a project `.claude/settings.json` copy: usage scanning and engagement warnings would run twice (`adlc5-setup` reports it). See [INSTALL.md](../shared/docs/INSTALL.md#claude-code-plugin-local-package).

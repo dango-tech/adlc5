@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Run any packaged ADLC5 script by its path under scripts/, from the caller's cwd:
+#   adlc5-run plugin-setup.sh --check      adlc5-run wiki/ingest-repo.sh --workspace .
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
+export ADLC5_ROOT="$ROOT"
+rel="${1:?usage: adlc5-run <script under scripts/> [args...]}"; shift
+case "$rel" in /*|*..*) echo "adlc5-run: script must be a relative path under scripts/" >&2; exit 2 ;; esac
+script="$ROOT/scripts/$rel"
+[ -f "$script" ] || { echo "adlc5-run: no such script: scripts/$rel" >&2; exit 2; }
+case "$script" in
+  *.py) exec python3 "$script" "$@" ;;
+  *) exec bash "$script" "$@" ;;
+esac
