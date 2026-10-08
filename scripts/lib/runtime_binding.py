@@ -5,7 +5,8 @@ import json
 import re
 from pathlib import Path
 
-YAML_LINE = re.compile(r"^(adlc5_root:\s*)(.*?)(\s*(?:#.*)?)$")
+# key, value (double-quoted, single-quoted or plain up to a ` #` comment), trailing comment
+YAML_LINE = re.compile(r"""^(adlc5_root:\s*)("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^#]*?)(\s*(?:#.*)?)$""")
 
 
 def is_adlc5_root(path: str) -> bool:
@@ -27,7 +28,23 @@ def is_stale(recorded: str, current: Path) -> bool:
 
 
 def unquote(value: str) -> str:
-    return value.strip().strip("'\"")
+    value = value.strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value[1:-1]
+    if len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+        return value[1:-1].replace("''", "'")
+    return value
+
+
+def yaml_scalar(path: str) -> str:
+    """Plain when safe; quoted when a plain scalar would be cut at ` #` or misparsed."""
+    if " #" not in path and not path.startswith(("#", "'", '"', "-", "?", "&", "*", "!", "|", ">", "%", "@", "`", "[", "{")) \
+            and ": " not in path and not path.endswith(":"):
+        return path
+    return "'" + path.replace("'", "''") + "'"  # single quotes: only ' needs escaping, never \\u or \\"
 
 
 def rebind_json(path: Path, root: Path, dry_run: bool) -> dict:
@@ -60,7 +77,7 @@ def rebind_yaml(path: Path, root: Path, dry_run: bool) -> dict:
         if not is_stale(old, root):
             return {"file": str(target), "status": "kept", "adlc5_root": old}
         ending = line[len(line.rstrip("\r\n")):]
-        lines[i] = f"{match.group(1)}{root}{match.group(3)}{ending}"
+        lines[i] = f"{match.group(1)}{yaml_scalar(str(root))}{match.group(3)}{ending}"
         if not dry_run:
             target.write_text("".join(lines), encoding="utf-8")
         return {"file": str(target), "status": "would-rebind" if dry_run else "rebound", "from": old, "to": str(root)}
