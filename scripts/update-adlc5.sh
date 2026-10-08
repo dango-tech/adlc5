@@ -59,7 +59,7 @@ get_yaml_value() {
   raw="$(grep -E "^${key}:" "$file" | head -1 | sed -E "s/^${key}:[[:space:]]*//")"
   case "$raw" in
     \"*) raw="${raw#\"}"; printf '%s\n' "${raw%%\"*}" ;;            # double-quoted: keep any ` #` inside
-    \'*) raw="${raw#\'}"; printf '%s\n' "${raw%%\'*}" ;;            # single-quoted
+    \'*) printf '%s\n' "$raw" | sed -E "s/^'(([^']|'')*)'.*$/\\1/; s/''/'/g" ;;  # single-quoted ('' is a literal ')
     *) printf '%s\n' "$raw" | sed -E 's/[[:space:]]+#.*$//' ;;      # plain: a ` #` starts a comment
   esac
 }

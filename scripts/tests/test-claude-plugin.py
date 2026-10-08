@@ -170,6 +170,7 @@ class PluginTest(unittest.TestCase):
             ["--workspace", pkg, "--workspace", str(safe)],
             [f"--workspace={safe}", f"--workspace={pkg}"],
             ["--wor", pkg],                                   # argparse abbreviation
+            ["--w", pkg],                                     # shortest unique abbreviation
         ):
             r = run([adlc5, "pilot", "--feature", "x", *flags], cwd=safe)
             self.assertEqual(r.returncode, 2, flags)
@@ -180,7 +181,7 @@ class PluginTest(unittest.TestCase):
 
     def test_rebind_quotes_runtime_paths_that_contain_a_comment_delimiter(self):
         repo = self.consumer()
-        odd = self.tmp / "ADLC5 #1" / "adlc5"
+        odd = self.tmp / "O'Brien #版本" / "adlc5"  # apostrophe + comment delimiter + non-ASCII
         shutil.copytree(self.pkg, odd)
         cfg = repo / ".adlc5/config.yaml"
         cfg.parent.mkdir()

@@ -44,7 +44,7 @@ def yaml_scalar(path: str) -> str:
     if " #" not in path and not path.startswith(("#", "'", '"', "-", "?", "&", "*", "!", "|", ">", "%", "@", "`", "[", "{")) \
             and ": " not in path and not path.endswith(":"):
         return path
-    return "'" + path.replace("'", "''") + "'" if "'" not in path else json.dumps(path)
+    return "'" + path.replace("'", "''") + "'"  # single quotes: only ' needs escaping, never \\u or \\"
 
 
 def rebind_json(path: Path, root: Path, dry_run: bool) -> dict:

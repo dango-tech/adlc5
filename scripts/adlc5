@@ -147,7 +147,7 @@ def _workspace_args(args: list[str]) -> list[str | None]:
     found: list[str | None] = []
     for i, arg in enumerate(args):
         flag, eq, value = arg.partition("=")
-        if len(flag) < 4 or not flag.startswith("--") or not "--workspace".startswith(flag):
+        if len(flag) < 3 or not flag.startswith("--") or not "--workspace".startswith(flag):
             continue
         if eq:
             found.append(value)
