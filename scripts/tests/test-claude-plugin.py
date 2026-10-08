@@ -160,6 +160,44 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(tree_digest(self.pkg), before, "a refused call still wrote into the package")
         self.assertFalse((self.pkg / "sub").exists())
 
+    def test_duplicate_or_abbreviated_workspace_flags_cannot_bypass_the_guard(self):
+        safe = self.consumer()
+        before = tree_digest(self.pkg)
+        adlc5 = str(self.pkg / "bin/adlc5")
+        pkg = str(self.pkg)
+        for flags in (
+            ["--workspace", str(safe), "--workspace", pkg],   # guard saw the first, argparse/shell use the last
+            ["--workspace", pkg, "--workspace", str(safe)],
+            [f"--workspace={safe}", f"--workspace={pkg}"],
+            ["--wor", pkg],                                   # argparse abbreviation
+        ):
+            r = run([adlc5, "pilot", "--feature", "x", *flags], cwd=safe)
+            self.assertEqual(r.returncode, 2, flags)
+            self.assertIn("inside the installed ADLC5 package", r.stderr, flags)
+        ok = run([adlc5, "pilot", "--feature", "x", "--workspace", str(safe)], cwd=safe)
+        self.assertNotIn("inside the installed ADLC5 package", ok.stderr)  # a single safe workspace still reaches the command
+        self.assertEqual(tree_digest(self.pkg), before, "a refused call still wrote into the package")
+
+    def test_rebind_quotes_runtime_paths_that_contain_a_comment_delimiter(self):
+        repo = self.consumer()
+        odd = self.tmp / "ADLC5 #1" / "adlc5"
+        shutil.copytree(self.pkg, odd)
+        cfg = repo / ".adlc5/config.yaml"
+        cfg.parent.mkdir()
+        cfg.write_text("adlc5_root: /gone/old/path   # keep this note\nmy_custom_key: keep-me\n")
+        r = run([sys.executable, str(odd / "scripts/rebind-runtime.py"), "--workspace", str(repo)], check=True)
+        self.assertIn("rebound", r.stdout)
+        text = cfg.read_text()
+        self.assertIn("# keep this note", text)
+        self.assertIn("my_custom_key: keep-me", text)
+        # Both readers recover the exact path: the Python rebinder (second pass is a no-op) and update-adlc5.sh.
+        again = json.loads(run([sys.executable, str(odd / "scripts/rebind-runtime.py"), "--workspace", str(repo)], check=True).stdout)
+        self.assertEqual([x["status"] for x in again["results"] if x["file"].endswith("config.yaml")], ["kept"])
+        script = (SRC / "scripts/update-adlc5.sh").read_text()
+        func = script[script.index("get_yaml_value() {"):script.index("\n}\n", script.index("get_yaml_value() {")) + 3]
+        got = run([BASH, "-c", f'{func}\nget_yaml_value adlc5_root "{cfg}"'])
+        self.assertEqual(got.stdout.strip(), str(odd))
+
     def test_adlc5_run_launcher(self):
         run_sh = str(self.pkg / "bin/adlc5-run")
         self.assertEqual(run([run_sh, "resolve-model.sh", "--help"]).returncode, 0)
