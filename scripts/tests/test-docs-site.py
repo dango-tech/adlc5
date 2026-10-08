@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -107,6 +108,14 @@ class DocsSiteTests(unittest.TestCase):
         for page in PAGES:
             self.assertNotIn("dango85", (self.site / page).read_text())
         self.assertTrue((self.site / "assets/brand/icon.svg").is_file())
+
+    def test_workflow_actions_are_sha_pinned(self):
+        workflow = (ROOT / ".github/workflows/docs.yml").read_text()
+        actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow, re.MULTILINE)
+        self.assertEqual(len(actions), 5)
+        for action in actions:
+            with self.subTest(action=action):
+                self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
 
 if __name__ == "__main__":
