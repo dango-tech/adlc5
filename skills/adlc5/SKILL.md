@@ -88,7 +88,7 @@ Cost-aware profiles in `.adlc5/{feature}/policies.yaml`: `tiny`, `standard`,
 
 **Deprecated:** `@adlc5-pilot` — use `@adlc5` with autonomous mode.
 
-## Soul check (fifth pillar — before every gate)
+## Soul check (supports Intelligence — before every gate)
 
 Before running any gate below, emit the 5-line graph-aware check from [@adlc5-soul](../adlc5-soul/SKILL.md): preserve acceptance, use code/graph evidence, choose the minimum sufficient profile, honor dependency/file ownership and trust boundaries, then require independent quality evidence before cost optimization. Verdict: `proceed | refocus | defer`. Advisory only: it never replaces the gate. On `refocus`/`defer` in HITL, AskQuestion; autonomous, record in `memory/summaries/{stage}.md` and act per verdict.
 

@@ -91,7 +91,7 @@ soul:
   - id: adlc5-soul
     invoke: "@adlc5-soul"
     path: skills/adlc5-soul/SKILL.md
-    role: Fifth pillar — graph/evidence-aware five-guard reasoning discipline, cross-cutting (all stages)
+    role: Supporting reasoning discipline — graph/evidence-aware five guards, cross-cutting (all stages)
     rule: shared/rules/portable/adlc5-soul.md
     model_tier: reasoning
 

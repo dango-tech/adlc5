@@ -43,7 +43,21 @@ flowchart LR
 | Tasks | `@adlc5-tasks` | `tasks-complete` |
 | Implement | `@adlc5-implement` | `pr-ready` |
 
-**Fifth pillar — SOUL** (cross-cutting, not a stage): `@adlc5-soul` keeps the five guards but applies them to the 4.0 graph—preserve consumer-owned acceptance, choose the minimum sufficient profile, respect dependency/file ownership, require independent verification, and optimize cost only after the quality floor. Advisory only; deterministic gates remain the enforcement. Rule: [adlc5-soul.md](../shared/rules/portable/adlc5-soul.md) · Skill: [skills/adlc5-soul](../skills/adlc5-soul/SKILL.md)
+## Intelligence — the fifth pillar
+
+**Specify · Plan · Tasks · Implement · Intelligence.** Four pillars structure
+delivery. Intelligence connects them to your codebase through generated repository
+maps, reviewed guidance, focused story context packs, and current evidence.
+Models supply reasoning; ADLC5 supplies structured knowledge, context, and
+checks. See [repository context](../core/guides/repository-context.md) for the
+mechanisms and limits. Better code or lower token costs require comparative measurements.
+
+**SOUL — supporting reasoning discipline:** `@adlc5-soul` preserves acceptance,
+uses existing knowledge, defers unforced decisions, respects dependency/file
+ownership, and requires failure checks before cost optimization. Advisory only;
+deterministic gates remain the enforcement.
+Rule: [adlc5-soul.md](../shared/rules/portable/adlc5-soul.md) ·
+Skill: [skills/adlc5-soul](../skills/adlc5-soul/SKILL.md)
 
 State: `.adlc5/{feature}/state.json` (`schema_version: "3.0"`) — [state-schema.json](../core/state-schema.json) · Model: [sdd-model.md](../core/sdd-model.md)
 

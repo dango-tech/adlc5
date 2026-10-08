@@ -1,5 +1,10 @@
 # Repository context
 
+**Intelligence is ADLC5's fifth pillar.** It connects Specify, Plan, Tasks, and
+Implement through repository knowledge, reviewed guidance, focused context packs,
+and evidence-based progression. Models supply reasoning; ADLC5 supplies context
+and deterministic checks. SOUL is the supporting reasoning discipline.
+
 ADLC5 keeps repository-wide context separate from feature SDD.
 
 | Layer | Location | Ownership | Loading rule |
@@ -112,3 +117,18 @@ it is missing, malformed, tampered with, or stale; refresh it before planning.
 
 The cache is local structural intelligence, not a privacy filter. Any context sent
 to a remote model still needs an allow-list, secret scan, and data-minimization step.
+
+## Focused context and evidence
+
+`adlc5 pack --feature NAME --story-id ID --persona coder --workspace .` assembles
+the declared story and acceptance, its code spec (or tiny change record), the spec
+handoff, and available repository guidance. It checks an estimated text budget and
+blocks when required content is missing. Agents select relevant index records and
+inspect source separately; the pack does not automatically include all source or
+the complete repository cache. Hidden host prompts and subsequent reads are unknown.
+
+Repository freshness and completion evidence answer different questions.
+`repo-index check` validates the structural map; evidence checks and review establish
+the selected delivery contract for current inputs. Neither is proof of defect-free
+code, production qualification, or measured token savings. The connection across
+these mechanisms is the Intelligence claim; comparative outcomes need measurements.
