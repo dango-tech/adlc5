@@ -52,6 +52,26 @@ sources/
 
 ### Ingest (brownfield)
 
+Initialize the existing repository before ingesting team knowledge:
+
+```bash
+{adlc5_root}/scripts/init-workspace.sh --project . --with-project-wiki
+{adlc5_root}/scripts/adlc5 repo-spec validate --workspace .
+{adlc5_root}/scripts/adlc5 repo-index check --workspace .
+```
+
+Initialization creates missing `.agents/` constitution drafts and builds six
+generated JSON artifacts in `.agent-cache/`: the manifest, repository index,
+module map, symbols, dependency graph, and test map. These index eligible code
+across the repository without storing source bodies; symbol/import extraction
+varies by language and test matching is heuristic. Review the constitution drafts
+before committing them; keep the cache gitignored. Refresh stale intelligence
+with `adlc5 repo-index refresh --workspace .`. See
+[repository context](../../core/guides/repository-context.md) for coverage and retrieval.
+
+The project wiki is the human-reviewed knowledge layer on top of that generated
+index. Ingest creates draft stubs, not an automatic explanation of the entire codebase:
+
 ```bash
 {adlc5_root}/scripts/wiki/ingest-repo.sh --workspace . [--commit HEAD]
 ```
