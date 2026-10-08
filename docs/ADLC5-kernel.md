@@ -141,6 +141,10 @@ python3 ./scripts/adlc5-mcp.py --smoke  # tool list + version invoke
 ./.cursor-plugin/run-mcp.sh --smoke     # plugin shim (sets ADLC5_ROOT)
 ```
 
+Transport is standard MCP stdio: one JSON-RPC message per line, protocol-only stdout, logs on stderr. Arguments are validated against each tool's schema (unknown tool → `-32602`; bad arguments → `isError` result; the server keeps running). Workspace-targeted tools resolve `workspace` (argument → `$ADLC5_WORKSPACE` → `$CLAUDE_PROJECT_DIR` → server cwd) to an absolute directory, run the kernel from it, resolve relative file arguments against it, and refuse a workspace inside an installed package (`.adlc5-package.json` marker). `--smoke` is an in-process check, not client-interoperability evidence; `scripts/tests/test-claude-plugin.py` drives a real stdio subprocess.
+
+The CLI runs delegated scripts from the caller's cwd, so `--workspace .` always means the consumer repository.
+
 Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`, `adlc5_clarity`, `adlc5_phase`, `adlc5_pilot`, `adlc5_state_get`, `adlc5_state_set`, `adlc5_transition`, `adlc5_evidence`, `adlc5_repo_spec`, `adlc5_repo_index`, `adlc5_resolve_model`.
 
 ## Agent Plugin packaging
@@ -149,6 +153,7 @@ Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`
 |------|----------|-------|
 | Cursor | [`.cursor-plugin/plugin.json`](../.cursor-plugin/plugin.json) | skills `skills/`, MCP `.cursor-plugin/mcp.json`, shims `run-adlc5.sh` / `run-mcp.sh` |
 | Codex | [`platform/codex-plugin/plugin.json`](../platform/codex-plugin/plugin.json) | metadata + `adlc5.kernel/mcp`; skills via `install.sh` |
+| Claude Code | [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json) | skills `skills/`, MCP `.mcp.json`, hooks `hooks/claude.json`, `bin/` on PATH; archive via `scripts/package-plugin.py` |
 | Antigravity | install stub `plugin.json` + `ADLC5_ROOT` file | skills linked under plugin; kernel stays in clone |
 
 **Plugin load vs classic install:** see [`.cursor-plugin/README.md`](../.cursor-plugin/README.md). Classic `./scripts/install.sh` still symlinks skills/rules for all seven hosts; it prints `ADLC5_ROOT` so agents can find the kernel/MCP.

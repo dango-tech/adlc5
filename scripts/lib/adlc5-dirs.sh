@@ -82,3 +82,18 @@ adlc5_shared_rules_dir() {
   local root="${1:?}"
   printf '%s/shared/rules\n' "$(cd "$root" && pwd)"
 }
+
+# Exit 0 when PATH_ARG is (or would be, if created) inside the installed ADLC5 package ROOT.
+# Compares physical paths (symlinks resolved, nonexistent tails allowed) so a symlinked
+# package or project path cannot bypass the guard. Source checkouts have no marker: never inside.
+adlc5_inside_package() {
+  local root="${1:?}" target="${2:?}"
+  [[ -f "${root}/.adlc5-package.json" ]] || return 1
+  python3 - "$root" "$target" <<'PY'
+import os
+import sys
+
+root, target = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
+sys.exit(0 if target == root or target.startswith(root + os.sep) else 1)
+PY
+}

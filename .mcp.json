@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "adlc5": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/adlc5-mcp.py"]
+    }
+  }
+}

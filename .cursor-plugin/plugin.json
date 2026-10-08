@@ -1,7 +1,7 @@
 {
   "name": "adlc5",
-  "version": "4.1.0",
-  "description": "ADLC5 4.0 evidence-driven fat-kernel Agent Plugin — skills + kernel CLI + MCP. Classic install via ./scripts/install.sh still supported for all hosts.",
+  "version": "5.0.0",
+  "description": "ADLC5 5.0 evidence-driven fat-kernel Agent Plugin — skills + kernel CLI + MCP. Classic install via ./scripts/install.sh still supported for all hosts.",
   "keywords": ["adlc5", "lifecycle", "sdd", "fat-kernel", "mcp"],
   "skills": "skills/",
   "mcpServers": ".cursor-plugin/mcp.json",

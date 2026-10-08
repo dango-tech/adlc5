@@ -1,6 +1,6 @@
 # ADLC5 invokable skill registry (~12 core + aux)
 schema_version: "3.0"
-framework_version: "4.1.0"
+framework_version: "5.0.0"
 
 personas_registry: "core/personas.yaml"
 
@@ -79,6 +79,13 @@ auxiliary:
   - id: project-wiki
     invoke: "@adlc5-project-wiki"
     path: skills/project-wiki/SKILL.md
+
+setup:
+  - id: adlc5-setup
+    invoke: "@adlc5-setup"
+    path: skills/adlc5-setup/SKILL.md
+    role: Plugin-host consumer setup — preflight, missing scaffolding, duplicate detection (repeat-safe)
+    model_tier: execution
 
 soul:
   - id: adlc5-soul

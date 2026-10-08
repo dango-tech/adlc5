@@ -50,6 +50,12 @@ sources/
 
 ## Workflows
 
+> **Plugin hosts (Claude Code):** `{adlc5_root}/scripts/X` means the active plugin runtime. Run
+> repository scripts as `adlc5-run <path under scripts/> ...` (for example
+> `adlc5-run wiki/ingest-repo.sh --workspace .`) and the kernel as `adlc5 ...`; set up the repository
+> once with the `adlc5-setup` skill instead of `init-workspace.sh`. The recorded `adlc5_root` in
+> `.adlc5/workspace.json` is only a hint there and may name another host's package.
+
 ### Ingest (brownfield)
 
 Initialize the existing repository before ingesting team knowledge:

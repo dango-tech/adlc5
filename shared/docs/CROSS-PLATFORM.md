@@ -60,6 +60,10 @@ Dry run:
 
 Backup-replace: existing skill/rule entries are backed up under `install_backup_root` (default `~/.adlc5-install-backup/<timestamp>/`), replaced with symlinks, then the backup is removed after successful verify. On failure, the backup is kept for manual restore. `--keep-backup` skips deletion on success.
 
+## Claude Code plugin (optional)
+
+`.claude-plugin/plugin.json` + `.mcp.json` + `hooks/claude.json` at the distribution root; `scripts/package-plugin.py` builds the self-contained archive. Skills are discovered from `skills/` and namespaced `adlc5:<frontmatter name>`; `bin/adlc5` and `bin/adlc5-run` give shell instructions a package-relative entry point. Setup: skill `adlc5-setup`. Details: [INSTALL.md](INSTALL.md#claude-code-plugin-local-package). Classic `./scripts/install.sh --platform claude` is unchanged.
+
 ## Codex plugin (optional)
 
 From the repo root:

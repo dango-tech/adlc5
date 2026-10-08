@@ -44,6 +44,12 @@ done
 
 WORKSPACE="$(cd "$WORKSPACE" && pwd)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/adlc5-dirs.sh
+source "${ROOT}/scripts/lib/adlc5-dirs.sh"
+if adlc5_inside_package "$ROOT" "$WORKSPACE"; then
+  echo "ERROR: --workspace ${WORKSPACE} is inside the installed ADLC5 package ${ROOT}; pass your repository" >&2
+  exit 2
+fi
 
 REPO_SIZE="unknown"
 WIKI_ACTION="skip"

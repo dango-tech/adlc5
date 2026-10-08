@@ -13,12 +13,11 @@ def mcp_call(name, arguments):
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": {"name": name, "arguments": arguments},
     }).encode()
-    framed = b"Content-Length: " + str(len(request)).encode() + b"\r\n\r\n" + request
     proc = subprocess.run(
         [sys.executable, str(ROOT / "scripts/adlc5-mcp.py")],
-        input=framed, capture_output=True, check=True,
+        input=request + b"\n", capture_output=True, check=True,  # standard MCP stdio: one message per line
     )
-    response = json.loads(proc.stdout.split(b"\r\n\r\n", 1)[1])["result"]
+    response = json.loads(proc.stdout.splitlines()[0])["result"]
     return json.loads(response["content"][0]["text"])
 
 

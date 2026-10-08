@@ -42,6 +42,30 @@ governance files. Ignore rules do not untrack files already in Git.
 
 Invoke: `@adlc5 for my-feature`
 
+## Claude Code plugin (local package)
+
+One self-contained package: skills, kernel, MCP server, hooks, templates. No separate ADLC5 clone is needed at runtime; the package is immutable and all lifecycle state stays in your repository's `.adlc5/`.
+
+```bash
+python3 scripts/package-plugin.py --out /tmp/adlc5-dist          # adlc5-plugin-<version>.tar.gz and .zip
+claude plugin validate <extracted-dir>                            # manifest, hooks, MCP, skills
+claude --plugin-dir /tmp/adlc5-dist/adlc5-plugin-<version>.zip    # session-local; changes no global config
+```
+
+In a session, skills appear as `adlc5:<name>` (for example `adlc5:adlc5-implement`; names come from SKILL.md frontmatter). The plugin puts `adlc5` and `adlc5-run` on the Bash PATH, so skill commands written as `./scripts/adlc5 ...` run as `adlc5 ... --workspace <repo>`; the SessionStart hook states this mapping once per session.
+
+**Set up a repository:** invoke the `adlc5-setup` skill (or `adlc5-run plugin-setup.sh --check`, then without `--check`). It checks Git, Bash 3.2+, Python 3.10+ and jq, shows the tracked additions (`AGENTS.md`, `.agents/*.yaml`, `docs/adr/`), initializes only what is missing, and never installs skills or Cursor agents. Repeat it after a plugin update: it repoints only a stale `adlc5_root` in `.adlc5/workspace.json` / `config.yaml`.
+
+**Update / uninstall:** replace or remove the package; consumer artifacts are untouched. Each host (Claude, Codex) uses its own package location; the recorded `adlc5_root` is only a hint for classic scripts, and hooks, MCP and `bin/` always use their own runtime.
+
+**Coexistence with a classic install:** both can be present. Setup reports duplicates (classic hooks in `.claude/settings*.json`, classic `adlc5*` skill links, a project `.mcp.json` ADLC5 server) and deletes nothing. Remove the classic hook entries and skill links when you want a single source, otherwise warnings and usage scans run twice.
+
+**Hooks:** `hooks/claude.json` wires SessionStart, UserPromptSubmit, PreToolUse (Write/Edit/MultiEdit/NotebookEdit) and Stop. The engagement gate warns by default (context only; it never auto-approves an edit). `ADLC5_ENGAGEMENT_GATE=enforce` denies; `off` disables. Usage is read from Claude transcripts; unavailable counters are not invented.
+
+**Models:** `adlc5 resolve-model --platform claude` reports the policy's model ID, but Claude subagents are selected by the host's model aliases (`sonnet`, `opus`, `haiku`, ...). The plugin does not claim to pin an exact ID or a non-Anthropic model. Record the identities the host actually used in the review JSON; a policy that needs a different verifier model fails honestly instead of being waived.
+
+Local/private package only — not a public-directory submission (it ships local MCP and hooks).
+
 ## Migrating an existing private installation
 
 The maintained distribution is [dango-tech/adlc5](https://github.com/dango-tech/adlc5).

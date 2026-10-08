@@ -1,0 +1,11 @@
+{
+  "name": "adlc5",
+  "version": "5.0.0",
+  "description": "ADLC5 lifecycle for Claude Code: Specify → Plan → Tasks → Implement skills, deterministic kernel gates, local MCP adapter, engagement and usage hooks.",
+  "author": { "name": "dango-tech" },
+  "homepage": "https://github.com/dango-tech/adlc5",
+  "repository": "https://github.com/dango-tech/adlc5",
+  "license": "MIT",
+  "keywords": ["adlc5", "lifecycle", "sdd", "gates", "mcp"],
+  "hooks": "./hooks/claude.json"
+}

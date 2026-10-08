@@ -2002,6 +2002,10 @@ python3 ./scripts/tests/test-claude-usage.py >/dev/null \
   || fail "Claude usage collector unit tests"
 pass "Claude usage collector unit tests"
 
+python3 ./scripts/tests/test-claude-plugin.py >/tmp/claude-plugin-test.out 2>&1 \
+  || { cat /tmp/claude-plugin-test.out >&2; fail "Claude plugin package, MCP stdio, bootstrap and hook tests"; }
+pass "Claude plugin package, MCP stdio, bootstrap and hook tests"
+
 python3 ./scripts/tests/test-codex-usage.py >/dev/null \
   || fail "Codex usage collector unit tests"
 pass "Codex usage collector unit tests"

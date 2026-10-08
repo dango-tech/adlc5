@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+## [5.0.0] — Claude Code plugin and MCP/kernel path contracts
+
+Major version: the MCP transport framing changes (standard newline-delimited stdio replaces `Content-Length` framing) and kernel subprocesses now inherit the caller's cwd. Lifecycle state schema stays 3.0; existing `.adlc5/` state is unaffected. Skill versions are synchronized to 5.0.0.
+
 ### Added
+
+- **Claude Code plugin (local package):** `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/claude.json` (SessionStart, UserPromptSubmit, PreToolUse, Stop), `bin/adlc5` / `bin/adlc5-run`, the shared `adlc5-setup` skill (`scripts/plugin-setup.sh`), and a deterministic archive builder `scripts/package-plugin.py` (tar.gz + zip, installed packages carry an immutable `.adlc5-package.json` marker). Claude hook wrappers resolve the current plugin runtime (`CLAUDE_PLUGIN_ROOT`) before any workspace binding. `init-workspace.sh` gains `--no-council-agents` and `--refresh-runtime` (`scripts/rebind-runtime.py` repairs only a stale `adlc5_root`). Tests: `scripts/tests/test-claude-plugin.py`.
 
 - Added repository context initialization and deterministic local intelligence indexes for brownfield and greenfield workspaces (`.agents/` constitution and gitignored `.agent-cache/`), with CLI, MCP, installation, and lifecycle integration. `repo-spec init` writes constitution beside existing `.agents/skills/`; `repo-spec reconcile` copies useful leftover `.agent/` yaml/schema into `.agents/` without overwriting, then documents what to keep vs delete.
 - **Cost-optimization pass** (lifecycle model/token spend, not a state-schema change): four levers, additive and off-by-default except where noted.
@@ -13,6 +19,10 @@
   - New shared parser [`scripts/lib/simple_yaml.py`](scripts/lib/simple_yaml.py) (no PyYAML dependency) backs both the pricing table and code-spec frontmatter parsing.
 
 ### Changed
+
+- `scripts/adlc5-mcp.py` now speaks standard newline-delimited MCP stdio (it previously used `Content-Length` framing, which standard clients do not send), validates tool arguments, keeps child processes off the protocol stream, resolves an explicit consumer workspace, and refuses workspaces inside an installed package.
+- `scripts/adlc5` runs delegated scripts from the caller's cwd (was the framework root), so `--workspace .` and relative file arguments resolve against the consumer repository.
+- The Claude engagement-gate hook no longer returns `permissionDecision: allow` in warn mode (it granted edits without the user's permission prompt); warn adds context only and `enforce` still denies.
 
 - `tasks-2-code-spec-complete` (and therefore `tasks-complete`) now fails a code spec whose frontmatter is missing or malformed, not just an empty `tasks/code-spec/` directory. An in-flight feature with pre-existing code specs written before this change will need frontmatter added (`./scripts/tasks/spec-lint.py` reports exactly what each file is missing) before that gate passes again.
 

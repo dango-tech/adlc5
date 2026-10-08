@@ -36,6 +36,7 @@ SCRIPTS = ROOT / "scripts"
 VERSION_FILE = ROOT / "core" / "VERSION"
 
 sys.path.insert(0, str(SCRIPTS))
+from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
 from lib.state_v2 import (  # noqa: E402
     feature_state_path,
     load_feature_state,
@@ -133,8 +134,20 @@ See: docs/ADLC5-kernel.md
 
 
 def run(cmd: list[str], *, env: dict | None = None) -> int:
-    proc = subprocess.run(cmd, cwd=str(ROOT), env=env or os.environ.copy())
+    # Inherit the caller's cwd: relative consumer paths (--workspace ., --file x)
+    # must resolve against the consumer, never against the framework/package dir.
+    # Every delegated script locates itself via absolute paths.
+    proc = subprocess.run(cmd, env=env or os.environ.copy())
     return int(proc.returncode)
+
+
+def _workspace_arg(args: list[str]) -> str | None:
+    for i, arg in enumerate(args):
+        if arg == "--workspace" and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--workspace="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 def require_exec(script: Path) -> int | None:
@@ -726,6 +739,12 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: unknown command: {command}", file=sys.stderr)
         usage(sys.stderr)
         return 2
+
+    if command != "version" and not any(a in ("-h", "--help") for a in rest):
+        problem = check_workspace(ROOT, resolve_workspace(_workspace_arg(rest)))
+        if problem:
+            print(f"ERROR: {problem}", file=sys.stderr)
+            return 2
 
     dispatch = {
         "transition": cmd_completion,

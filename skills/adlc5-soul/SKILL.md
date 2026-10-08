@@ -1,7 +1,7 @@
 ---
 name: adlc5-soul
 description: ADLC5 fifth pillar — SOUL, the evidence-driven five-guard reasoning discipline for graph-routed work. Cross-cutting, not a stage. Invoke @adlc5-soul at a gate transition or whenever reasoning feels tangential.
-version: 4.1.0
+version: 5.0.0
 ---
 
 # ADLC5 Soul — Reasoning Guard

@@ -6,22 +6,9 @@ set -euo pipefail
 payload="$(cat)"
 project_dir="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
-adlc5_root="$(
-  python3 - "$project_dir" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-workspace = Path(sys.argv[1])
-config = workspace / ".adlc5" / "workspace.json"
-if config.is_file():
-    try:
-        value = json.loads(config.read_text(encoding="utf-8"))
-        print(value.get("adlc5_root", ""))
-    except (json.JSONDecodeError, OSError):
-        pass
-PY
-)"
+# shellcheck source=_adlc5-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_adlc5-root.sh"
+adlc5_root="$(adlc5_resolve_root "$project_dir")"
 
 gate="${adlc5_root}/scripts/engagement-gate.py"
 if [[ -n "$adlc5_root" && -f "$gate" ]]; then

@@ -1,7 +1,7 @@
 {
   "name": "adlc5",
-  "version": "4.1.0",
-  "description": "ADLC5 4.0 evidence-driven fat-kernel Codex plugin metadata. Prefer ./scripts/install.sh --platform codex for skills; kernel/MCP live at the distribution root.",
+  "version": "5.0.0",
+  "description": "ADLC5 5.0 evidence-driven fat-kernel Codex plugin metadata. Prefer ./scripts/install.sh --platform codex for skills; kernel/MCP live at the distribution root.",
   "keywords": ["adlc5", "lifecycle", "sdd", "fat-kernel", "mcp"],
   "skills": "./skills/",
   "adlc5": {

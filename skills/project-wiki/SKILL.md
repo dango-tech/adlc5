@@ -11,7 +11,7 @@ description: ADLC5 Project Wiki — team-shared repo KB with evidence-gated inge
 
 **Scripts (mandatory):** `{adlc5_root}/scripts/wiki/*.sh` — do not reimplement logic inline.
 
-Resolve `adlc5_root` from `.adlc5/workspace.json` or `.adlc5/config.yaml` in the consumer project.
+Resolve `adlc5_root` from `.adlc5/workspace.json` or `.adlc5/config.yaml` in the consumer project. When ADLC5 runs as a host plugin, use the runtime path the session context reports (or `adlc5-run wiki/<script>`); the recorded binding is only a hint.
 
 ---
 

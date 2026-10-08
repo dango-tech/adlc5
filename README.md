@@ -31,6 +31,12 @@ In your application repository:
 /path/to/adlc5/scripts/init-feature.sh --feature my-feature --interaction hitl
 ```
 
+**Claude Code plugin (no clone needed at runtime):** build the local package with
+`python3 scripts/package-plugin.py --out /tmp/adlc5-dist`, start a session with
+`claude --plugin-dir /tmp/adlc5-dist/adlc5-plugin-<version>.zip`, then invoke the
+`adlc5-setup` skill in your repository. Skills appear as `adlc5:<name>`. See the
+[Claude plugin guide](shared/docs/INSTALL.md#claude-code-plugin-local-package).
+
 Then invoke **`@adlc5 for my-feature`**. Use the framework in consumer repositories;
 this repository distributes the framework and its portable `dogfood/` example.
 See [installation](shared/docs/INSTALL.md) for other hosts and upgrades.
@@ -111,7 +117,8 @@ comparative quality results; the pilot and outside-contributor trial remain pend
 ## Host support
 
 The contract-test CI matrix covers Ubuntu and macOS; disposable installation smoke
-covers Claude skill links and kernel verification. Codex and Cursor have packaged
+covers Claude skill links and kernel verification, and the Claude Code plugin package
+has archive, MCP stdio, bootstrap and hook tests plus a recorded live local session. Codex and Cursor have packaged
 adapter/hook tests. Other install adapters remain available but do not imply equal
 end-to-end delivery validation. See [cross-platform details](shared/docs/CROSS-PLATFORM.md).
 Live delivery/resume qualification must be recorded per host before broader claims.
