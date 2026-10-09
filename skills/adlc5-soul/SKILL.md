@@ -1,6 +1,6 @@
 ---
 name: adlc5-soul
-description: ADLC5 fifth pillar — SOUL, the evidence-driven five-guard reasoning discipline for graph-routed work. Cross-cutting, not a stage. Invoke @adlc5-soul at a gate transition or whenever reasoning feels tangential.
+description: ADLC5 supporting reasoning discipline — SOUL, the evidence-driven five-guard reasoning discipline for graph-routed work. Cross-cutting, not a stage. Invoke @adlc5-soul at a gate transition or whenever reasoning feels tangential.
 version: 5.0.0
 ---
 
@@ -8,7 +8,7 @@ version: 5.0.0
 
 **Invoke:** `@adlc5-soul for [feature]` — at any gate transition, or the moment work stops tracing to the written problem.
 
-The fifth pillar. The four stages and work graph say *what* happens in what order; SOUL says *how the agent reasons* while doing it. In 4.0, that means preserving consumer-owned acceptance, choosing the minimum sufficient profile, respecting dependency and file-ownership edges, demanding independent verification, and optimizing cost only after the quality floor holds. Rule text (always-on version): [shared/rules/portable/adlc5-soul.md](../../shared/rules/portable/adlc5-soul.md).
+Supports Intelligence, ADLC5’s fifth pillar. The four stages and work graph say *what* happens in what order; SOUL says *how the agent reasons* while doing it. In 4.0, that means preserving consumer-owned acceptance, choosing the minimum sufficient profile, respecting dependency and file-ownership edges, demanding independent verification, and optimizing cost only after the quality floor holds. Rule text (always-on version): [shared/rules/portable/adlc5-soul.md](../../shared/rules/portable/adlc5-soul.md).
 
 ## Procedure
 

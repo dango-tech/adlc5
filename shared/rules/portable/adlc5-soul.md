@@ -1,7 +1,7 @@
 
 # ADLC5 Soul — Five-Guard Reasoning Discipline
 
-The fifth pillar of ADLC5. Not a lifecycle stage — a reasoning discipline across Specify → Plan → Tasks → Implement. In 4.0 it keeps graph-routed work anchored to consumer-owned acceptance, selects the minimum sufficient profile, respects dependency and file-ownership edges, requires independent verification, and optimizes only after the quality floor holds.
+The reasoning discipline supporting Intelligence, ADLC5’s fifth pillar. Not a lifecycle stage — a reasoning discipline across Specify → Plan → Tasks → Implement. In 4.0 it keeps graph-routed work anchored to consumer-owned acceptance, selects the minimum sufficient profile, respects dependency and file-ownership edges, requires independent verification, and optimizes only after the quality floor holds.
 
 ## The five guards, mapped to the lifecycle
 

@@ -2,6 +2,8 @@
 
 **Lifecycle:** Specify → Plan → Tasks → Implement — agent judgment + deterministic kernel — **`@adlc5 for [feature]`**
 
+**Fifth pillar:** Intelligence — repository knowledge, focused context, and current evidence. See [repository context](core/guides/repository-context.md). SOUL supports it as the reasoning discipline.
+
 Install: `./scripts/install.sh` · Version: `core/VERSION` · Update: `./scripts/update-adlc5.sh --self` \| `--global` · Reference: [docs/ADLC5.md](docs/ADLC5.md)
 
 ## Essentials
@@ -25,7 +27,7 @@ Install: `./scripts/install.sh` · Version: `core/VERSION` · Update: `./scripts
 |--------|--------|
 | New feature (full lifecycle) | **`@adlc5`** |
 | Single stage | `@adlc5-specify` · `@adlc5-plan` · `@adlc5-tasks` · `@adlc5-implement` |
-| Reasoning guard (fifth pillar, cross-cutting) | `@adlc5-soul` |
+| Supporting reasoning discipline (cross-cutting) | `@adlc5-soul` |
 | Requirements / discovery | `@discover` · `@prt` |
 | Architecture review | `@clean-architecture-review` |
 | Patterns | `@design-pattern-advisor` · `@pbe-select-patterns` |

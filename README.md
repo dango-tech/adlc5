@@ -8,6 +8,8 @@
 and outside-contributor qualification are still pending.
 
 **ADLC5** is a coding harness for **Specify → Plan → Tasks → Implement**.
+The five pillars are **Specify · Plan · Tasks · Implement · Intelligence**.
+Four pillars structure delivery. Intelligence connects them to your codebase.
 Agent skills handle judgment; one deterministic kernel owns progression and checks.
 It aims for repeatable acceptance and failure handling, not identical generated code.
 
@@ -86,6 +88,24 @@ Tiny work keeps decisions in one `change.md`. Standard work keeps a brief
 QA and human approval. Knowledge-base and craftsmanship material are pulled in
 when a concrete problem needs them.
 
+## Intelligence — the fifth pillar
+
+ADLC5 gathers repository knowledge, gives agents relevant context, and uses
+current evidence to guide delivery. Its distinction is the connection across the
+lifecycle: repository maps inform planning, reviewed guidance constrains tasks,
+focused context packs equip agents, and evidence checks govern progression.
+
+- **Understand:** generate maps of modules, symbols, import dependencies, and tests.
+- **Constrain:** retain reviewed architecture, boundaries, and runnable commands.
+- **Equip:** assemble bounded story context from requirements and repository guidance.
+- **Refresh and verify:** check map freshness and require current completion evidence.
+
+Models supply reasoning; ADLC5 supplies structured knowledge, context, and checks.
+Generated maps remain navigation aids; source and reviewed guidance are authoritative.
+SOUL is the supporting reasoning discipline across all four stages.
+[Repository context and limits](core/guides/repository-context.md) explains the
+mechanics. Better code, fewer errors, or lower token costs require comparative measurements.
+
 ## What completion establishes
 
 `adlc5 transition TARGET` validates the next step and its required gates.
@@ -141,3 +161,19 @@ Further reference: [kernel](docs/ADLC5-kernel.md), [skill map](shared/docs/SKILL
 [current technology sources](core/guides/current-information.md), [license](LICENSE).
 
 Framework version: [core/VERSION](core/VERSION). Persisted state retains schema `3.0`.
+
+## Documentation website
+
+The browsable user docs in `website/docs/` cover overview, installation, quickstart,
+lifecycle, Intelligence, and reference. For a local preview:
+
+```bash
+python3 -m venv .venv-docs
+. .venv-docs/bin/activate
+python -m pip install -r requirements-docs.txt
+python -m mkdocs serve
+```
+
+See [site maintenance and GitHub Pages setup](docs/documentation-site.md) for builds,
+validation, and publication. The workflow validates pull requests and can publish
+from the default branch after Pages is configured.
