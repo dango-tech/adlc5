@@ -3,8 +3,8 @@
 **Intelligence is the fifth pillar of ADLC5:** its ability to gather repository
 knowledge, give agents relevant context, and use evidence to guide delivery.
 
-**Specify · Plan · Tasks · Implement · Intelligence.** Four pillars structure
-delivery. Intelligence connects them to your codebase across all four stages.
+**Specify · Plan · Tasks · Implement · Intelligence.** The first four are
+delivery stages; Intelligence connects them to your codebase across all four.
 
 ## What makes the claim concrete
 
