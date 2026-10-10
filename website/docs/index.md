@@ -6,21 +6,23 @@
 **Public preview.** Workflow contracts are tested; comparative coding-quality
 results and outside-contributor qualification remain pending.
 
-**Specify → Plan → Tasks → Implement.** ADLC5 is a coding harness that combines
-agent judgment with one deterministic kernel for progression and checks.
-It aims for repeatable acceptance and failure handling, not identical generated code.
+ADLC5 gives AI coding tools a repeatable delivery workflow: **Specify → Plan →
+Tasks → Implement**, connected by a fifth pillar: **Intelligence**. Intelligence
+gathers repository knowledge, assembles focused context, and grounds progression
+in current evidence. Agent skills handle judgment; one deterministic kernel owns
+progression and checks. It aims for repeatable acceptance and failure handling,
+not identical generated code.
+
+Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
 Use it in your application repository. This repository distributes the framework
 and a portable `dogfood/` consumer example.
 
 ## Five pillars, connected delivery
 
-**Specify · Plan · Tasks · Implement · Intelligence.**
-
-Four pillars structure delivery. Intelligence connects them to your codebase.
-ADLC5 gathers repository knowledge, gives agents relevant context, and uses
-current evidence to guide delivery. Models supply reasoning; the framework
-supplies structured knowledge, context, and deterministic checks.
+**Specify · Plan · Tasks · Implement · Intelligence.** The first four are delivery
+stages; Intelligence connects them to your codebase. Models supply reasoning;
+ADLC5 supplies structured knowledge, focused context, and deterministic checks.
 
 | Intelligence capability | Role in delivery |
 | --- | --- |
@@ -58,5 +60,6 @@ deployment and live host qualification need separate evidence.
 Read the [completion limits](lifecycle.md#what-completion-establishes) before making release claims.
 
 The [reference](reference.md) links to the canonical repository documentation,
-kernel commands, and skill map. The site is a curated entry point; repository
-documents remain authoritative.
+kernel commands, skill map, and [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview).
+The [README](https://github.com/dango-tech/adlc5#readme) is the install-oriented
+project entry point; repository documents remain authoritative.

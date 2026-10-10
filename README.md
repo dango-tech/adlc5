@@ -7,11 +7,14 @@
 **Public preview.** ADLC5 has tested workflow contracts; comparative coding-quality
 and outside-contributor qualification are still pending.
 
-**ADLC5** is a coding harness for **Specify → Plan → Tasks → Implement**.
-The five pillars are **Specify · Plan · Tasks · Implement · Intelligence**.
-Four pillars structure delivery. Intelligence connects them to your codebase.
-Agent skills handle judgment; one deterministic kernel owns progression and checks.
-It aims for repeatable acceptance and failure handling, not identical generated code.
+**ADLC5** gives AI coding tools a repeatable delivery workflow: **Specify → Plan →
+Tasks → Implement**, connected by a fifth pillar: **Intelligence**. Intelligence
+gathers repository knowledge, assembles focused context, and grounds progression
+in current evidence. Agent skills handle judgment; one deterministic kernel owns
+progression and checks. It aims for repeatable acceptance and failure handling,
+not identical generated code.
+
+Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
 ## Quickstart
 
@@ -164,8 +167,10 @@ Framework version: [core/VERSION](core/VERSION). Persisted state retains schema 
 
 ## Documentation website
 
-The browsable user docs in `website/docs/` cover overview, installation, quickstart,
-lifecycle, Intelligence, and reference. For a local preview:
+The [published user docs](https://dango-tech.github.io/adlc5/) in `website/docs/`
+cover overview, installation, quickstart, lifecycle, Intelligence, and reference.
+The [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview)
+provides a project-level introduction. For a local preview:
 
 ```bash
 python3 -m venv .venv-docs
