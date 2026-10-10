@@ -61,7 +61,7 @@ Skill: [skills/adlc5-soul](../skills/adlc5-soul/SKILL.md)
 
 State: `.adlc5/{feature}/state.json` (`schema_version: "3.0"`) — [state-schema.json](../core/state-schema.json) · Model: [sdd-model.md](../core/sdd-model.md)
 
-Autonomous: `init-feature.sh --interaction autonomous` · navigator: `scripts/pilot-autopilot.sh` · local executor handoff: `scripts/runner/dispatch.sh` (`needs_executor` until a host adapter performs the action)
+Autonomous: `init-feature.sh --interaction autonomous` · navigator: `scripts/pilot-autopilot.sh` · Codex headless runner: `scripts/adlc5 run --feature NAME --host codex --workspace PATH` · local navigator-only dispatch: `scripts/runner/dispatch.sh`
 
 Gates: `./scripts/check-gates.py --feature NAME --gate pr-ready` · registry: [skill-registry.yaml](../core/skill-registry.yaml)
 

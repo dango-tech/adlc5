@@ -69,6 +69,25 @@ Persona registry: [core/personas.yaml](../../core/personas.yaml)
 
 ## Autopilot loop (integrated — replaces `@adlc5-pilot`)
 
+On Codex, use the qualified headless runner from a terminal because Codex's sandbox
+does not permit nested `codex exec`:
+
+```bash
+./scripts/adlc5 run --feature F --host codex --workspace .
+```
+
+If it exits with code 10, ask the user the printed question, then record the reply
+and resume:
+
+```bash
+./scripts/adlc5 answer QUESTION_ID --text 'user reply' --workspace .
+./scripts/adlc5 run --feature F --host codex --workspace .
+```
+
+The runner owns step routing, evidence ingestion, usage capture, and retries. Chat
+handles only the initial choices and human decisions. Other hosts without a
+qualified adapter continue with the in-agent loop below.
+
 When `autopilot.mode` is `autonomous` or user selects autonomous:
 
 ```text

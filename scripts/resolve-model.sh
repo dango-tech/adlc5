@@ -13,22 +13,19 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/resolve-model.sh --tier TIER [OPTIONS]
 
-  --tier TIER         reasoning | balanced | execution | implementation | fast
-                      (implementation is an alias for execution)
+  --tier TIER         reasoning | balanced | execution | implementation
+                      (implementation is an alias for execution; fast routes to execution with a notice)
   --platform NAME     cursor | claude | codex | opencode | hermes | gemini | antigravity
                       (optional; auto-detect via env heuristics — best-effort)
   --step ID           optional lifecycle step for notice context
-  --workspace DIR     optional consumer workspace (loads .adlc5/config.yaml)
+  --workspace DIR     optional consumer workspace (loads shared repo config)
   --feature NAME      optional; loads persona knobs from feature policies only
   -h, --help          show help
 
-Merge order: config.example.yaml ← repo config.yaml ← workspace .adlc5/config.yaml
-Feature policies (.adlc5/{feature}/policies.yaml) affect persona knobs
-(fresh_session, verifier_different_model) and may override execution_policy
-via model_routing.execution_policy — inherit|explicit — which wins over the
-config.yaml default for that feature only. See core/guides/model-matrix.md.
+Config is chosen with `adlc5 setup models`: master settings in ~/.adlc5/config.yaml,
+then repository overrides in the Git common directory. config.example.yaml is documentation only.
 
-Platform detection limitations: env heuristics are best-effort; pass --platform when known.
+Pass --platform or configure default_host. With no configured choice, host default is used.
 
 Stdout: JSON {tier, model_id, spawn_policy, fresh_session, platform, notice, version, ...}
 EOF

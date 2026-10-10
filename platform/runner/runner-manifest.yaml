@@ -7,6 +7,12 @@ backends:
     dispatch: scripts/runner/dispatch.sh
     watch: scripts/runner/watch.sh
 
+  codex-local:
+    description: "Codex CLI headless worker runner with workspace-write confinement"
+    dispatch: scripts/runner/run.py
+    host: codex
+    mode: unattended
+
   cursor-cloud:
     description: "Cursor Cloud Agents (stub — wire SDK when available)"
     dispatch: platform/runner/cursor-cloud-stub.sh
@@ -19,5 +25,6 @@ backends:
 
 contract: |
   Runners MUST invoke scripts/pilot-autopilot.sh and scripts/check-gates.py —
-  no duplicate gate logic in runner adapters. The local navigator never invokes
-  an agent: spawn/advance/heal return dispatch=needs_executor for a host adapter.
+  no duplicate gate logic in runner adapters. The local backend remains a
+  navigator-only interface; codex-local invokes the supervised headless Codex
+  adapter and routes every lifecycle change through scripts/adlc5.

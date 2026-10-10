@@ -9,12 +9,16 @@ Usage:
   ./scripts/adlc5 clarity <file_path> [--step-id ID]
   ./scripts/adlc5 phase --feature NAME [--workspace DIR] [--target PHASE_ID]
   ./scripts/adlc5 pilot --feature NAME [--workspace DIR] [--record-result pass|fail]
+  ./scripts/adlc5 run --feature NAME [--host codex] [--workspace DIR] [--summary off|brief|detailed]
   ./scripts/adlc5 state get --feature NAME [--workspace DIR]
   ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
   ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]
   ./scripts/adlc5 repo-spec init|reconcile|validate [--workspace DIR]
   ./scripts/adlc5 repo-index build|refresh|check [--workspace DIR]
   ./scripts/adlc5 resolve-model --tier TIER [--platform NAME] ...
+  ./scripts/adlc5 setup models [--repo] [--accept-defaults] [--workspace DIR]
+  ./scripts/adlc5 config show [--workspace DIR]
+  ./scripts/adlc5 answer QUESTION_ID --text REPLY [--workspace DIR]
   ./scripts/adlc5 cleanup-features --workspace DIR ...
   ./scripts/adlc5 feature summarize --feature-dir PATH [--workspace DIR] [--dry-run]
   ./scripts/adlc5 patterns lookup --tags TAG[,TAG...] [--group GROUP] ...
@@ -51,11 +55,15 @@ COMMANDS = {
     "clarity": "Score a spec/design file (→ clarity-score.py)",
     "phase": "Inspect legacy phase suggestion; canonical progression uses transition",
     "pilot": "One autopilot iteration (→ pilot-autopilot.sh)",
+    "run": "Run the navigator with supervised headless workers (→ runner/run.py)",
     "state": "Read/patch metadata; audited repair cannot certify completion",
     "anchors": "Lock/check acceptance anchors (lock applies the validated state patch)",
     "repo-spec": "Initialize/validate tracked repository constitution files",
     "repo-index": "Build/refresh/check generated repository intelligence",
     "resolve-model": "Resolve tier → host model ID (→ resolve-model.sh)",
+    "setup": "Ask for model tiers and summary preferences",
+    "config": "Show effective settings and their source",
+    "answer": "Record a human answer to a pending runner question",
     "cleanup-features": "Dry-run/archive/delete aged .adlc5/{feature}/ (default: dry-run archive → _archive/)",
     "feature": "Feature helpers (summarize → OKF FEATURE.md)",
     "usage": "Record/summarize/fleet-roll-up model + token usage (→ memory/usage-ledger.py)",
@@ -86,11 +94,15 @@ Commands:
   clarity        {COMMANDS['clarity']}
   phase          {COMMANDS['phase']}
   pilot          {COMMANDS['pilot']}
+  run            {COMMANDS['run']}
   state get|set  {COMMANDS['state']}
   anchors lock|check {COMMANDS['anchors']}
   repo-spec init|reconcile|validate {COMMANDS['repo-spec']}
   repo-index build|refresh|check {COMMANDS['repo-index']}
   resolve-model  {COMMANDS['resolve-model']}
+  setup models   {COMMANDS['setup']}
+  config show    {COMMANDS['config']}
+  answer         {COMMANDS['answer']}
   cleanup-features  {COMMANDS['cleanup-features']}
   feature summarize {COMMANDS['feature']}
   usage record|summary {COMMANDS['usage']}
@@ -231,12 +243,38 @@ def cmd_pilot(args: list[str]) -> int:
     return run(["bash", str(script), *args])
 
 
+def cmd_run(args: list[str]) -> int:
+    script = SCRIPTS / "runner" / "run.py"
+    return run([sys.executable, str(script), *args])
+
+
 def cmd_resolve_model(args: list[str]) -> int:
     script = ROOT / "scripts" / "resolve-model.sh"
     err = require_exec(script)
     if err is not None:
         return err
     return run(["bash", str(script), *args])
+
+
+def cmd_config(args: list[str]) -> int:
+    if not args or args[0] != "show":
+        print("Usage: ./scripts/adlc5 config show [--workspace DIR]", file=sys.stderr)
+        return 2
+    script = SCRIPTS / "configure-models.py"
+    return run([sys.executable, str(script), "show", *args[1:]])
+
+
+def cmd_setup(args: list[str]) -> int:
+    if not args or args[0] != "models":
+        print("Usage: ./scripts/adlc5 setup models [--repo] [--accept-defaults] [--workspace DIR]", file=sys.stderr)
+        return 2
+    script = SCRIPTS / "configure-models.py"
+    return run([sys.executable, str(script), "setup", *args[1:]])
+
+
+def cmd_answer(args: list[str]) -> int:
+    script = SCRIPTS / "runner" / "answer.py"
+    return run([sys.executable, str(script), *args])
 
 
 def _state_help(stream=sys.stdout) -> None:
@@ -618,7 +656,7 @@ def cmd_patterns(args: list[str]) -> int:
 def cmd_completion(args, *, evidence=False):
     from lib.completion_evidence import transition, run_checks, fingerprint, append
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["check", "review", "approve", "build"] if evidence else None)
+    parser.add_argument("action", choices=["check", "review", "approve", "build", "integrate"] if evidence else None)
     parser.add_argument("--feature", required=True)
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--file", help="review identity/disposition JSON or approval JSON")
@@ -657,11 +695,26 @@ def cmd_completion(args, *, evidence=False):
                 state = load_feature_state(workspace, ns.feature)
                 if not state or state.get("current_stage") != "implement":
                     raise ValueError("review requires Implement stage")
-                for key in ("coder_session_id", "verifier_session_id", "coder_model_id", "verifier_model_id", "disposition"):
+                for key in ("verifier_session_id", "verifier_model_id", "disposition"):
                     if not isinstance(result.get(key), str) or not result[key]:
                         raise ValueError("missing " + key)
+                if not ((isinstance(result.get("coder_session_id"), str) and result["coder_session_id"])
+                        or (isinstance(result.get("coder_session_ids"), list) and result["coder_session_ids"]
+                            and all(isinstance(item, str) and item for item in result["coder_session_ids"]))):
+                    raise ValueError("missing coder_session_id(s)")
+                if not ((isinstance(result.get("coder_model_id"), str) and result["coder_model_id"])
+                        or (isinstance(result.get("coder_model_ids"), list) and result["coder_model_ids"]
+                            and all(isinstance(item, str) and item for item in result["coder_model_ids"]))):
+                    raise ValueError("missing coder_model_id(s)")
                 if result["disposition"] not in ("pass", "reject") or not isinstance(result.get("blocking_findings", []), list):
                     raise ValueError("invalid review disposition/findings")
+            elif ns.action == "integrate":
+                state = load_feature_state(workspace, ns.feature)
+                if not state or state.get("current_step") != "implement-3-integrate" or result != {"status": "completed"}:
+                    raise ValueError("integration evidence requires implement-3-integrate and status=completed")
+                saved = set_feature_state(workspace, ns.feature, patch={"implement": {"integration": result}}, operation="transition")
+                if saved["status"] != "ok":
+                    raise ValueError(str(saved))
             else:
                 from lib.state_v2 import is_human_approver
                 state = load_feature_state(workspace, ns.feature)
@@ -696,15 +749,19 @@ def cmd_completion(args, *, evidence=False):
                     pr = (state.get("implement") or {}).get("pr") or {}
                     if state.get("stage_status", {}).get("implement") != "completed" or not (pr.get("url") and (pr.get("published") is True or pr.get("status") == "completed")):
                         raise ValueError("deploy approval requires completed Implement and published PR URL")
-            result.update(kind={"review": "review", "approve": "approval", "build": "build"}[ns.action], fingerprint=fingerprint(workspace, ns.feature))
-            append(workspace, ns.feature, result)
-            if ns.action == "approve":
-                # Anchor/deployment legacy readers consume history; freshness still comes from ledger.
-                history = list((state.get("clarity") or {}).get("history") or [])
-                history.append(result)
-                saved = set_feature_state(workspace, ns.feature, patch={"clarity": {"history": history}}, operation="transition")
-                if saved["status"] != "ok":
-                    raise ValueError(str(saved))
+            if ns.action == "integrate":
+                result.update(kind="integration", fingerprint=fingerprint(workspace, ns.feature))
+                append(workspace, ns.feature, result)
+            else:
+                result.update(kind={"review": "review", "approve": "approval", "build": "build"}[ns.action], fingerprint=fingerprint(workspace, ns.feature))
+                append(workspace, ns.feature, result)
+                if ns.action == "approve":
+                    # Anchor/deployment legacy readers consume history; freshness still comes from ledger.
+                    history = list((state.get("clarity") or {}).get("history") or [])
+                    history.append(result)
+                    saved = set_feature_state(workspace, ns.feature, patch={"clarity": {"history": history}}, operation="transition")
+                    if saved["status"] != "ok":
+                        raise ValueError(str(saved))
             result = {"status": "ok"}
         if evidence and ns.action in ("check", "review"):
             from lib.completion_evidence import completion_checks
@@ -761,11 +818,15 @@ def main(argv: list[str]) -> int:
         "clarity": cmd_clarity,
         "phase": cmd_phase,
         "pilot": cmd_pilot,
+        "run": cmd_run,
         "state": cmd_state,
         "anchors": cmd_anchors,
         "repo-spec": cmd_repo_spec,
         "repo-index": cmd_repo_index,
         "resolve-model": cmd_resolve_model,
+        "setup": cmd_setup,
+        "config": cmd_config,
+        "answer": cmd_answer,
         "cleanup-features": cmd_cleanup_features,
         "feature": cmd_feature,
         "usage": cmd_usage,

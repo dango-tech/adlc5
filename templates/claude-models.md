@@ -1,28 +1,5 @@
-# Claude Code — Model tier mapping for ADLC5
+# Claude Code model tiers
 
-Map abstract tiers from [core/guides/model-matrix.md](../core/guides/model-matrix.md) via `/model` or Claude settings.
+Model choices are user-specific. Use `adlc5 setup models` when Claude Code is supported by the installed runner; otherwise use the current session model for the in-agent lifecycle.
 
-**Resolve:** `./scripts/resolve-model.sh --platform claude --tier <tier>`
-
-## Suggested mapping
-
-| Tier | Typical Claude use |
-|------|---------------------|
-| **reasoning** | Opus-class for design, code spec, verify, `@qa` |
-| **balanced** | Sonnet-class for orchestration and stories |
-| **execution** | Inherit parent when `execution_policy: inherit`; Haiku/Sonnet only if explicit |
-| **fast** | Not for implement/verify or `@qa` |
-
-## config.yaml example
-
-```yaml
-platform_profiles:
-  claude:
-    reasoning: "claude-opus-4-6"
-    balanced: "claude-sonnet-4-6"
-    execution: "claude-haiku-4-5"
-    spawn:
-      task_model_param: true
-```
-
-IDs change; keep them in gitignored `config.yaml`.
+The tier contract is `reasoning`, `balanced`, and `execution`. Each configured tier stores a host model name and a separate reasoning-effort value. No model IDs ship with ADLC5.

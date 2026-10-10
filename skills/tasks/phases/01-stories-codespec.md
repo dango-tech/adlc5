@@ -16,7 +16,8 @@ For each story, write `tasks/code-spec/{story-id}.md` starting from
 
 1. **YAML frontmatter first** — `story_id`, `files_to_create`, `files_to_modify`
    (each a list, may be empty), `tests[]` (non-empty — file + name + scenario
-   per case), `acceptance_criteria[]` (non-empty), optional `signatures[]`.
+   per case), `acceptance_criteria[]` (non-empty), `acceptance_checks` mapping
+   every criterion to one or more `file::test_name` assertions, optional `signatures[]`.
    This is what `./scripts/tasks/spec-lint.py` and `./scripts/verify-story.py`
    read — the code-spec-complete gate now lints it, not just checks that a
    `.md` file exists.

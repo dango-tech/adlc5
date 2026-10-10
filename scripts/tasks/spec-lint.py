@@ -18,6 +18,8 @@ Frontmatter schema (see templates/feature-docs/code-spec.md for a skeleton):
       name: test_function_name
       scenario: optional prose
   acceptance_criteria: [AC-1, AC-2]      # required, non-empty
+  acceptance_checks:                    # required; each criterion maps to a named assertion
+    AC-1: [test_file.py::test_named_case]
   signatures:                            # optional
     - symbol: create_item
       kind: function                     # function | method | class
@@ -138,6 +140,25 @@ def lint_one(path: Path, *, known_story_ids: set[str] | None) -> dict:
     ac = fm.get("acceptance_criteria")
     if not isinstance(ac, list) or not ac:
         blockers.append("acceptance_criteria must be a non-empty list")
+    checks = fm.get("acceptance_checks")
+    if isinstance(ac, list) and ac:
+        if not isinstance(checks, dict):
+            blockers.append("acceptance_checks must map every acceptance criterion to named checks")
+        else:
+            missing = [item for item in ac if item not in checks]
+            unknown = [item for item in checks if item not in ac]
+            if missing:
+                blockers.append("acceptance criteria lack named checks: " + ", ".join(map(str, missing)))
+            if unknown:
+                blockers.append("acceptance_checks contains unknown criteria: " + ", ".join(map(str, unknown)))
+            for criterion, names in checks.items():
+                if not isinstance(names, list) or not names or any(not _is_nonempty_str(name) or "::" not in name for name in names):
+                    blockers.append(f"acceptance_checks[{criterion}] must be a non-empty list of file::test names")
+                elif isinstance(tests, list):
+                    test_names = {f"{test.get('file')}::{test.get('name')}" for test in tests if isinstance(test, dict)}
+                    for name in names:
+                        if name not in test_names:
+                            blockers.append(f"acceptance check '{name}' must match a declared tests[] file and name")
 
     signatures = fm.get("signatures")
     if signatures is not None:
