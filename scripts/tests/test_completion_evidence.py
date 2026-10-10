@@ -33,6 +33,11 @@ def demo():
             raise AssertionError('jump permitted')
         assert (base / 'state.json').read_bytes() == original
         assert completion_checks(workspace, 'demo')[0]['status'] == 'fail'
+        before_pilot = fingerprint(workspace, 'demo')
+        pilot = base / 'pilot'
+        pilot.mkdir()
+        (pilot / 'attempts.jsonl').write_text('{"checkpoint":"launched"}\n')
+        assert fingerprint(workspace, 'demo') == before_pilot
         run_checks(workspace, 'demo')
         append(workspace, 'demo', {'kind': 'review', 'fingerprint': fingerprint(workspace, 'demo'), 'disposition': 'pass', 'blocking_findings': [], 'coder_session_id': 'a', 'verifier_session_id': 'b', 'coder_model_id': 'one', 'verifier_model_id': 'two'})
         assert completion_checks(workspace, 'demo')[0]['status'] == 'pass'

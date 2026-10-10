@@ -91,14 +91,16 @@ Do not assume Cursor-only tools exist; use fallbacks from this guide.
 
 **Resolver:** `./scripts/resolve-model.sh --platform <host> --tier <tier>`
 
-**Config:** `platform_profiles` (preferred) + flat `model_profiles` fallback + `model_routing.execution_policy` — [config.example.yaml](../../config.example.yaml)
+**Config:** per-host structured tiers configured with `adlc5 setup models` — [config.example.yaml](../../config.example.yaml)
+
+**Headless Codex runner (experimental):** configure model tiers with `./scripts/adlc5 setup models`, then start `./scripts/adlc5 run --feature NAME --host codex --workspace PATH` from a terminal. Workers use Codex CLI in `workspace-write` sandbox mode. The runner records each attempt and usage under `.adlc5/NAME/pilot/`; return code `10` means it is waiting for an answer, which can be recorded with `./scripts/adlc5 answer QUESTION_ID --text '...' --workspace PATH`. The benchmark gate in [headless-runner.md](../../docs/plans/headless-runner.md) remains open; this path is not yet qualified for cost or quality improvements.
 
 | Tier | When | Host action |
 |------|------|-------------|
 | **reasoning** | Design, code spec, verify, `@qa`, Discover council | Select highest-capability model in picker |
 | **balanced** | `@adlc5`, stories, integration, PR review | Default strong model |
-| **execution** | `@build-implementer`, `@adlc5-tdd` (alias: `implementation`) | **Inherit parent** when `execution_policy: inherit` |
-| **fast** | Not for Implement/verify or `@qa` | Optional routing only |
+| **execution** | `@build-implementer`, `@adlc5-tdd` (alias: `implementation`) | Select the configured execution tier |
+| **fast** | Deprecated alias for execution | Resolves to execution with a notice |
 
 | Platform | Apply tier |
 |----------|------------|
@@ -109,7 +111,7 @@ Do not assume Cursor-only tools exist; use fallbacks from this guide.
 | **Gemini / Antigravity** | [templates/gemini-models.md](../../templates/gemini-models.md) |
 | **Hermes Agent** | [templates/hermes-models.md](../../templates/hermes-models.md) |
 
-On first skill invoke, output the tier notice from the skill’s **Model recommendation** section (informational only). Never use `fast` for implement/verify or `@qa`.
+On first skill invoke, show the tier notice and its configured source. Legacy `model_profiles` and `execution_policy` settings are ignored with a migration notice.
 
 ## Working memory
 

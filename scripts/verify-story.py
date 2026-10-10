@@ -220,7 +220,16 @@ def check_tests_declared_exist(workspace: Path, fm: dict) -> dict:
             "status": "warn",
             "message": f"test name string not found in file (naming/decorator convention?): {', '.join(missing_names[:5])}",
         }
-    return {"id": "tests_declared_exist", "status": "pass", "message": f"{len(tests)} declared test(s) present"}
+    mapping_errors: list[str] = []
+    for criterion, named in (fm.get("acceptance_checks") or {}).items():
+        for value in named:
+            filename, test_name = value.split("::", 1)
+            path = workspace / filename
+            if not path.is_file() or test_name not in path.read_text(encoding="utf-8", errors="replace"):
+                mapping_errors.append(f"{criterion}: mapped check is missing: {value}")
+    if mapping_errors:
+        return {"id": "tests_declared_exist", "status": "fail", "message": "; ".join(mapping_errors[:5])}
+    return {"id": "tests_declared_exist", "status": "pass", "message": f"{len(tests)} declared test(s) and acceptance mappings present"}
 
 
 def _run_json_script(script: Path, args: list[str]) -> tuple[int, dict | None, str]:

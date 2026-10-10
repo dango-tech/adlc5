@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Supervised headless Codex runner:** `adlc5 run` drives the existing navigator with isolated Codex CLI workers, worktree isolation, attempt checkpoints, retry escalation, kill-switch and timeout supervision, kernel-ingested evidence, and per-attempt usage records. `adlc5 answer` resumes a pending human question; `adlc5 setup models` and `adlc5 config show` manage and inspect user-selected Codex tiers. MCP exposes run and answer operations.
+- **Acceptance traceability:** code specs map each acceptance criterion to declared named checks; spec lint and story verification reject missing or stale mappings.
+
+### Changed
+
+- Model IDs are user-selected rather than shipped as defaults; repo configuration is shared in the Git common directory and machine paths stay in `workspace.json`.
+- Benchmark results have not qualified the runner yet. M2 requires six runs for both the docs and real-code features; cross-host adapters and storage changes remain gated on that decision. See [the implementation record](docs/plans/headless-runner.md#8-milestones).
+
 ## [5.0.0] — Claude Code plugin and MCP/kernel path contracts
 
 Major version: the MCP transport framing changes (standard newline-delimited stdio replaces `Content-Length` framing) and kernel subprocesses now inherit the caller's cwd. Lifecycle state schema stays 3.0; existing `.adlc5/` state is unaffected. Skill versions are synchronized to 5.0.0.

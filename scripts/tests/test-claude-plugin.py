@@ -232,7 +232,7 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(replies), 6)  # the notification gets no reply
         self.assertEqual(by_id[1]["result"]["protocolVersion"], "2025-06-18")
         self.assertEqual(by_id[1]["result"]["serverInfo"]["version"], self.info["version"])
-        self.assertEqual(len(by_id[2]["result"]["tools"]), 13)
+        self.assertEqual(len(by_id[2]["result"]["tools"]), 15)
         call = json.loads(by_id[3]["result"]["content"][0]["text"])
         self.assertEqual(call["stdout"].strip(), f"adlc5 {self.info['version']}")
         cli = run([str(self.pkg / "bin/adlc5"), "state", "get", "--feature", "demo", "--workspace", str(repo)])
@@ -378,7 +378,7 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(Path(json.loads((repo / ".adlc5/workspace.json").read_text())["adlc5_root"]).resolve(), self.pkg.resolve())
         text = cfg.read_text()
-        self.assertIn(f"adlc5_root: {self.pkg}", text.replace("'", "").replace('"', ""))
+        self.assertNotIn("adlc5_root:", text, "runtime binding belongs in workspace.json, not shared model config")
         self.assertIn("my_custom_key: keep-me", text)
 
     def test_two_hosts_with_different_roots_do_not_rebind_each_other(self):

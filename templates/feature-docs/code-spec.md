@@ -30,6 +30,11 @@ tests:
 acceptance_criteria:
   - AC-1
   - AC-2
+acceptance_checks:
+  AC-1:
+    - path/to/test_file.py::test_happy_path
+  AC-2:
+    - path/to/test_file.py::test_edge_case
 signatures:
   - symbol: function_or_class_name
     kind: function

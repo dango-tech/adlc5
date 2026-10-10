@@ -1,30 +1,5 @@
-# Hermes Agent — Model tier mapping for ADLC5
+# Hermes Agent model tiers
 
-Map abstract tiers from [core/guides/model-matrix.md](../core/guides/model-matrix.md) via Hermes session model settings.
+Model choices are user-specific. Until a headless adapter is qualified, the in-agent lifecycle uses the current session model unless a host profile has been configured.
 
-**Resolve:** `./scripts/resolve-model.sh --platform hermes --tier <tier>`
-
-## Suggested mapping
-
-| Tier | Typical Hermes use |
-|------|--------------------|
-| **reasoning** | Highest-capability provider model |
-| **balanced** | Mid-cost default |
-| **execution** | Inherit parent when `execution_policy: inherit` |
-| **fast** | Not for implement/verify or `@qa` |
-
-Prefer a fresh Hermes session when switching personas (`fresh_session_per_persona`).
-
-## config.yaml example
-
-```yaml
-platform_profiles:
-  hermes:
-    reasoning: "anthropic/claude-opus-4"
-    balanced: "google/gemini-2.5-flash"
-    execution: "google/gemini-2.5-flash"
-    spawn:
-      fresh_session_per_persona: true
-```
-
-IDs change; keep them in gitignored `config.yaml`.
+The tier contract is `reasoning`, `balanced`, and `execution`; model name, effort, and context are separate settings. No model IDs ship with ADLC5.

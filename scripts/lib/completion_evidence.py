@@ -57,7 +57,7 @@ def fingerprint(workspace: Path, feature: str) -> str:
             continue
         if '.git' in parts or '__pycache__' in parts or name.endswith('.pyc'):
             continue
-        if name.startswith('.agent-cache/') or name.startswith('.adlc5/') and (name.endswith('/state.json') or '/memory/' in name or '/telemetry/' in name or '/evidence/' in name and not name.endswith('/evidence/checks.json')):
+        if name.startswith('.agent-cache/') or name.startswith(f'.adlc5/{feature}/pilot/') or name.startswith('.adlc5/') and (name.endswith('/state.json') or '/memory/' in name or '/telemetry/' in name or '/evidence/' in name and not name.endswith('/evidence/checks.json')):
             continue
         path = workspace / name
         h.update(name.encode())
@@ -151,9 +151,11 @@ def completion_checks(workspace, feature, policies=None, *, approval=True, revie
             independent = profile_name(policies) in ('standard', 'high_risk', 'full') or persona.get('fresh_subagent_per_persona')
             if review_record.get('disposition') != 'pass' or review_record.get('blocking_findings'):
                 failures.append('fresh passing diff review')
-            if independent and (not review_record.get('coder_session_id') or not review_record.get('verifier_session_id') or review_record.get('coder_session_id') == review_record.get('verifier_session_id')):
+            coder_sessions = review_record.get('coder_session_ids') or [review_record.get('coder_session_id')]
+            if independent and (not all(coder_sessions) or not review_record.get('verifier_session_id') or review_record.get('verifier_session_id') in coder_sessions):
                 failures.append('independent reviewer session')
-            if persona.get('verifier_different_model') and (not review_record.get('coder_model_id') or not review_record.get('verifier_model_id') or review_record.get('coder_model_id') == review_record.get('verifier_model_id')):
+            coder_models = review_record.get('coder_model_ids') or [review_record.get('coder_model_id')]
+            if persona.get('verifier_different_model') and (not all(coder_models) or not review_record.get('verifier_model_id') or review_record.get('verifier_model_id') in coder_models):
                 failures.append('different reviewer model')
         if approval and ((policies.get('autopilot') or {}).get('require_human_pr_approval') or policies.get('require_human_pr_approval')):
             latest_approval = next((r for r in reversed(fresh) if r.get('kind') == 'approval' and r.get('type') == 'pr_approval'), {})

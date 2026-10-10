@@ -16,9 +16,9 @@ are optional unless your consumer policy requires them.
 
 ```bash
 git clone https://github.com/dango-tech/adlc5.git && cd adlc5
-cp config.example.yaml config.yaml
 ./scripts/install.sh --platform cursor
-./scripts/verify-install.sh 
+./scripts/verify-install.sh
+./scripts/adlc5 setup models
 ```
 
 Workspace initialization keeps lifecycle exclusions in the target repository's
@@ -54,7 +54,7 @@ claude --plugin-dir /tmp/adlc5-dist/adlc5-plugin-<version>.zip    # session-loca
 
 In a session, skills appear as `adlc5:<name>` (for example `adlc5:adlc5-implement`; names come from SKILL.md frontmatter). The plugin puts `adlc5` and `adlc5-run` on the Bash PATH, so skill commands written as `./scripts/adlc5 ...` run as `adlc5 ... --workspace <repo>`; the SessionStart hook states this mapping once per session.
 
-**Set up a repository:** invoke the `adlc5-setup` skill (or `adlc5-run plugin-setup.sh --check`, then without `--check`). It checks Git, Bash 3.2+, Python 3.10+ and jq, shows the tracked additions (`AGENTS.md`, `.agents/*.yaml`, `docs/adr/`), initializes only what is missing, and never installs skills or Cursor agents. Repeat it after a plugin update: it repoints only a stale `adlc5_root` in `.adlc5/workspace.json` / `config.yaml`.
+**Set up a repository:** invoke the `adlc5-setup` skill (or `adlc5-run plugin-setup.sh --check`, then without `--check`). It checks Git, Bash 3.2+, Python 3.10+ and jq, shows the tracked additions (`AGENTS.md`, `.agents/*.yaml`, `docs/adr/`), initializes only what is missing, and never installs skills or Cursor agents. Repeat it after a plugin update: it repoints only a stale `adlc5_root` in `.adlc5/workspace.json`.
 
 **Update / uninstall:** replace or remove the package; consumer artifacts are untouched. Each host (Claude, Codex) uses its own package location; the recorded `adlc5_root` is only a hint for classic scripts, and hooks, MCP and `bin/` always use their own runtime.
 
@@ -99,10 +99,8 @@ installation until the new host setup has been verified.
 | Key | Purpose |
 |-----|---------|
 | `*_skills_target` / `rules_install_target` | Global install paths per host |
-| `model_routing` | `strategy`, `execution_policy` (`inherit` \| `explicit`) |
-| `platform_profiles` | Per-host tier → model IDs + spawn hints — [model-matrix.md](../../core/guides/model-matrix.md) |
-| `model_profiles` | Flat fallback when platform unknown (backward compatible) |
-| `council_models` | Discover council agent models (optional) |
+| `model_routing` | Preset strategy (`cost_optimized`, `balanced`, `quality_first`) |
+| `platform_profiles` | User-chosen per-host model, effort, and context by tier — [model-matrix.md](../../core/guides/model-matrix.md) |
 
 Do **not** point install targets at this clone's `skills/` — `install.sh` refuses self-symlinks.
 
@@ -146,7 +144,7 @@ ADLC5 installs at three different scopes. Knowing which layer owns an artifact a
 | Layer | Installed by | Scope | Contents |
 |-------|--------------|-------|----------|
 | 1. Machine-global | `install.sh` | Once per machine | Skills and rules **symlinked** out of this adlc5 clone into agent homes (`~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.gemini/skills`, `~/.hermes/skills/adlc5`, `~/.cursor/rules`). Nothing is copied — every project, worktree, and agent host reads the same clone. |
-| 2. Repository-local | `init-workspace.sh --project .` | Once per repository | `.adlc5/workspace.json`, `.adlc5/config.yaml`, `.adlc5/governance/`, `.adlc5/policies.yaml.example`, `AGENTS.md`, `.agents/`, `.agent-cache/`. Static for the repo. |
+| 2. Repository-local | `init-workspace.sh --project .` | Once per repository | `.adlc5/workspace.json`, shared config, `.adlc5/governance/`, `.adlc5/policies.yaml.example`, `AGENTS.md`, `.agents/`, `.agent-cache/`. |
 | 3. Per-feature | `init-feature.sh` / `@adlc5` | Once per feature | `.adlc5/{feature}/` — `state.json`, design docs, code specs, memory, usage ledger. |
 
 ### Why worktrees used to look like duplicate installs
@@ -160,7 +158,7 @@ state. Re-running `init-workspace.sh` there previously re-copied the whole
 layer-2 scaffold, so a repo with three worktrees carried three independent
 copies of files that are identical by definition.
 
-`init-workspace.sh` is now worktree-aware. In a **linked** worktree it materializes the static layer-2 artifacts once at `<git-common-dir>/adlc5-shared/` — the same directory from every worktree, since `git rev-parse --git-common-dir` resolves to the one real `.git` — and symlinks the worktree's `.adlc5/config.yaml`, `.adlc5/governance/`, and `.adlc5/policies.yaml.example` at it. The shared store lives under the common `.git` dir rather than inside the first worktree, so it survives that worktree being removed. Existing real files are never converted, the main worktree keeps ordinary files, and `--no-shared-worktree` opts out.
+`init-workspace.sh` is worktree-aware. Repository model settings live at `<git-common-dir>/adlc5-shared/config.yaml`; the master file is `~/.adlc5/config.yaml`. The legacy `.adlc5/config.yaml` remains readable during migration but is no longer the active store for new repositories.
 
 **Layer 3 stays worktree-local on purpose.** Parallel worktrees exist to run different features; sharing `.adlc5/{feature}/` between them would merge unrelated lifecycle state. If two worktrees do end up with the same feature name, `init-feature.sh` warns and names the other worktree rather than merging silently.
 
@@ -171,7 +169,8 @@ copies of files that are identical by definition.
 | Path | Purpose |
 |------|---------|
 | `.adlc5/workspace.json` | ADLC5-enabled project; records `adlc5_root` |
-| `.adlc5/config.yaml` | Project `model_profiles`, HITL defaults |
+| `~/.adlc5/config.yaml` | Master model tiers and defaults |
+| `<git-common-dir>/adlc5-shared/config.yaml` | Optional repository overrides shared by linked worktrees |
 | `.adlc5/governance/` | DoD, production-ready, verifier rules (symlinked to the repo's shared store in a linked worktree) |
 | `.agents/` | Tracked constitution (`architecture.yaml`, `boundaries.yaml`, `commands.yaml`, `schemas/`) plus `skills/` symlinks |
 | `AGENTS.md` | Agent guidance (if missing) |
