@@ -6,7 +6,7 @@ Cross-IDE parity for skills and scripts.
 |------|-------|
 | T1 | Unified state, v2 scripts, skill-registry.yaml |
 | T2 | AskQuestion / numbered fallbacks |
-| T3 | Host hooks (Cursor only) |
+| T3 | Host hooks (Cursor, Claude Code, and Codex) |
 
 ## Install
 
@@ -25,5 +25,7 @@ Cross-IDE parity for skills and scripts.
 | Hermes Agent | `/skill adlc5` or `hermes -s adlc5` |
 
 Skills install from `skills/` via `./scripts/install.sh`.
+
+The Codex headless runner is invoked from a terminal with `./scripts/adlc5 run --feature NAME --host codex --workspace PATH`; it supervises fresh workers and sends lifecycle changes through the kernel. Claude Code, Cursor, Gemini, OpenCode, Hermes, and Antigravity continue using the in-agent lifecycle until their unattended adapters are qualified.
 
 See [docs/CROSS-PLATFORM.md](../shared/docs/CROSS-PLATFORM.md).

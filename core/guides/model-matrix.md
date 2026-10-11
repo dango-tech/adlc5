@@ -2,7 +2,7 @@
 
 **Purpose:** Match cognitive load to model capability so lifecycle work does not under- or over-spend tokens on the wrong model.
 
-**Config:** Prefer `platform_profiles` per host; flat `model_profiles` remains the fallback. See [config.example.yaml](../../config.example.yaml).
+**Config:** Choose per-host tiers with `adlc5 setup models`; values are stored in master `~/.adlc5/config.yaml` and optional repository overrides in `<git-common-dir>/adlc5-shared/config.yaml`. Run `adlc5 config show --workspace PATH` to inspect the effective values and their source. See [config.example.yaml](../../config.example.yaml).
 
 **Resolver (authoritative for agents):**
 
@@ -21,40 +21,21 @@
 |------|----------|-----------------|
 | **reasoning** | Multi-doc synthesis, security, verification gaps, council, code-spec gates | Council: one model per member (Discover). Others: inherit parent unless noted |
 | **balanced** | Orchestration, structured writing, stories, integration, PR review | — |
-| **execution** | Bounded TDD in listed files (`implementation` is a legacy alias) | Default **`execution_policy: inherit`** — inherit parent model; never `fast` |
-| **fast** | Optional trivial routing only | **Not** for Delivery implement/verify or `@qa` |
+| **execution** | Bounded TDD in listed files (`implementation` is a legacy alias) | Headless Codex runner uses the configured execution model; setup is required unless `--accept-defaults` is explicit |
+| **fast** | Deprecated alias for execution | `resolve-model --tier fast` maps to execution with a notice |
 
-`execution_policy` in `model_routing`:
-
-| Policy | Behavior |
-|--------|----------|
-| **inherit** (default) | `execution` / `implementation` resolve like today — typically `inherit` parent session |
-| **explicit** | Use concrete `platform_profiles.<host>.execution` IDs for build spawns |
-
-**Per-feature override:** `.adlc5/{feature}/policies.yaml` may set `model_routing.execution_policy` too — it wins over the `config.yaml` global for that feature only (`resolve-model.sh --workspace . --feature NAME` picks it up; the result's `execution_policy_source` says `"feature_policy"` when it applied). This is how a cost-conscious profile opts a feature into the cheap execution tier without changing the workspace-wide default: [`templates/policies-tiny.yaml.example`](../../templates/policies-tiny.yaml.example) and [`templates/policies-standard.yaml.example`](../../templates/policies-standard.yaml.example) ship with `explicit`; [`templates/policies-high-risk.yaml.example`](../../templates/policies-high-risk.yaml.example) ships with `inherit` so the Coder session's own (reasoning-tier, per `persona_mode`) model stays on `implement-1-build`.
+The old `execution_policy` and `model_profiles` keys are ignored with a notice. Select each tier explicitly; setup never invents model IDs.
 
 Resolve tier → concrete model:
 
 ```yaml
 model_routing:
   strategy: cost_optimized
-  execution_policy: inherit
-
-model_profiles:          # fallback when platform unknown
-  reasoning: "…"
-  balanced: "…"
-  implementation: "inherit"
-  execution: "inherit"
-  fast: "…"
-
-platform_profiles:       # preferred when --platform is set
-  cursor:
-    reasoning: "auto"
-    balanced: "composer-2"
-    execution: "composer-2"
-    fast: "composer-2-fast"
-    spawn:
-      task_model_param: true
+platform_profiles:
+  codex:
+    reasoning: { model: "<chosen-model>", effort: high }
+    balanced: { model: "<chosen-model>", effort: medium }
+    execution: { model: "<chosen-model>", effort: low }
 ```
 
 ---
@@ -71,7 +52,7 @@ platform_profiles:       # preferred when --platform is set
 | `@adlc5-plan` | Algorithm review (scale NFRs) | reasoning | optional autoresearch |
 | `@adlc5-tasks` | User stories | balanced | — |
 | `@adlc5-tasks` | TDD code specs | reasoning | — |
-| `@adlc5-implement` | `implement-1-build` | execution | `@build-implementer`: inherit (unless `execution_policy: explicit`) |
+| `@adlc5-implement` | `implement-1-build` | execution | configured execution tier |
 | `@assure-verifier` | `implement-2-verify` | reasoning | fresh verifier for high-risk work |
 | `@adlc5-implement` | Integrate / PR orchestration | balanced | — |
 | `@qa` | Security / clearance | reasoning | scan subagents: inherit |
@@ -87,9 +68,7 @@ On **first invocation** of each orchestrator/stage skill, output (replace `{skil
 ```text
 Recommended model tier: {tier} ({reasoning|balanced|execution}).
 Resolve with: ./scripts/resolve-model.sh --tier {tier} [--platform <host>]
-See core/guides/model-matrix.md and config platform_profiles / model_profiles.
-Switch your host model picker before continuing if you are on a fast/light model for this work.
-(Subagents for execution/verification inherit your current model when execution_policy: inherit — do not set model: "fast".)
+See core/guides/model-matrix.md and configure tiers with `adlc5 setup models`.
 ```
 
 ### Tier by skill (quick reference)
@@ -130,10 +109,10 @@ changes; `usage summary --format markdown` flags a snapshot over 180 days old.
 
 | Context | Rule |
 |---------|------|
-| `@build-implementer`, `@assure-verifier` | **Omit** `model` parameter when `execution_policy: inherit` |
+| `@build-implementer`, `@assure-verifier` | Use the configured execution or reasoning tier |
 | Discover council | Use platform-specific parallel agents with distinct models |
 | `@qa` scan subagents | Inherit parent |
-| Never | `model: "fast"` for implement, verify, code-spec, or security work |
+| Never | Treat a legacy model ID as a configured tier |
 
 `platform_profiles.<host>.spawn` hints (`task_model_param`, `spawn_agent_model`, `fresh_session_per_persona`) are returned by `resolve-model.sh` and included in pilot spawn JSON as `model_spawn_policy`.
 

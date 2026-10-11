@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 VALID_TIERS = ("reasoning", "balanced", "execution", "implementation", "fast")
-TIER_ALIAS = {"implementation": "execution"}
+TIER_ALIAS = {"implementation": "execution", "fast": "execution"}
 PLATFORMS = ("cursor", "claude", "codex", "opencode", "hermes", "gemini", "antigravity")
 
 
@@ -99,6 +99,11 @@ def load_yaml_file(path: Path) -> dict:
         return {}
     text = path.read_text(encoding="utf-8")
     try:
+        loaded = json.loads(text)
+        return loaded if isinstance(loaded, dict) else {}
+    except json.JSONDecodeError:
+        pass
+    try:
         import yaml  # type: ignore
 
         loaded = yaml.safe_load(text)
@@ -158,13 +163,10 @@ def detect_platform(explicit: str | None = None) -> str:
 
 def merge_model_config(root: Path, workspace: Path | None) -> dict:
     cfg: dict[str, Any] = {}
-    example = root / "config.example.yaml"
-    user = root / "config.yaml"
-    cfg = _merge_dict(cfg, load_yaml_file(example))
-    cfg = _merge_dict(cfg, load_yaml_file(user))
-    if workspace is not None:
-        ws_cfg = workspace / ".adlc5" / "config.yaml"
-        cfg = _merge_dict(cfg, load_yaml_file(ws_cfg))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from lib.config_layers import config_paths, merge
+    for _layer, path in config_paths(workspace):
+        cfg = merge(cfg, load_yaml_file(path))
     return cfg
 
 
@@ -208,8 +210,8 @@ def resolve_model(
     step: str | None = None,
 ) -> dict[str, Any]:
     canonical = normalize_tier(tier)
-    plat = detect_platform(platform)
     cfg = merge_model_config(root, workspace)
+    plat = detect_platform(platform or (cfg.get("default_host") if isinstance(cfg.get("default_host"), str) else "unknown"))
     version = read_version(root)
 
     routing = cfg.get("model_routing") or {}
@@ -217,14 +219,6 @@ def resolve_model(
         routing = {}
 
     knobs = _feature_policy_knobs(workspace, feature)
-    execution_policy_source = "config"
-    raw_execution_policy = routing.get("execution_policy")
-    if knobs.get("execution_policy"):
-        raw_execution_policy = knobs["execution_policy"]
-        execution_policy_source = "feature_policy"
-    execution_policy = str(raw_execution_policy or "inherit").strip().lower()
-    if execution_policy not in ("inherit", "explicit"):
-        execution_policy = "inherit"
     strategy = str(routing.get("strategy") or "balanced").strip().lower()
 
     profiles = cfg.get("platform_profiles") or {}
@@ -247,71 +241,51 @@ def resolve_model(
                     return str(container[key]).strip(), f"{label}.{key}"
         return None, "none"
 
-    # execution_policy inherit: prefer legacy flat implementation/execution (usually "inherit")
-    # execution_policy explicit: prefer platform_profiles concrete IDs
-    if canonical == "execution" and execution_policy == "inherit":
-        model_id, source = _lookup(
-            ("implementation", "execution"),
-            [("model_profiles", flat), (f"platform_profiles.{plat}", plat_cfg)],
-        )
-        if model_id is None:
-            model_id, source = "inherit", "execution_policy.inherit"
-        else:
-            source = f"{source}+execution_policy.inherit"
-    elif canonical == "execution" and execution_policy == "explicit":
-        model_id, source = _lookup(
-            ("execution", "implementation"),
-            [(f"platform_profiles.{plat}", plat_cfg), ("model_profiles", flat)],
-        )
-        if model_id is None or model_id.lower() == "inherit":
-            bal, bal_src = _lookup(("balanced",), [(f"platform_profiles.{plat}", plat_cfg), ("model_profiles", flat)])
-            if bal and bal.lower() != "inherit":
-                model_id, source = bal, f"{bal_src}+execution_policy.explicit"
-            elif model_id is None:
-                model_id, source = "", "default+execution_policy.explicit"
-            else:
-                source = f"{source}+execution_policy.explicit"
-        else:
-            source = f"{source}+execution_policy.explicit"
+    model_id, source = None, "built-in"
+    # Only structured, user-chosen settings are executable. Shipped examples
+    # and legacy model IDs never become runtime defaults.
+    tier_config = plat_cfg.get(canonical)
+    effort = context = None
+    if isinstance(tier_config, dict):
+        model_id = str(tier_config.get("model") or "host default").strip()
+        effort = str(tier_config.get("effort") or "").strip() or None
+        context = tier_config.get("context")
+        source = f"platform_profiles.{plat}.{canonical}"
     else:
-        model_id, source = _lookup(
-            (canonical, "implementation" if canonical == "execution" else canonical),
-            [(f"platform_profiles.{plat}", plat_cfg), ("model_profiles", flat)],
-        )
-        if model_id is None:
-            model_id, source = ("inherit" if canonical == "execution" else ""), "default"
-
-    model_id = str(model_id).strip() if model_id is not None else ""
+        model_id, source = "host default", "built-in"
+    legacy_settings = bool(flat) or "execution_policy" in routing or bool(knobs.get("execution_policy"))
 
     fresh_session = bool(spawn.get("fresh_session_per_persona")) or bool(knobs.get("fresh_session"))
+    global_persona = cfg.get("persona_mode") if isinstance(cfg.get("persona_mode"), dict) else {}
 
     notice_parts = [
         f"Recommended model tier: {canonical} (alias ok: implementation→execution).",
         f"Resolved via ./scripts/resolve-model.sh → {model_id or '(empty)'}.",
-        "See core/guides/model-matrix.md and config platform_profiles / model_profiles.",
-        "Never use fast for implement/verify or @qa.",
+        "See core/guides/model-matrix.md and config platform_profiles.",
     ]
+    if legacy_settings:
+        notice_parts.append("Legacy model settings are ignored; run adlc5 setup models to choose current tiers.")
+    if tier == "fast":
+        notice_parts.append("The fast tier was removed; execution is used.")
     if plat == "unknown":
-        notice_parts.append("Platform undetected — used flat model_profiles fallback.")
+        notice_parts.append("No host is configured; use the current session model.")
     if step:
         notice_parts.append(f"Step context: {step}.")
-    if execution_policy_source == "feature_policy":
-        notice_parts.append(f"execution_policy={execution_policy} from feature policies.yaml (overrides config.yaml).")
 
     return {
         "tier": canonical,
         "requested_tier": tier,
         "model_id": model_id,
+        "effort": effort,
+        "context": context,
         "spawn_policy": spawn,
         "fresh_session": fresh_session,
         "platform": plat,
         "notice": " ".join(notice_parts),
         "version": version,
-        "execution_policy": execution_policy,
-        "execution_policy_source": execution_policy_source,
         "strategy": strategy,
         "source": source,
-        "verifier_different_model": bool(knobs.get("verifier_different_model")),
+        "verifier_different_model": bool(knobs.get("verifier_different_model") or global_persona.get("verifier_different_model")),
     }
 
 

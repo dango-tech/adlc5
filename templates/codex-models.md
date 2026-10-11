@@ -1,30 +1,5 @@
-# Codex — Model tier mapping for ADLC5
+# Codex model tiers
 
-Map abstract tiers from [core/guides/model-matrix.md](../core/guides/model-matrix.md) via `~/.codex/config.toml` and `spawn_agent` model hints.
+Choose all values with `adlc5 setup models`; do not copy a model ID from documentation. The Codex runner uses the model and effort chosen for each tier and uses the host's current model when the tier says `host default`.
 
-**Resolve:** `./scripts/resolve-model.sh --platform codex --tier <tier>`
-
-## Suggested mapping
-
-| Tier | Typical Codex use |
-|------|---------------------|
-| **reasoning** | High-reasoning Codex / GPT thinking for design and verify |
-| **balanced** | Default Codex model for orchestration |
-| **execution** | Inherit parent when `execution_policy: inherit` |
-| **fast** | Not for implement/verify or `@qa` |
-
-`platform_profiles.codex.spawn.spawn_agent_model: true` means council/spawn may pass an explicit model when policy allows.
-
-## config.yaml example
-
-```yaml
-platform_profiles:
-  codex:
-    reasoning: "gpt-5.3-codex[reasoning=extra-high]"
-    balanced: "gpt-5.3-codex"
-    execution: "gpt-5.3-codex[fast=true]"
-    spawn:
-      spawn_agent_model: true
-```
-
-IDs change; keep them in gitignored `config.yaml`.
+The tier contract is `reasoning`, `balanced`, and `execution`. Effort is a separate value (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`).

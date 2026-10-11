@@ -1,54 +1,14 @@
-# Project-local ADLC5 config (consumer workspace)
-# Copy from adlc5 repo: config.example.yaml for full key reference
-
-# ADLC5 distribution root (absolute path to adlc5 git clone)
-adlc5_root: /path/to/adlc5
-
+# Repository overrides live in the Git common directory at adlc5-shared/config.yaml.
+# New choices are made with `adlc5 setup models --repo`.
 git_branch_prefix: feat
 
-# Model routing — see core/guides/model-matrix.md
-# Resolve: /path/to/adlc5/scripts/resolve-model.sh --platform <host> --tier <tier> --workspace .
 model_routing:
-  strategy: cost_optimized   # balanced | cost_optimized | quality_first
-  execution_policy: inherit  # inherit | explicit — inherit preserves parent-model for build
+  strategy: cost_optimized
 
-# Flat fallback (used when platform undetected)
-model_profiles:
-  reasoning: "claude-4.6-opus-high"
-  balanced: "composer-2"
-  implementation: "inherit"   # legacy alias of execution
-  execution: "inherit"
-  fast: "composer-2-fast"
-
-# Optional: override per-host IDs (uncomment and adjust)
-# platform_profiles:
-#   cursor:
-#     reasoning: "auto"
-#     balanced: "composer-2"
-#     execution: "composer-2"
-#     fast: "composer-2-fast"
-#     spawn:
-#       task_model_param: true
-
-cursor_agents_install_target: ~/.cursor/agents
-council_models:
-  claude: "claude-opus-4-7[thinking=true,context=300k,effort=xhigh,fast=false]"
-  gpt: "gpt-5.3-codex[reasoning=extra-high,fast=true]"
-  gemini: "gemini-3.5-flash"
-
-# Defaults for new features (see interaction-modes.md)
 defaults:
   interaction_mode: hitl
   execution_mode: parallel
   clarity_threshold: 80
+  summary: brief
 
-# Optional hints when stack is detected (registry is authoritative)
-# scaffold_preferences:
-#   google_adk: agents-cli
-
-# Team-shared project wiki (see shared/docs/project-wiki.md)
-# project_wiki:
-#   enabled: true
-#   auto: true              # profile-repo.py decides init/ingest/skip
-#   ingest_on: medium        # small | medium | large — minimum size tier to ingest
-#   root: wiki
+# Optional project wiki and scaffold preferences may be added by the repository owner.

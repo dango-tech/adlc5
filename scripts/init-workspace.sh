@@ -72,7 +72,7 @@ ADLC5 installs in three layers — this script is layer 2:
                       (skipped if the project already has one at any conventional path)
   --no-council-agents  Skip the Cursor discover-council agents (.cursor/agents/); use for hosts
                     that are not Cursor (default: installed, for classic compatibility)
-  --refresh-runtime Repoint a stale ADLC5-owned adlc5_root (workspace.json, config.yaml) at this
+  --refresh-runtime Repoint a stale ADLC5-owned adlc5_root in workspace.json at this
                     root after a package cache/version move. Touches nothing else; keeps a valid
                     source-clone binding. Safe to repeat (no --force needed)
   --force           Overwrite .adlc5/workspace.json and refresh skill links
@@ -88,7 +88,7 @@ Then in your app repo:
   /path/to/adlc5/scripts/init-workspace.sh --project .
 
 Creates:
-  .adlc5/workspace.json, .adlc5/config.yaml
+  .adlc5/workspace.json
   .adlc5/governance/ (production-ready, DoD, autopilot picker, verifier rules)
   .adlc5/policies.yaml.example
     In the main worktree these are real files. In a linked worktree they are
@@ -330,8 +330,29 @@ EOF
   fi
 fi
 
-CONFIG_STORE="$(artifact_store_path config.yaml "$CONFIG_YAML")"
-seed_shared_artifact config.yaml "$CONFIG_STORE" || true
+CONFIG_STORE="$CONFIG_YAML"
+CONFIG_LINK=0
+CONFIG_SHARED_ROOT=""
+if [[ "$SHARE_STATIC" -eq 1 ]]; then
+  CONFIG_SHARED_ROOT="$SHARED_ROOT"
+fi
+if [[ -n "$CONFIG_SHARED_ROOT" ]]; then
+  CONFIG_STORE="${CONFIG_SHARED_ROOT}/config.yaml"
+  CONFIG_SOURCE="$CONFIG_YAML"
+  if [[ ! -f "$CONFIG_SOURCE" || -L "$CONFIG_SOURCE" ]]; then
+    CONFIG_SOURCE="${MAIN_WORKTREE}/.adlc5/config.yaml"
+  fi
+  if [[ ! -e "$CONFIG_STORE" && -f "$CONFIG_SOURCE" && ! -L "$CONFIG_SOURCE" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "  [dry-run] adopt legacy ${CONFIG_SOURCE} -> ${CONFIG_STORE}"
+    else
+      mkdir -p "$CONFIG_SHARED_ROOT"
+      cp "$CONFIG_SOURCE" "$CONFIG_STORE"
+      echo "Adopted existing config into shared repository settings: ${CONFIG_STORE}"
+    fi
+  fi
+  CONFIG_LINK=1
+fi
 if [[ ! -f "$CONFIG_STORE" ]]; then
   if [[ -f "$TEMPLATE_CONFIG" ]]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -339,13 +360,25 @@ if [[ ! -f "$CONFIG_STORE" ]]; then
     else
       mkdir -p "$(dirname "$CONFIG_STORE")"
       sed "s|adlc5_root: /path/to/adlc5|adlc5_root: ${ADLC5_ROOT}|" "$TEMPLATE_CONFIG" >"$CONFIG_STORE"
-      echo "Created ${CONFIG_STORE} — edit model_profiles"
+      echo "Created ${CONFIG_STORE} — run adlc5 setup models --repo"
     fi
   fi
 else
-  echo "Config exists: ${CONFIG_STORE}"
+  if [[ "$CONFIG_LINK" -eq 1 ]]; then
+    echo "  OK (shared across worktrees): .adlc5/config.yaml"
+  else
+    echo "Config exists: ${CONFIG_STORE}"
+  fi
 fi
-link_shared_artifact config.yaml "$CONFIG_STORE" "$CONFIG_YAML"
+if [[ "$CONFIG_LINK" -eq 1 && "$DRY_RUN" -ne 1 ]]; then
+  if [[ -L "$CONFIG_YAML" && "$(readlink "$CONFIG_YAML" 2>/dev/null)" == "$CONFIG_STORE" ]]; then
+    :
+  elif [[ -e "$CONFIG_YAML" && ! -L "$CONFIG_YAML" ]]; then
+    echo "Preserving legacy worktree config: ${CONFIG_YAML}" >&2
+  else
+    ln -sfn "$CONFIG_STORE" "$CONFIG_YAML"
+  fi
+fi
 
 # AGENTS.md
 AGENTS_MD="${PROJECT}/AGENTS.md"
@@ -553,10 +586,10 @@ echo
 echo "Next steps:"
 echo "  1. (once per machine) cd ${ADLC5_ROOT} && ./scripts/install.sh --rules-only"
 if [[ "$SHARE_STATIC" -eq 1 ]]; then
-  echo "  2. Edit ${CONFIG_STORE} — set model_profiles"
-  echo "     (shared by every worktree of this repo; .adlc5/config.yaml links to it)"
+  echo "  2. ${ADLC5_ROOT}/scripts/adlc5 setup models --repo --workspace ${PROJECT}"
+  echo "     (repository settings live outside worktrees in the shared Git directory)"
 else
-  echo "  2. Edit ${CONFIG_YAML} — set model_profiles"
+  echo "  2. ${ADLC5_ROOT}/scripts/adlc5 setup models --repo --workspace ${PROJECT}"
 fi
 echo "  3. ${ADLC5_ROOT}/scripts/adlc5 repo-spec reconcile --workspace ${PROJECT}"
 echo "     Review .agents/{architecture,boundaries,commands}.yaml; keep .agents/skills/;"

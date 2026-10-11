@@ -38,11 +38,14 @@ PILOT_META="${FEATURE_DIR}/pilot/meta.json"
 mkdir -p "${FEATURE_DIR}/pilot"
 if [[ ! -f "$PILOT_META" ]]; then
   RUN_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
-  jq -nc --arg run_id "$RUN_ID" \
-    '{run_id:$run_id,iteration_count:0,consecutive_failure_counter:0}' >"$PILOT_META"
+  jq -nc --arg run_id "$RUN_ID" --arg started "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{run_id:$run_id,started_at:$started,iteration_count:0,consecutive_failure_counter:0}' >"$PILOT_META"
 elif ! jq -e '.run_id and (.run_id | length > 0)' "$PILOT_META" >/dev/null 2>&1; then
   RUN_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
-  jq --arg run_id "$RUN_ID" '.run_id=$run_id' "$PILOT_META" >"${PILOT_META}.tmp"
+  jq --arg run_id "$RUN_ID" --arg started "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '.run_id=$run_id | .started_at=(.started_at // $started)' "$PILOT_META" >"${PILOT_META}.tmp"
+  mv "${PILOT_META}.tmp" "$PILOT_META"
+elif ! jq -e '.started_at and (.started_at | length > 0)' "$PILOT_META" >/dev/null 2>&1; then
+  jq --arg started "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '.started_at=$started' "$PILOT_META" >"${PILOT_META}.tmp"
   mv "${PILOT_META}.tmp" "$PILOT_META"
 fi
 
@@ -156,17 +159,19 @@ resolve_model_json() {
   local ec=$?
   set -e
   if [[ "$ec" -ne 0 || -z "$out" ]]; then
-    echo '{}'
-    return 0
+    echo "Model resolution failed for tier=${tier} step=${step}: ${out:-no result}" >&2
+    return 1
   fi
   echo "$out" | jq -c '{
     recommended_model: .model_id,
+    model_effort: .effort,
+    model_context: .context,
     model_tier_resolved: .tier,
     model_platform: .platform,
     model_notice: .notice,
     model_spawn_policy: .spawn_policy,
     model_version: .version,
-    execution_policy: .execution_policy
+    config_source: .source
   }' 2>/dev/null || echo '{}'
 }
 

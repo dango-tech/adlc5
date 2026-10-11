@@ -562,11 +562,15 @@ WT_LINKED="${TMP}/wt-feat"
   || fail "main worktree should keep a real .adlc5/governance/"
 pass "init-workspace keeps real files in the main worktree"
 
+echo 'repo_config_marker: preserved' >>"${WT_REPO}/.adlc5/config.yaml"
+
 ./scripts/init-workspace.sh --project "$WT_LINKED" --no-skills >/tmp/iw-wt-linked.txt
 grep -q "Linked git worktree detected" /tmp/iw-wt-linked.txt \
   || fail "init-workspace should report linked-worktree sharing"
 WT_SHARED="$(cd "${WT_REPO}/.git" && pwd -P)/adlc5-shared"
 [[ -d "$WT_SHARED" ]] || fail "shared store should exist under the common .git dir"
+grep -q 'repo_config_marker: preserved' "$WT_SHARED/config.yaml" \
+  || fail "linked worktree should adopt the existing main-worktree config into shared settings"
 for artifact in config.yaml governance policies.yaml.example; do
   [[ -L "${WT_LINKED}/.adlc5/${artifact}" ]] \
     || fail "linked worktree .adlc5/${artifact} should be a symlink, not a copy"
@@ -1519,10 +1523,12 @@ files_to_create:
   - src/a.py
 files_to_modify: []
 tests:
-  - file: tests/test_a.py
-    name: test_a
+  - file: app/a.py
+    name: add
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [tests/test_a.py::test_a]
 ---
 # code spec
 EOF
@@ -1543,6 +1549,8 @@ tests:
     name: test_${sid_lower}
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [tests/test_${sid_lower}.py::test_${sid_lower}]
 ---
 # code spec
 EOF
@@ -1855,9 +1863,7 @@ pass "hermes install dry-run"
 pass "Antigravity metadata version coherence"
 
 # resolve-model: alias + platform profile + version
-# Isolated against config.example.yaml only (no repo-root config.yaml) so this
-# contract test verifies the shipped default, independent of the maintainer's
-# own gitignored model routing preferences in config.yaml.
+# Isolated from user configuration; the example must not affect runtime routing.
 chmod +x ./scripts/resolve-model.sh ./scripts/update-adlc5.sh
 RESOLVE_DEFAULT_ROOT="${TMP}/resolve-model-default-root"
 mkdir -p "${RESOLVE_DEFAULT_ROOT}/core"
@@ -1867,9 +1873,8 @@ python3 ./scripts/lib/model_routing.py --root "$RESOLVE_DEFAULT_ROOT" --platform
   >/tmp/resolve-model.json
 jq -e '.tier == "execution" and .platform == "cursor" and (.version|length)>0' /tmp/resolve-model.json >/dev/null \
   || fail "resolve-model implementation→execution contract"
-# default execution_policy inherit → model_id inherit from flat model_profiles
-jq -e '.model_id == "inherit" and .execution_policy == "inherit"' /tmp/resolve-model.json >/dev/null \
-  || fail "resolve-model inherit policy expected inherit model_id"
+jq -e '.model_id == "host default"' /tmp/resolve-model.json >/dev/null \
+  || fail "resolve-model should use host default without setup"
 # bad tier fails
 set +e
 ./scripts/resolve-model.sh --platform cursor --tier nope >/dev/null 2>&1
@@ -1975,6 +1980,8 @@ tests:
   - file: tests/test_item.py
     name: test_create
 acceptance_criteria: [AC-1]
+acceptance_checks:
+  AC-1: [tests/test_item.py::test_create]
 ---
 # Implementation
 Create an item and preserve existing behavior.
@@ -2554,7 +2561,7 @@ pass "skill doc links resolve"
 
 # --- Cost-optimization levers ---------------------------------------------
 
-# Lever 1: per-feature execution_policy override (model_routing.py / resolve-model.sh)
+# Legacy tier keys are ignored; structured setup values are authoritative.
 LEVER1_WS=$(mktemp -d)
 LEVER1_FEATURE="lever1-feature"
 mkdir -p "${LEVER1_WS}/.adlc5/${LEVER1_FEATURE}"
@@ -2565,15 +2572,11 @@ model_routing:
   execution_policy: explicit
 EOF
 
-GLOBAL_EXEC_JSON=$(./scripts/resolve-model.sh --tier execution --platform claude)
-jq -e '.execution_policy == "inherit" and .execution_policy_source == "config"' <<<"$GLOBAL_EXEC_JSON" >/dev/null \
-  || fail "execution tier should default to inherit/config without a feature override"
-
 FEATURE_EXEC_JSON=$(./scripts/resolve-model.sh --tier execution --platform claude --workspace "$LEVER1_WS" --feature "$LEVER1_FEATURE")
-jq -e '.execution_policy == "explicit" and .execution_policy_source == "feature_policy" and .model_id == "claude-haiku-4-5"' \
+jq -e '.model_id == "host default" and (.notice|contains("Legacy model settings are ignored"))' \
   <<<"$FEATURE_EXEC_JSON" >/dev/null \
-  || fail "feature policies.yaml model_routing.execution_policy should override config default"
-pass "resolve-model.sh: feature-level execution_policy override"
+  || fail "removed execution_policy setting should be ignored with a notice"
+pass "resolve-model.sh: removed model settings fail over to host default with notice"
 rm -rf "$LEVER1_WS"
 
 # Lever 2: spec-lint.py — frontmatter contract
@@ -2591,6 +2594,8 @@ tests:
     name: test_it_works
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [tests/test_thing.py::test_it_works]
 ---
 # US-001
 EOF
@@ -2599,6 +2604,17 @@ set +e
 LEVER2_GOOD_EC=$?
 set -e
 [[ "$LEVER2_GOOD_EC" -eq 0 ]] || fail "spec-lint should pass a well-formed code spec, got exit $LEVER2_GOOD_EC"
+
+sed -i.bak 's#tests/test_thing.py::test_it_works#tests/test_missing.py::test_missing#' \
+  "${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/tasks/code-spec/US-001.md"
+set +e
+LEVER2_MAP_OUT=$(./scripts/tasks/spec-lint.py --feature "$LEVER2_FEATURE" --workspace "$LEVER2_WS")
+LEVER2_MAP_EC=$?
+set -e
+[[ "$LEVER2_MAP_EC" -eq 1 ]] || fail "spec-lint should reject an unmapped/nonexistent named check"
+grep -q 'acceptance check' <<<"$LEVER2_MAP_OUT" || fail "spec-lint should explain the invalid acceptance mapping"
+mv "${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/tasks/code-spec/US-001.md.bak" \
+   "${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/tasks/code-spec/US-001.md"
 
 cat >"${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/tasks/code-spec/US-002.md" <<'EOF'
 # US-002 legacy spec, no frontmatter
@@ -2653,6 +2669,8 @@ tests:
     name: add
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [app/thing.py::add]
 ---
 # US-001
 EOF
@@ -2797,6 +2815,8 @@ tests:
     name: test_a
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [tests/test_a.py::test_a]
 ---
 # US-A
 EOF
@@ -2817,10 +2837,12 @@ files_to_create:
   - src/b.py
 files_to_modify: []
 tests:
-  - file: tests/test_b.py
-    name: test_b
+  - file: app/b.py
+    name: sub
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [app/b.py::sub]
 ---
 # US-B
 EOF
@@ -2856,6 +2878,8 @@ tests:
     name: add
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [app/a.py::add]
 ---
 # US-A
 EOF
@@ -2870,6 +2894,8 @@ tests:
     name: sub
 acceptance_criteria:
   - AC-1
+acceptance_checks:
+  AC-1: [app/b.py::sub]
 ---
 # US-B
 EOF
@@ -2911,7 +2937,7 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
-for test in test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py; do
+for test in test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done
