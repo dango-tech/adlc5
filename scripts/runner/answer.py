@@ -36,12 +36,32 @@ def main() -> int:
         return 2
     item["answer"] = text
     item["answered_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    added = []
+    if item.get("denied_actions") and text.lower() in ("allow", "yes", "approve"):
+        for denial in item["denied_actions"]:
+            if not isinstance(denial, dict) or denial.get("tool_name") != "Bash":
+                continue
+            command = (denial.get("tool_input") or {}).get("command")
+            if isinstance(command, str) and command.strip():
+                added.append(command)
+        if added:
+            allowlist = path.parent / "approved-commands.json"
+            try:
+                current = json.loads(allowlist.read_text(encoding="utf-8")) if allowlist.is_file() else []
+            except json.JSONDecodeError as exc:
+                print(json.dumps({"status": "error", "error": f"invalid feature command allowlist: {exc}"}), file=sys.stderr)
+                return 2
+            if not isinstance(current, list) or any(not isinstance(command, str) for command in current):
+                print(json.dumps({"status": "error", "error": "invalid feature command allowlist"}), file=sys.stderr)
+                return 2
+            allowlist.write_text(json.dumps(sorted(set(current + added)), indent=2) + "\n", encoding="utf-8")
     path.write_text(json.dumps(item, indent=2) + "\n", encoding="utf-8")
     journal = path.parent / "answers.jsonl"
     with journal.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps({"id": args.question_id, "step": item.get("step"), "answer": text,
                                 "answered_at": item["answered_at"]}, sort_keys=True) + "\n")
-    print(json.dumps({"status": "ok", "question_id": args.question_id, "feature": path.parents[1].name}))
+    print(json.dumps({"status": "ok", "question_id": args.question_id, "feature": path.parents[1].name,
+                      "approved_commands_added": len(added)}))
     return 0
 
 

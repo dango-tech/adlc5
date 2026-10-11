@@ -8,10 +8,28 @@ backends:
     watch: scripts/runner/watch.sh
 
   codex-local:
-    description: "Codex CLI headless worker runner with workspace-write confinement"
+    description: "Supervised local runner; Codex workers use workspace-write confinement"
     dispatch: scripts/runner/run.py
     host: codex
-    mode: unattended
+    mode: confined
+
+  claude-local:
+    description: "Claude Code headless runner with repo command allowlist and host permission denials"
+    dispatch: scripts/runner/run.py
+    host: claude
+    mode: allowlist
+
+  cursor-local:
+    description: "Cursor Agent headless runner with sandbox confinement; --force is forbidden"
+    dispatch: scripts/runner/run.py
+    host: cursor
+    mode: confined
+
+  hermes-local:
+    description: "Hermes Agent attended runner; unattended execution is allowed only inside a declared container"
+    dispatch: scripts/runner/run.py
+    host: hermes
+    mode: attended
 
   cursor-cloud:
     description: "Cursor Cloud Agents (stub — wire SDK when available)"
@@ -26,5 +44,6 @@ backends:
 contract: |
   Runners MUST invoke scripts/pilot-autopilot.sh and scripts/check-gates.py —
   no duplicate gate logic in runner adapters. The local backend remains a
-  navigator-only interface; codex-local invokes the supervised headless Codex
-  adapter and routes every lifecycle change through scripts/adlc5.
+  navigator-only interface; local host adapters invoke supervised workers and
+  route every lifecycle change through scripts/adlc5. Hermes is not confined
+  by its own CLI and must never run unattended outside a container boundary.

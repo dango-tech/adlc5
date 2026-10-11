@@ -26,6 +26,6 @@ Cross-IDE parity for skills and scripts.
 
 Skills install from `skills/` via `./scripts/install.sh`.
 
-The Codex headless runner is invoked from a terminal with `./scripts/adlc5 run --feature NAME --host codex --workspace PATH`; it supervises fresh workers and sends lifecycle changes through the kernel. Claude Code, Cursor, Gemini, OpenCode, Hermes, and Antigravity continue using the in-agent lifecycle until their unattended adapters are qualified.
+The supervised runner supports Codex (confined), Claude Code (allowlist), Cursor (confined), and Hermes (attended; unattended only inside a declared container). Start it with `./scripts/adlc5 run --feature NAME --host HOST --workspace PATH`. Claude and Cursor also support unattended workers; Cursor never receives `--force`. Gemini, OpenCode, and Antigravity keep using the in-agent lifecycle. Comparative benchmark qualification remains pending; see [runner modes](../docs/running.md).
 
 See [docs/CROSS-PLATFORM.md](../shared/docs/CROSS-PLATFORM.md).

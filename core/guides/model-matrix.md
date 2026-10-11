@@ -21,7 +21,7 @@
 |------|----------|-----------------|
 | **reasoning** | Multi-doc synthesis, security, verification gaps, council, code-spec gates | Council: one model per member (Discover). Others: inherit parent unless noted |
 | **balanced** | Orchestration, structured writing, stories, integration, PR review | — |
-| **execution** | Bounded TDD in listed files (`implementation` is a legacy alias) | Headless Codex runner uses the configured execution model; setup is required unless `--accept-defaults` is explicit |
+| **execution** | Bounded TDD in listed files (`implementation` is a legacy alias) | Supervised runner uses the selected host's configured execution model; setup is required unless `--accept-defaults` is explicit |
 | **fast** | Deprecated alias for execution | `resolve-model --tier fast` maps to execution with a notice |
 
 The old `execution_policy` and `model_profiles` keys are ignored with a notice. Select each tier explicitly; setup never invents model IDs.
@@ -36,7 +36,13 @@ platform_profiles:
     reasoning: { model: "<chosen-model>", effort: high }
     balanced: { model: "<chosen-model>", effort: medium }
     execution: { model: "<chosen-model>", effort: low }
+  claude:
+    reasoning: { model: "<chosen-model>", effort: high }
+    balanced: { model: "<chosen-model>", effort: medium }
+    execution: { model: "<chosen-model>", effort: low }
 ```
+
+Use `adlc5 setup models --host codex|claude|cursor|hermes` to configure one host's tiers and supervision mode. The saved mode is stored in `platform_modes.<host>`; `--mode` overrides it for a single run. Cursor lists account models and filters `-fast` variants; its effort level is encoded in the chosen model id. Hermes is attended by default and only runs unattended inside a user-declared container that the runner verifies at runtime. These adapters remain experimental until the M2 benchmark gate is complete.
 
 ---
 

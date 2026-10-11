@@ -9,14 +9,14 @@ Usage:
   ./scripts/adlc5 clarity <file_path> [--step-id ID]
   ./scripts/adlc5 phase --feature NAME [--workspace DIR] [--target PHASE_ID]
   ./scripts/adlc5 pilot --feature NAME [--workspace DIR] [--record-result pass|fail]
-  ./scripts/adlc5 run --feature NAME [--host codex] [--workspace DIR] [--summary off|brief|detailed]
+  ./scripts/adlc5 run --feature NAME [--host codex|claude|cursor|hermes] [--mode confined|allowlist|attended] [--workspace DIR] [--summary off|brief|detailed]
   ./scripts/adlc5 state get --feature NAME [--workspace DIR]
   ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
   ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]
   ./scripts/adlc5 repo-spec init|reconcile|validate [--workspace DIR]
   ./scripts/adlc5 repo-index build|refresh|check [--workspace DIR]
   ./scripts/adlc5 resolve-model --tier TIER [--platform NAME] ...
-  ./scripts/adlc5 setup models [--repo] [--accept-defaults] [--workspace DIR]
+  ./scripts/adlc5 setup models [--host HOST] [--repo] [--accept-defaults] [--workspace DIR]
   ./scripts/adlc5 config show [--workspace DIR]
   ./scripts/adlc5 answer QUESTION_ID --text REPLY [--workspace DIR]
   ./scripts/adlc5 cleanup-features --workspace DIR ...
@@ -266,7 +266,7 @@ def cmd_config(args: list[str]) -> int:
 
 def cmd_setup(args: list[str]) -> int:
     if not args or args[0] != "models":
-        print("Usage: ./scripts/adlc5 setup models [--repo] [--accept-defaults] [--workspace DIR]", file=sys.stderr)
+        print("Usage: ./scripts/adlc5 setup models [--host codex|claude|cursor|hermes] [--repo] [--accept-defaults] [--workspace DIR]", file=sys.stderr)
         return 2
     script = SCRIPTS / "configure-models.py"
     return run([sys.executable, str(script), "setup", *args[1:]])

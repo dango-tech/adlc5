@@ -69,24 +69,33 @@ Persona registry: [core/personas.yaml](../../core/personas.yaml)
 
 ## Autopilot loop (integrated — replaces `@adlc5-pilot`)
 
-On Codex, use the qualified headless runner from a terminal because Codex's sandbox
-does not permit nested `codex exec`:
+For a supervised host, configure its model tiers and start the runner:
 
 ```bash
-./scripts/adlc5 run --feature F --host codex --workspace .
+./scripts/adlc5 setup models --host HOST
+./scripts/adlc5 run --feature F --host HOST --workspace .
 ```
+
+Supported hosts: Codex (`confined`), Claude Code (`allowlist`), Cursor
+(`confined`), and Hermes (`attended`; unattended only inside a detected,
+user-declared container). Codex must be started in a terminal because its
+sandbox blocks nested `codex exec`. Attended mode always requires a terminal.
 
 If it exits with code 10, ask the user the printed question, then record the reply
 and resume:
 
 ```bash
 ./scripts/adlc5 answer QUESTION_ID --text 'user reply' --workspace .
-./scripts/adlc5 run --feature F --host codex --workspace .
+./scripts/adlc5 run --feature F --host HOST --workspace .
 ```
 
 The runner owns step routing, evidence ingestion, usage capture, and retries. Chat
-handles only the initial choices and human decisions. Other hosts without a
-qualified adapter continue with the in-agent loop below.
+handles the initial choices and human decisions. In Claude `hitl` mode, a
+denied command creates a question; answer `allow` to add that exact command to
+the feature allowlist before retry. Cursor is never launched with `--force`.
+Other hosts continue with the in-agent loop below. The supported adapters are
+experimental; M2 benchmarks are still required before claiming lower cost or
+unchanged quality.
 
 When `autopilot.mode` is `autonomous` or user selects autonomous:
 

@@ -93,7 +93,20 @@ Do not assume Cursor-only tools exist; use fallbacks from this guide.
 
 **Config:** per-host structured tiers configured with `adlc5 setup models` — [config.example.yaml](../../config.example.yaml)
 
-**Headless Codex runner (experimental):** configure model tiers with `./scripts/adlc5 setup models`, then start `./scripts/adlc5 run --feature NAME --host codex --workspace PATH` from a terminal. Workers use Codex CLI in `workspace-write` sandbox mode. The runner records each attempt and usage under `.adlc5/NAME/pilot/`; return code `10` means it is waiting for an answer, which can be recorded with `./scripts/adlc5 answer QUESTION_ID --text '...' --workspace PATH`. Comparative benchmarks remain pending, so this path is not yet qualified for cost or quality improvements.
+## Supervised runner support
+
+Configure a host profile with `./scripts/adlc5 setup models --host HOST`, then run `./scripts/adlc5 run --feature NAME --host HOST --workspace PATH` from a terminal. Run `adlc5 setup models --accept-defaults` for a Codex profile without prompts. Return code `10` means a human answer is pending; record it with `./scripts/adlc5 answer QUESTION_ID --text '...' --workspace PATH`.
+
+| Host | Default mode | Unattended | Started from chat | Supervision |
+|---|---|---:|---:|---|
+| Codex | confined | yes | no | Codex `workspace-write` sandbox |
+| Claude Code | allowlist | yes | yes, after CLI login | `acceptEdits`, project test/lint/build commands from `.agents/commands.yaml`; denied commands ask in `hitl` and stop in `autonomous` |
+| Cursor | confined | yes | yes | Cursor sandbox enabled; adapter never passes `--force` and excludes `-fast` model ids |
+| Hermes Agent | attended | no, outside a declared container | no | host approval prompts in an interactive terminal; unattended container runs require both a user declaration and runtime container marker |
+
+Attended mode runs the host CLI in the current terminal, seeds the worker brief as the first prompt, and requires the worker to write the attempt result file. Claude attended usage is read from its matching session transcript. Cursor attended usage can be unavailable when the session collector cannot match a session; Hermes attended usage is recorded as unavailable. The runner writes attempts and usage under `.adlc5/NAME/pilot/` and `.adlc5/NAME/memory/`.
+
+Comparative M2 benchmarks remain pending. Adapter support does not qualify a host for cost or quality improvements; do not describe these modes as benchmark-qualified.
 
 | Tier | When | Host action |
 |------|------|-------------|

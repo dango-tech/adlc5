@@ -18,8 +18,11 @@ are optional unless your consumer policy requires them.
 git clone https://github.com/dango-tech/adlc5.git && cd adlc5
 ./scripts/install.sh --platform cursor
 ./scripts/verify-install.sh
-./scripts/adlc5 setup models
+./scripts/adlc5 setup models --host cursor
 ```
+
+Configure any installed host with `--host codex|claude|cursor|hermes`. See
+[supervised runner modes](../../docs/running.md) before starting a run.
 
 Workspace initialization keeps lifecycle exclusions in the target repository's
 local Git `info/exclude` by default, so it does not add a `.gitignore` diff. If

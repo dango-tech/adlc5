@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ADLC5's navigator with supervised, headless Codex workers."""
+"""Run ADLC5's navigator with supervised agent workers."""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from runner import hosts  # noqa: E402
 from lib.completion_evidence import fingerprint, records as evidence_records  # noqa: E402
-from lib.model_routing import merge_model_config  # noqa: E402
+from lib.model_routing import load_yaml_file, merge_model_config  # noqa: E402
 from lib.policies_load import CANONICAL_STEPS, load_policies, next_step_for_profile, profile_name, step_enabled  # noqa: E402
 from lib.state_v2 import load_feature_state  # noqa: E402
 
@@ -54,6 +54,14 @@ def read_json(path: Path, default: Any = None) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return default
+
+
+def interaction_mode(config: dict[str, Any], policies: dict[str, Any]) -> str:
+    defaults = config.get("defaults") if isinstance(config.get("defaults"), dict) else {}
+    mode = str(policies.get("interaction_mode") or defaults.get("interaction_mode") or "hitl")
+    if mode not in ("hitl", "autonomous"):
+        raise RuntimeError(f"unsupported interaction mode: {mode}")
+    return mode
 
 
 def append(path: Path, item: dict[str, Any]) -> None:
@@ -114,9 +122,18 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
         recorded_path = ((state.get("git") or {}).get("worktree_path"))
         events_path = feature_dir / "pilot/attempts.jsonl"
         events = journal(events_path) if events_path.is_file() else []
-        open_attempt = next((item for item in reversed(events) if "start_commit" in item and not attempt_event(events, item["attempt_id"], "closed")), None)
-        runner_owned = bool(recorded_path and Path(recorded_path).resolve() == workspace and open_attempt and
-                            git(workspace, "rev-parse", "HEAD") == open_attempt.get("start_commit"))
+        resumable_attempt = None
+        if recorded_path and Path(recorded_path).resolve() == workspace:
+            for candidate in reversed(events):
+                if "start_commit" not in candidate:
+                    continue
+                closed = attempt_event(events, candidate["attempt_id"], "closed")
+                if not closed or closed.get("outcome") == "needs_human" or (
+                    closed.get("outcome") == "fail" and attempt_event(events, candidate["attempt_id"], "evidence_ingested")
+                ):
+                    resumable_attempt = candidate
+                    break
+        runner_owned = bool(resumable_attempt and git(workspace, "rev-parse", "HEAD") == resumable_attempt.get("start_commit"))
         if not runner_owned:
             if git(workspace, "branch", "--show-current") not in ("main", "master"):
                 raise RuntimeError("runner requires a clean feature branch; preserve or commit existing changes before running")
@@ -144,8 +161,12 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
                 subprocess.run(["git", "-C", str(workspace), "worktree", "remove", "--force", str(target)], check=False)
                 raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "could not transfer feature state to runner worktree")
             return run(argparse.Namespace(**{**vars(args), "workspace": str(target)}))
-        subprocess.run(["git", "-C", str(workspace), "reset", "--hard", open_attempt["start_commit"]], check=True)
-        subprocess.run(["git", "-C", str(workspace), "clean", "-fd"], check=True)
+        closed = attempt_event(events, resumable_attempt["attempt_id"], "closed")
+        has_ingested_result = bool(closed and closed.get("outcome") == "fail" and
+                                   attempt_event(events, resumable_attempt["attempt_id"], "evidence_ingested"))
+        if not has_ingested_result:
+            subprocess.run(["git", "-C", str(workspace), "reset", "--hard", resumable_attempt["start_commit"]], check=True)
+            subprocess.run(["git", "-C", str(workspace), "clean", "-fd"], check=True)
     common = Path(git(workspace, "rev-parse", "--git-common-dir"))
     if not common.is_absolute():
         common = (workspace / common).resolve()
@@ -209,8 +230,36 @@ def enforce_scope_block(workspace: Path, feature: str) -> None:
         raise RuntimeError("spec-handoff.md is missing scope confirmation fields: " + ", ".join(missing))
 
 
+def command_allowlist(workspace: Path, feature: str) -> list[str]:
+    """Translate repo-declared test/lint/build commands into Claude tool permissions."""
+    path = workspace / ".agents" / "commands.yaml"
+    if not path.is_file():
+        return []
+    try:
+        data = load_yaml_file(path)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot read .agents/commands.yaml allowlist: {exc}") from exc
+    commands = data.get("commands") if isinstance(data, dict) else None
+    if not isinstance(commands, dict):
+        raise RuntimeError(".agents/commands.yaml must contain a commands mapping")
+    allowed = []
+    for name in ("test", "lint", "build"):
+        entry = commands.get(name)
+        command = entry.get("run") if isinstance(entry, dict) else entry
+        if isinstance(command, str) and command.strip():
+            allowed.append("Bash(" + command.strip() + ")")
+        elif isinstance(command, list):
+            allowed.extend("Bash(" + item.strip() + ")" for item in command if isinstance(item, str) and item.strip())
+    approved = read_json(workspace / ".adlc5" / feature / "pilot/approved-commands.json", [])
+    if not isinstance(approved, list) or any(not isinstance(item, str) or not item.strip() for item in approved):
+        raise RuntimeError("feature approved-commands.json is malformed")
+    allowed.extend("Bash(" + item + ")" for item in approved)
+    return allowed
+
+
 def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: str,
-               model: dict[str, Any], timeout: int) -> tuple[int, dict[str, Any], str]:
+               model: dict[str, Any], timeout: int, host: str, mode: str,
+               interaction_mode: str) -> tuple[int, dict[str, Any], str]:
     result_dir = workspace / ".adlc5" / feature / "pilot/results"
     result_dir.mkdir(parents=True, exist_ok=True)
     attempt_id = attempt["attempt_id"]
@@ -220,17 +269,34 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                        "summary": {"type": "string"}, "question": {"type": "string"},
                        "story_id": {"type": "string"}, "state_patch": {"type": "object"},
                        "review": {"type": "object"}}, "additionalProperties": True}, indent=2))
-    prompt = ("You are an ADLC5 worker. Do only the current step. Do not run transitions, change lifecycle state, "
+    result_prompt = ("You are an ADLC5 worker. Do only the current step. Do not run transitions, change lifecycle state, "
               "commit, push, create worktrees, or perform the next step. Write only in the workspace. Return JSON "
               f"matching the supplied schema with attempt_id {attempt_id}. For a human decision return needs_human and a question.\n\n"
               f"Feature: {feature}\nStep: {attempt['step']}\n\n{brief}")
-    argv = hosts.command(workspace=workspace, prompt=prompt, model=model.get("model_id"), effort=model.get("effort"))
-    argv[2:2] = ["--output-schema", str(schema), "-o", str(last)]
+    prompt = result_prompt
+    if mode == "attended" or host == "hermes":
+        prompt += (f"\n\nWhen finished, write the final JSON object to {last}. Include attempt_id {attempt_id}, "
+                   "status, summary, and any required story_id, state_patch, or review fields. Do not exit until that file is written. "
+                   "Then tell the user the result file is ready so they can exit the host CLI and return control to the runner.")
+    allowlist = command_allowlist(workspace, feature) if host == "claude" else []
+    usage_file = result_dir / f"{attempt_id}.usage.json"
+    session_file = result_dir / f"{attempt_id}.session.json"
+    argv = hosts.command(host=host, mode=mode, workspace=workspace, prompt=prompt,
+                         model=model.get("model_id"), effort=model.get("effort"), allowlist=allowlist,
+                         session_id=attempt_id, usage_file=usage_file if host == "hermes" and mode != "attended" else None)
+    if mode != "attended" and host == "codex":
+        argv[2:2] = ["--output-schema", str(schema), "-o", str(last)]
+    elif mode != "attended" and host == "claude":
+        argv.extend(("--json-schema", json.dumps(json.loads(schema.read_text(encoding="utf-8")))))
     log = result_dir / f"{attempt_id}.log"
     timed_out = stopped = False
     with log.open("w", encoding="utf-8") as stream:
-        proc = subprocess.Popen(argv, cwd=workspace, env=hosts.environment(), stdout=stream,
-                                stderr=subprocess.STDOUT, start_new_session=True, text=True)
+        proc = subprocess.Popen(argv, cwd=workspace, env=hosts.environment(
+                                    host, feature=feature, attempt_id=attempt_id,
+                                    session_file=session_file if host == "cursor" else None),
+                                stdout=None if mode == "attended" else stream,
+                                stderr=None if mode == "attended" else subprocess.STDOUT,
+                                start_new_session=True, text=True)
         started = time.monotonic()
         try:
             while proc.poll() is None:
@@ -259,7 +325,27 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                     pass
                 proc.wait()
     log_text = log.read_text(encoding="utf-8", errors="replace")
-    events = hosts.parse_events(log_text)
+    events = hosts.parse_events(host, log_text)
+    if mode == "attended" or host == "hermes":
+        if not last.is_file():
+            return proc.returncode or 1, {"error": "worker exited without writing the attempt result file"}, log_text
+    if events.get("denied_actions") and interaction_mode == "hitl":
+        denied = events["denied_actions"]
+        question = "The worker was denied: " + json.dumps(denied, ensure_ascii=False) + ". Reply 'allow' to add its command to this feature allowlist, or 'deny'."
+        return 0, {"status": "needs_human", "attempt_id": attempt_id, "summary": "permission approval required",
+                   "question": question, "denied_actions": denied, "usage": events.get("usage", {}),
+                   "model_id": events.get("model_id"), "host_reported_cost_usd": events.get("host_reported_cost_usd")}, log_text
+    if events.get("is_error") or events.get("denied_actions"):
+        return proc.returncode or 1, {"error": "host reported an error or denied action", **events}, log_text
+    if mode != "attended" and host != "hermes":
+        try:
+            raw_result = events.get("text") or "{}"
+            result_data = raw_result if isinstance(raw_result, dict) else json.loads(raw_result)
+            if result_data.get("attempt_id") != attempt_id:
+                raise ValueError("structured result did not match the active attempt; host must return the schema object")
+            last.write_text(json.dumps(result_data), encoding="utf-8")
+        except (json.JSONDecodeError, ValueError, AttributeError, TypeError) as exc:
+            return proc.returncode or 1, {"error": f"invalid {host} worker result: {exc}"}, log_text
     if not last.is_file():
         return (124 if timed_out else 130 if stopped else proc.returncode or 1), {"error": "missing result file"}, log_text
     try:
@@ -268,13 +354,63 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
             raise ValueError("result identity or status mismatch")
     except (ValueError, json.JSONDecodeError) as exc:
         return (proc.returncode or 1), {"error": f"invalid result: {exc}"}, log_text
-    worker.update(session_id=events.get("session_id"), model_id=events.get("model_id") or model.get("model_id") or "unknown",
+    if host == "hermes" and usage_file.is_file():
+        usage_data = read_json(usage_file, {})
+        if isinstance(usage_data, dict):
+            events["usage"] = {name: usage_data[key] for name, key in {
+                "input": "input_tokens", "output": "output_tokens", "thinking": "reasoning_tokens",
+                "cache_read": "cache_read_tokens", "cache_creation": "cache_write_tokens"}.items()
+                if type(usage_data.get(key)) is int and usage_data[key] >= 0}
+            events["model_id"] = usage_data.get("model")
+            events["host_reported_cost_usd"] = usage_data.get("estimated_cost_usd")
+            events["calls"] = usage_data.get("api_calls", 1)
+            events["is_error"] = any(usage_data.get(flag) is True for flag in ("failed", "interrupted", "partial"))
+        if events.get("is_error"):
+            return proc.returncode or 1, {"error": "Hermes usage report indicates an incomplete or failed run", **events}, log_text
+    host_session_id = events.get("session_id")
+    if host == "cursor" and session_file.is_file():
+        session_record = read_json(session_file, {})
+        if isinstance(session_record, dict) and session_record.get("attempt_id") == attempt_id:
+            host_session_id = session_record.get("session_id")
+    if mode == "attended" and host == "claude":
+        host_session_id = attempt_id
+        transcript_usage, transcript_model = claude_session_usage(host_session_id)
+        events["usage"] = transcript_usage
+        events["model_id"] = transcript_model or model.get("model_id")
+    # The attempt id is the runner-owned identity when a host exposes no session id.
+    worker.update(session_id=host_session_id or attempt_id, host_session_id=host_session_id,
+                  model_id=events.get("model_id") or model.get("model_id") or "unknown",
                   usage=events.get("usage") or {}, wall_seconds=round(time.monotonic() - started, 3),
-                  calls=events.get("calls", 1))
+                  calls=events.get("calls", 1), host_reported_cost_usd=events.get("host_reported_cost_usd"))
     temp = result.with_suffix(".tmp")
     temp.write_text(json.dumps(worker, indent=2) + "\n", encoding="utf-8")
     temp.replace(result)
     return proc.returncode, worker, log_text
+
+
+def claude_session_usage(session_id: str, projects_dir: Path | None = None) -> tuple[dict[str, int], str | None]:
+    usage: dict[str, int] = {}
+    model = None
+    project_dir = projects_dir or Path.home() / ".claude" / "projects"
+    if not project_dir.is_dir():
+        return usage, model
+    for transcript in project_dir.glob(f"*/{session_id}.jsonl"):
+        for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = entry.get("message") if isinstance(entry, dict) else None
+            values = message.get("usage") if isinstance(message, dict) else None
+            if not isinstance(values, dict):
+                continue
+            for target, key in (("input", "input_tokens"), ("output", "output_tokens"),
+                                ("cache_read", "cache_read_input_tokens"),
+                                ("cache_creation", "cache_creation_input_tokens")):
+                if type(values.get(key)) is int:
+                    usage[target] = usage.get(target, 0) + values[key]
+            model = message.get("model") or model
+    return usage, model
 
 
 def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result: dict[str, Any], model: dict[str, Any]) -> None:
@@ -285,10 +421,11 @@ def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result:
     usage = result.get("usage") or {}
     extra = {"attempt_id": attempt["attempt_id"], "requested_model_id": model.get("model_id") or "host-default",
              "observed_model_id": result.get("model_id"), "config_sha256": attempt["config_sha256"],
+             "host_session_id": result.get("host_session_id"),
              "usage_unavailable": not bool(usage), "wall_seconds": result.get("wall_seconds"),
              "host_reported_cost_usd": result.get("host_reported_cost_usd"), "calls": result.get("calls", 1)}
     args = [sys.executable, str(SCRIPTS / "memory/usage-ledger.py"), "record", "--feature", feature, "--workspace", str(workspace),
-            "--source", "api", "--platform", "codex", "--model-id", str(result.get("model_id") or "unknown"),
+            "--source", "api" if usage else "self_reported", "--platform", str(attempt.get("host") or "codex"), "--model-id", str(result.get("model_id") or "unknown"),
             "--tier", str(model.get("tier") or "balanced"), "--step", attempt["step"], "--stage", attempt["step"].split("-", 1)[0],
             "--attempt", str(attempt["number"]), "--run-id", attempt["run_id"], "--node-id", attempt["step"], "--extra-json", json.dumps(extra)]
     for name, flag in (("input", "--input-tokens"), ("output", "--output-tokens"), ("thinking", "--thinking-tokens"),
@@ -435,11 +572,27 @@ def run(args: argparse.Namespace) -> int:
         events = journal(journal_path) if journal_path.exists() else []
         config = merge_model_config(ROOT, workspace)
         profiles = config.get("platform_profiles") if isinstance(config.get("platform_profiles"), dict) else {}
-        codex_profile = profiles.get("codex") if isinstance(profiles.get("codex"), dict) else {}
-        configured = any(isinstance(codex_profile.get(tier), dict) and codex_profile[tier].get("model")
+        host = str(args.host or config.get("default_host") or "codex")
+        if host not in hosts.HOSTS:
+            raise RuntimeError(f"unsupported host: {host}")
+        profile = profiles.get(host) if isinstance(profiles.get(host), dict) else {}
+        configured = any(isinstance(profile.get(tier), dict) and profile[tier].get("model")
                          for tier in ("reasoning", "balanced", "execution"))
         if not configured and not args.accept_defaults:
             raise RuntimeError("model setup is missing; run 'adlc5 setup models' or pass --accept-defaults")
+        defaults = config.get("defaults") if isinstance(config.get("defaults"), dict) else {}
+        current_interaction_mode = interaction_mode(config, policies)
+        container_declared = hosts.in_declared_container(workspace)
+        configured_modes = config.get("platform_modes") if isinstance(config.get("platform_modes"), dict) else {}
+        mode = args.mode or configured_modes.get(host) or ("confined" if host == "hermes" and container_declared else hosts.MODES[host][0])
+        if mode == "attended" and not sys.stdin.isatty():
+            raise RuntimeError("attended mode requires a terminal; start adlc5 run from a terminal")
+        if current_interaction_mode == "autonomous" and mode == "attended" and not container_declared:
+            raise RuntimeError("autonomous interaction cannot use attended mode outside a declared container")
+        if host == "hermes" and mode != "attended" and not container_declared:
+            raise RuntimeError("Hermes unattended mode requires .adlc5/external-sandbox.json declared by the user as a container")
+        if mode not in hosts.AVAILABLE_MODES[host]:
+            raise RuntimeError(f"{host} does not support {mode} mode")
         isolated = ensure_isolation(workspace, args.feature, feature_dir, args)
         if isinstance(isolated, int):
             return isolated
@@ -453,12 +606,15 @@ def run(args: argparse.Namespace) -> int:
         if pending and not pending.get("answer"):
             print(json.dumps({"status": "needs_human", **pending}, indent=2))
             return 10
+        if pending and pending.get("denied_actions") and str(pending.get("answer", "")).lower() not in ("allow", "yes", "approve"):
+            print(json.dumps({"status": "halted", "reason": "user denied the host permission request; no retry was started",
+                              "question_id": pending.get("id")}, indent=2))
+            return 1
         run_id = str(uuid.uuid4())
-        defaults = config.get("defaults") if isinstance(config.get("defaults"), dict) else {}
         summary_mode = args.summary or defaults.get("summary", "brief")
         config_hash = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         config_path = feature_dir / "pilot/run-config.json"
-        config_path.write_text(json.dumps({"host": "codex", "preset": (config.get("model_routing") or {}).get("strategy", "balanced"),
+        config_path.write_text(json.dumps({"host": host, "mode": mode, "preset": (config.get("model_routing") or {}).get("strategy", "balanced"),
             "summary": summary_mode, "effective_config": config, "sha256": config_hash, "isolation": isolation}, indent=2) + "\n")
         recover(workspace, args.feature, journal_path, events, run_id)
         while True:
@@ -488,10 +644,7 @@ def run(args: argparse.Namespace) -> int:
             if step == "implement-5-pr":
                 raise RuntimeError("PR review and scoped approval remain chat-owned; use the in-agent PR workflow for this step")
             tier = str(action.get("model_tier_resolved") or "balanced")
-            host = str(args.host or config.get("default_host") or "codex")
-            if host != "codex":
-                raise RuntimeError(f"M1 supports only the Codex adapter; configured host is {host}")
-            model = hosts.resolve_model(ROOT, workspace, args.feature, tier)
+            model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
             model["tier"] = tier
             prior = [item for item in journal(journal_path) if item.get("step") == step and item.get("checkpoint") == "closed"]
             consecutive = 0
@@ -504,12 +657,12 @@ def run(args: argparse.Namespace) -> int:
                 model["effort"] = {"minimal": "low", "low": "medium", "medium": "high", "high": "xhigh"}.get(model.get("effort") or "medium", "xhigh")
             elif attempt_no >= 3:
                 tier = "reasoning" if tier != "reasoning" else "balanced"
-                model = hosts.resolve_model(ROOT, workspace, args.feature, tier)
+                model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
                 model["tier"] = tier
             if step == "implement-2-verify" and model.get("verifier_different_model"):
                 coder_models = {item.get("model_id") for item in journal(journal_path)
                                 if item.get("step") == "implement-1-build" and item.get("outcome") == "pass" and item.get("model_id")}
-                candidates = [model] + [hosts.resolve_model(ROOT, workspace, args.feature, candidate)
+                candidates = [model] + [hosts.resolve_model(ROOT, workspace, args.feature, candidate, host)
                                         for candidate in ("reasoning", "balanced", "execution") if candidate != tier]
                 model = next((candidate_model for candidate_model in candidates
                               if candidate_model.get("model_id") not in coder_models
@@ -523,17 +676,20 @@ def run(args: argparse.Namespace) -> int:
             entry = {"attempt_id": str(uuid.uuid4()), "run_id": run_id, "step": step, "story": story,
                      "number": attempt_no, "pack_sha256": hashlib.sha256(brief.encode()).hexdigest(), "config_sha256": config_hash,
                      "start_commit": start_commit, "kernel_fingerprint": fingerprint(workspace, args.feature),
-                     "requested_model_id": model.get("model_id"), "tier": tier, "gate": action.get("gate"), "at": now()}
+                     "requested_model_id": model.get("model_id"), "tier": tier, "gate": action.get("gate"), "at": now(),
+                     "host": host, "mode": mode}
             append(journal_path, entry)
             record_checkpoint(journal_path, entry, "launched")
             try:
                 timeout = min(args.timeout, max(1, worker_deadline(workspace, args.feature)))
-                rc, result, _log = run_worker(workspace, args.feature, entry, brief, model, timeout)
+                rc, result, _log = run_worker(workspace, args.feature, entry, brief, model, timeout, host, mode,
+                                              current_interaction_mode)
                 if rc or result.get("status") == "failed":
                     raise RuntimeError(result.get("error") or f"worker exited {rc}")
                 record_checkpoint(journal_path, entry, "result_validated", session_id=result.get("session_id"), model_id=result.get("model_id"))
                 if result.get("status") == "needs_human":
-                    question = {"id": entry["attempt_id"], "question": result.get("question", "Human input required"), "step": step}
+                    question = {"id": entry["attempt_id"], "question": result.get("question", "Human input required"), "step": step,
+                                "denied_actions": result.get("denied_actions", []), "host": host}
                     (feature_dir / "pilot/pending-question.json").write_text(json.dumps(question, indent=2) + "\n")
                     record_usage(workspace, args.feature, entry, result, model)
                     record_checkpoint(journal_path, entry, "usage_recorded")
@@ -587,7 +743,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feature", required=True)
     parser.add_argument("--workspace", default=".")
-    parser.add_argument("--host", choices=("codex",), default=None)
+    parser.add_argument("--host", choices=hosts.HOSTS, default=None)
+    parser.add_argument("--mode", choices=("confined", "allowlist", "attended"), default=None)
     parser.add_argument("--summary", choices=("off", "brief", "detailed"), default=None)
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--accept-defaults", action="store_true")

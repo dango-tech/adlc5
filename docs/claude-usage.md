@@ -1,5 +1,13 @@
 # Claude Code token usage collection
 
+The supervised runner can use Claude Code in allowlist mode with
+`./scripts/adlc5 run --feature FEATURE --host claude`. It enables edits under
+the workspace, allows repository-declared `test`, `lint`, and `build` commands
+from `.agents/commands.yaml`, and records host-reported usage. A denied Bash
+request pauses in `hitl`; answering `allow` approves that exact command for
+the feature retry. `autonomous` mode records the denial as a failed attempt.
+See [runner modes](running.md) for the trust boundary and attended mode.
+
 **Last verified:** 2026-09-04
 **Status:** No API key needed — reads Claude Code's own on-disk transcript.
 

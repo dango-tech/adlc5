@@ -1,5 +1,11 @@
 # Cursor token usage collection
 
+The supervised Cursor runner uses `cursor-agent -p --sandbox enabled`. ADLC5
+does not pass `--force` and filters `-fast` account model ids during model
+setup. Attended Cursor sessions use the host's own prompts; their usage is
+recorded only when the existing session collector can match the session and
+time window. See [runner modes](running.md).
+
 **Optional integration:** API availability and permissions depend on your Cursor
 account. Check the linked vendor documentation before configuring access.
 
