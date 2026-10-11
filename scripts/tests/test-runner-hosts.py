@@ -30,7 +30,12 @@ def main() -> None:
     assert "--permission-mode" in claude and "acceptEdits" in claude and "--allowedTools" in claude
     cursor = hosts.command(host="cursor", mode="confined", workspace=workspace, prompt="work", model="gpt-5",
                            effort=None)
-    assert "--sandbox" in cursor and "enabled" in cursor and "--force" not in cursor
+    assert "--sandbox" in cursor and "enabled" in cursor and "--force" not in cursor and "--trust" in cursor
+    # Payload shapes measured from the real CLIs.
+    measured = hosts.parse_events("cursor", '{"result":"OK","usage":{"inputTokens":20760,"outputTokens":39,"cacheReadTokens":1152,"cacheWriteTokens":0}}')
+    assert measured["usage"] == {"input": 20760, "output": 39, "cache_read": 1152, "cache_creation": 0}
+    claude_result = hosts.parse_events("claude", '{"result":"OK","usage":{"input_tokens":10},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10}}}')
+    assert claude_result["model_id"] == "claude-haiku-4-5-20251001"
     for host, mode in (("codex", "confined"), ("claude", "allowlist"), ("cursor", "confined"), ("hermes", "attended")):
         with patch.object(hosts.os, "isatty", return_value=True):
             default_model = hosts.command(host=host, mode=mode, workspace=workspace, prompt="work",

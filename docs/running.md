@@ -13,8 +13,20 @@ in the machine or repository config. `--mode` overrides it for one run.
 The runner calls the existing navigator, launches one worker at a time, and
 submits lifecycle and evidence changes through the ADLC5 kernel. It records an
 attempt journal, result, run log, and usage row under the feature's `.adlc5`
-directory. Exit code `10` means a human answer is pending; record it with
+directory. Exit code `10` means a person must act. With status `needs_human`
+an answer is pending; record it with
 `./scripts/adlc5 answer QUESTION_ID --text 'allow' --workspace .` and resume.
+With status `handoff` the run has reached PR review and approval, which stay
+with the in-agent PR workflow; complete that, then run again.
+
+`--host` or a configured `default_host` is required; the runner does not pick
+a host for you. Each run prints one `starting` line to stderr with the host,
+mode, tiers and the config layers in effect.
+
+Inside an existing linked worktree, including one an agent host created on
+its own branch, the runner creates or switches to the feature branch in place
+and never adds another worktree. It does not reset uncommitted changes when a
+run resumes, except to restore an attempt that was interrupted mid-flight.
 
 | Host | Default mode | Unattended | Chat launch | Boundary |
 |---|---|---:|---:|---|

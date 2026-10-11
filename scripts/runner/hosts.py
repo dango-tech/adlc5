@@ -84,7 +84,8 @@ def command(*, host: str, mode: str, workspace: Path, prompt: str, model: str | 
         if effort:
             argv.extend(("--effort", effort))
     elif host == "cursor":
-        argv = ["cursor-agent", "-p", "--output-format", "json", "--sandbox", "enabled", "--workspace", str(workspace)]
+        argv = ["cursor-agent", "-p", "--output-format", "json", "--sandbox", "enabled", "--trust",
+                "--workspace", str(workspace)]
         if model:
             if model.endswith("-fast"):
                 raise ValueError("Cursor fast model variants are disabled for supervised runs")
@@ -152,13 +153,18 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
         usage = data.get("usage") or {}
         return {"text": data.get("structured_output") or data.get("result", ""), "usage": _usage(usage, {"input": "input_tokens", "output": "output_tokens",
                 "cache_read": "cache_read_input_tokens", "cache_creation": "cache_creation_input_tokens"}),
-                "model_id": data.get("model"), "session_id": data.get("session_id"), "calls": 1,
+                "model_id": data.get("model") or next(iter(data.get("modelUsage") or {}), None),
+                "session_id": data.get("session_id"), "calls": 1,
                 "host_reported_cost_usd": data.get("total_cost_usd"), "denied_actions": data.get("permission_denials", []),
                 "is_error": data.get("is_error", False)}
     if host == "cursor":
         usage = data.get("usage") or data.get("token_usage") or {}
-        return {"text": data.get("result") or data.get("text", ""), "usage": _usage(usage, {"input": "input_tokens", "output": "output_tokens",
-                "cache_read": "cache_read_tokens", "cache_creation": "cache_write_tokens"}),
+        # Cursor Agent reports camelCase counters; older snake_case names are kept as a fallback.
+        counters = {**_usage(usage, {"input": "input_tokens", "output": "output_tokens",
+                                     "cache_read": "cache_read_tokens", "cache_creation": "cache_write_tokens"}),
+                    **_usage(usage, {"input": "inputTokens", "output": "outputTokens",
+                                     "cache_read": "cacheReadTokens", "cache_creation": "cacheWriteTokens"})}
+        return {"text": data.get("result") or data.get("text", ""), "usage": counters,
                 "model_id": data.get("model"), "session_id": data.get("session_id"), "calls": 1,
                 "denied_actions": data.get("permission_denials", []), "is_error": data.get("is_error", False)}
     return {"text": data.get("response", ""), "usage": _usage(data, {"input": "input_tokens", "output": "output_tokens",

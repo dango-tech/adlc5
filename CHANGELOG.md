@@ -7,6 +7,10 @@
 - **Supervised headless Codex runner:** `adlc5 run` drives the existing navigator with isolated Codex CLI workers, worktree isolation, attempt checkpoints, retry escalation, kill-switch and timeout supervision, kernel-ingested evidence, and per-attempt usage records. `adlc5 answer` resumes a pending human question; `adlc5 setup models` and `adlc5 config show` manage and inspect user-selected Codex tiers. MCP exposes run and answer operations.
 - **Acceptance traceability:** code specs map each acceptance criterion to declared named checks; spec lint and story verification reject missing or stale mappings.
 
+### Fixed
+
+- **Runner adapters and recovery:** Cursor token usage is read from the CLI's actual camelCase counters; Claude Code's observed model is read from `modelUsage`; usage from failed attempts is kept in the ledger. The runner now reuses a host-created worktree that is on its own named branch, no longer resets uncommitted changes when resuming after a human question, hands off at PR review with exit code 10 instead of failing, reads the worker deadline from the feature's `wall_clock_cap_minutes`, requires an explicit host, passes `--trust` to headless Cursor, uses the QA brief for the QA step, and never moves a reasoning-tier step down a tier on retry. Worker prompts put the per-attempt id last so workers share a cacheable prefix.
+
 ### Changed
 
 - Model IDs are user-selected rather than shipped as defaults; repo configuration is shared in the Git common directory and machine paths stay in `workspace.json`.

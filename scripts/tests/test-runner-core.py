@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -73,6 +74,28 @@ def main() -> None:
             json.dumps({"type": "assistant", "message": {"model": "claude-sonnet", "usage": {
                 "input_tokens": 8, "output_tokens": 3, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0}}}),
         ]))
+        # The worker deadline follows the feature's policy cap, with the kill switch's 360-minute default.
+        meta = workspace / ".adlc5/feature/pilot/meta.json"
+        meta.write_text(json.dumps({"started_at": runner.now()}))
+        assert 170 * 60 < runner.worker_deadline(workspace, "feature", {"autopilot": {"wall_clock_cap_minutes": 180}}) <= 180 * 60
+        assert 350 * 60 < runner.worker_deadline(workspace, "feature", {}) <= 360 * 60
+        # A host-created worktree on its own named branch is reused: the feature branch is made in place.
+        repo, host_tree = Path(temp) / "origin", Path(temp) / "host-tree"
+        repo.mkdir()
+        git = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), "-c", "user.email=t@x", "-c", "user.name=t", *a],
+                                             check=True, capture_output=True, text=True).stdout
+        git(repo, "init", "-q", "-b", "main")
+        (repo / "README.md").write_text("x\n")
+        git(repo, "add", "."), git(repo, "commit", "-qm", "init")
+        git(repo, "worktree", "add", "-q", "-b", "host/session", str(host_tree))
+        subprocess.run([str(ROOT / "scripts/init-feature.sh"), "--feature", "wt-feature", "--workspace", str(host_tree),
+                        "--mode", "brownfield", "--interaction", "autonomous"], check=True, capture_output=True)
+        git(host_tree, "add", "-A"), git(host_tree, "commit", "-qm", "scaffold", "--allow-empty")
+        before = git(repo, "worktree", "list").count("\n")
+        branch, isolation = runner.ensure_isolation(host_tree.resolve(), "wt-feature", host_tree.resolve() / ".adlc5/wt-feature", SimpleNamespace())
+        assert (branch, isolation) == ("feat/wt-feature", "worktree")
+        assert git(host_tree, "branch", "--show-current").strip() == "feat/wt-feature"
+        assert git(repo, "worktree", "list").count("\n") == before
         usage, model = runner.claude_session_usage("session-1", projects)
         assert usage == {"input": 20, "output": 7, "cache_read": 6, "cache_creation": 2}
         assert model == "claude-sonnet"
