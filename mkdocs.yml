@@ -40,5 +40,6 @@ nav:
   - Installation: installation.md
   - Quickstart: quickstart.md
   - Lifecycle: lifecycle.md
+  - Running agents: running.md
   - Intelligence: intelligence.md
   - Reference: reference.md

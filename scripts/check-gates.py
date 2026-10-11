@@ -407,17 +407,19 @@ def check_verifier_independence(lifecycle: dict | None, policies: dict) -> list[
 
     evidence = ((((lifecycle or {}).get("implement") or {}).get("verification") or {}).get("independence") or {})
     failures = []
+    coder_sessions = evidence.get("coder_session_ids") or [evidence.get("coder_session_id")]
     if require_fresh and not (
         evidence.get("fresh_session") is True
-        and evidence.get("coder_session_id")
+        and all(coder_sessions)
         and evidence.get("verifier_session_id")
-        and evidence.get("coder_session_id") != evidence.get("verifier_session_id")
+        and evidence.get("verifier_session_id") not in coder_sessions
     ):
         failures.append("fresh verifier session not evidenced")
+    coder_models = evidence.get("coder_model_ids") or [evidence.get("coder_model_id")]
     if require_different_model and not (
-        evidence.get("coder_model_id")
+        all(coder_models)
         and evidence.get("verifier_model_id")
-        and evidence.get("coder_model_id") != evidence.get("verifier_model_id")
+        and evidence.get("verifier_model_id") not in coder_models
     ):
         failures.append("different verifier model not evidenced")
     return [
@@ -1199,7 +1201,9 @@ def main() -> int:
             for approval in approvals:
                 lifecycle.setdefault("clarity", {}).setdefault("history", []).append(dict(approval))
         if fresh_review and lifecycle:
-            lifecycle.setdefault("implement", {}).setdefault("verification", {})["independence"] = dict(fresh_review, fresh_session=fresh_review.get("coder_session_id") != fresh_review.get("verifier_session_id"))
+            coder_sessions = fresh_review.get("coder_session_ids") or [fresh_review.get("coder_session_id")]
+            lifecycle.setdefault("implement", {}).setdefault("verification", {})["independence"] = dict(
+                fresh_review, fresh_session=bool(all(coder_sessions)) and fresh_review.get("verifier_session_id") not in coder_sessions)
     except (ValueError, OSError, subprocess.CalledProcessError):
         pass
 

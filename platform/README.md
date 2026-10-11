@@ -6,7 +6,7 @@ Cross-IDE parity for skills and scripts.
 |------|-------|
 | T1 | Unified state, v2 scripts, skill-registry.yaml |
 | T2 | AskQuestion / numbered fallbacks |
-| T3 | Host hooks (Cursor only) |
+| T3 | Host hooks (Cursor, Claude Code, and Codex) |
 
 ## Install
 
@@ -25,5 +25,7 @@ Cross-IDE parity for skills and scripts.
 | Hermes Agent | `/skill adlc5` or `hermes -s adlc5` |
 
 Skills install from `skills/` via `./scripts/install.sh`.
+
+The supervised runner supports Codex (confined), Claude Code (allowlist), Cursor (confined), and Hermes (attended; unattended only inside a declared container). Start it with `./scripts/adlc5 run --feature NAME --host HOST --workspace PATH`. Claude and Cursor also support unattended workers; Cursor never receives `--force`. Gemini, OpenCode, and Antigravity keep using the in-agent lifecycle. Comparative benchmark qualification remains pending; see [runner modes](../docs/running.md).
 
 See [docs/CROSS-PLATFORM.md](../shared/docs/CROSS-PLATFORM.md).

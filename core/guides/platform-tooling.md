@@ -91,14 +91,29 @@ Do not assume Cursor-only tools exist; use fallbacks from this guide.
 
 **Resolver:** `./scripts/resolve-model.sh --platform <host> --tier <tier>`
 
-**Config:** `platform_profiles` (preferred) + flat `model_profiles` fallback + `model_routing.execution_policy` — [config.example.yaml](../../config.example.yaml)
+**Config:** per-host structured tiers configured with `adlc5 setup models` — [config.example.yaml](../../config.example.yaml)
+
+## Supervised runner support
+
+Configure a host profile with `./scripts/adlc5 setup models --host HOST`, then run `./scripts/adlc5 run --feature NAME --host HOST --workspace PATH` from a terminal. Run `adlc5 setup models --accept-defaults` for a Codex profile without prompts. Return code `10` means a human answer is pending; record it with `./scripts/adlc5 answer QUESTION_ID --text '...' --workspace PATH`.
+
+| Host | Default mode | Unattended | Started from chat | Supervision |
+|---|---|---:|---:|---|
+| Codex | confined | yes | no | Codex `workspace-write` sandbox |
+| Claude Code | allowlist | yes | yes, after CLI login | `acceptEdits`, project test/lint/build commands from `.agents/commands.yaml`; denied commands ask in `hitl` and stop in `autonomous` |
+| Cursor | confined | yes | yes | Cursor sandbox enabled; adapter never passes `--force` and excludes `-fast` model ids |
+| Hermes Agent | attended | no, outside a declared container | no | host approval prompts in an interactive terminal; unattended container runs require both a user declaration and runtime container marker |
+
+Attended mode runs the host CLI in the current terminal, seeds the worker brief as the first prompt, and requires the worker to write the attempt result file. Claude attended usage is read from its matching session transcript. Cursor attended usage can be unavailable when the session collector cannot match a session; Hermes attended usage is recorded as unavailable. The runner writes attempts and usage under `.adlc5/NAME/pilot/` and `.adlc5/NAME/memory/`.
+
+Comparative M2 benchmarks remain pending. Adapter support does not qualify a host for cost or quality improvements; do not describe these modes as benchmark-qualified.
 
 | Tier | When | Host action |
 |------|------|-------------|
 | **reasoning** | Design, code spec, verify, `@qa`, Discover council | Select highest-capability model in picker |
 | **balanced** | `@adlc5`, stories, integration, PR review | Default strong model |
-| **execution** | `@build-implementer`, `@adlc5-tdd` (alias: `implementation`) | **Inherit parent** when `execution_policy: inherit` |
-| **fast** | Not for Implement/verify or `@qa` | Optional routing only |
+| **execution** | `@build-implementer`, `@adlc5-tdd` (alias: `implementation`) | Select the configured execution tier |
+| **fast** | Deprecated alias for execution | Resolves to execution with a notice |
 
 | Platform | Apply tier |
 |----------|------------|
@@ -109,7 +124,7 @@ Do not assume Cursor-only tools exist; use fallbacks from this guide.
 | **Gemini / Antigravity** | [templates/gemini-models.md](../../templates/gemini-models.md) |
 | **Hermes Agent** | [templates/hermes-models.md](../../templates/hermes-models.md) |
 
-On first skill invoke, output the tier notice from the skill’s **Model recommendation** section (informational only). Never use `fast` for implement/verify or `@qa`.
+On first skill invoke, show the tier notice and its configured source. Legacy `model_profiles` and `execution_policy` settings are ignored with a migration notice.
 
 ## Working memory
 

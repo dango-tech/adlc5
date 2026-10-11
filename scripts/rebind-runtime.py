@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Repair a consumer's stale ADLC5 runtime binding without touching anything else.
 
-`init-workspace.sh` records `adlc5_root` in `.adlc5/workspace.json` and
-`.adlc5/config.yaml`. When ADLC5 runs from a host package cache (a plugin), that
+`init-workspace.sh` records `adlc5_root` in `.adlc5/workspace.json`. When ADLC5 runs
+from a host package cache (a plugin), that
 path changes on update/relocation. This tool repoints ONLY those two values, and
 only when the recorded root is stale: the path is gone or is no longer an ADLC5 root
 (for example a package cache that moved after an update).

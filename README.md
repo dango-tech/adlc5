@@ -29,6 +29,14 @@ cp config.example.yaml config.yaml
 ./scripts/verify-install.sh --platform codex
 ```
 
+**Experimental supervised runner:** configure per-host tiers with
+`./scripts/adlc5 setup models --host HOST`, then run
+`./scripts/adlc5 run --feature FEATURE --host HOST --workspace PATH`. Codex and
+Cursor use confined modes, Claude Code uses its project command allowlist, and
+Hermes is attended unless it is inside a user-declared, runtime-detected
+container. Comparative cost and quality benchmarks remain pending; see
+[runner modes and limits](docs/running.md).
+
 In your application repository:
 
 ```bash

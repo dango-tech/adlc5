@@ -2,9 +2,13 @@
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -320,6 +324,22 @@ class CursorUsageTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "skipped")
             self.assertEqual(result["reason"], "no-cloud-bindings")
+
+    def test_runner_session_is_saved_before_optional_global_usage_registration(self):
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Path(temp)
+            (workspace / ".adlc5/feature/pilot/results").mkdir(parents=True)
+            session_file = workspace / ".adlc5/feature/pilot/results/attempt.session.json"
+            payload = json.dumps({"cwd": str(workspace), "session_id": "cursor-session"})
+            with patch.dict(os.environ, {"ADLC5_RUNNER_FEATURE": "feature", "ADLC5_RUNNER_ATTEMPT_ID": "attempt",
+                                         "ADLC5_RUNNER_SESSION_FILE": str(session_file)}), \
+                 patch.object(self.module, "hook_workspaces", return_value=[workspace]), \
+                 patch.object(self.module, "bind_usage", side_effect=PermissionError("global registry is read-only")), \
+                 patch.object(sys, "stdin", StringIO(payload)):
+                with self.assertRaises(PermissionError):
+                    self.module.cmd_hook(SimpleNamespace(event="session-start"))
+            self.assertEqual(json.loads(session_file.read_text()), {
+                "attempt_id": "attempt", "session_id": "cursor-session", "feature": "feature"})
 
 
 if __name__ == "__main__":

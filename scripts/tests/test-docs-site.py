@@ -16,7 +16,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = "https://docs.example.test/adlc5/"
 PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
-         "lifecycle/index.html", "intelligence/index.html", "reference/index.html")
+         "lifecycle/index.html", "running/index.html", "intelligence/index.html", "reference/index.html")
 
 
 class Document(HTMLParser):
@@ -76,7 +76,19 @@ class DocsSiteTests(unittest.TestCase):
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())
         locations = {entry["location"].split("#")[0] for entry in index["docs"]}
-        self.assertTrue({"", "installation/", "quickstart/", "lifecycle/", "intelligence/", "reference/"} <= locations)
+        self.assertTrue({"", "installation/", "quickstart/", "lifecycle/", "running/", "intelligence/", "reference/"} <= locations)
+
+    def test_adlc5_cli_references_exist(self):
+        surfaces = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"), *(ROOT / "website/docs").rglob("*.md")]
+        help_text = subprocess.run([str(ROOT / "scripts/adlc5"), "--help"], cwd=ROOT,
+                                   capture_output=True, text=True, check=True).stdout
+        commands = set()
+        for path in surfaces:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            commands.update(re.findall(r"(?<![@\w])adlc5[ \t]+([a-z][a-z0-9-]*)", text))
+        declared = set(re.findall(r"^\s{2}([a-z][a-z0-9-]*)(?:\s|$)", help_text, re.M))
+        declared.update({"config", "setup", "answer", "version", "transition", "evidence", "state"})
+        self.assertFalse(commands - declared, f"unknown adlc5 commands: {sorted(commands - declared)}")
 
     def test_site_content(self):
         for page in PAGES:

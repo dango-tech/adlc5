@@ -477,18 +477,26 @@ def cmd_hook(args: argparse.Namespace) -> int:
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    feature = extract_feature(payload)
+    feature = extract_feature(payload) or os.environ.get("ADLC5_RUNNER_FEATURE")
     conversation_id = payload.get("conversation_id") or payload.get("session_id")
     for workspace in hook_workspaces(payload):
         if (workspace / ".adlc5").is_dir():
-            register_workspace(workspace)
             if feature and conversation_id:
+                session_file = os.environ.get("ADLC5_RUNNER_SESSION_FILE")
+                attempt_id = os.environ.get("ADLC5_RUNNER_ATTEMPT_ID")
+                if args.event == "session-start" and session_file and attempt_id:
+                    target = Path(session_file).resolve()
+                    if target.is_relative_to((workspace / ".adlc5").resolve()):
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text(json.dumps({"attempt_id": attempt_id, "session_id": str(conversation_id),
+                                                      "feature": feature}) + "\n", encoding="utf-8")
                 bind_usage(
                     workspace,
                     feature,
                     str(conversation_id),
                     model_id=str(payload.get("model_id") or payload.get("model") or "") or None,
                 )
+            register_workspace(workspace)
     if args.event == "pre-tool":
         print('{"permission":"allow"}')
     elif args.event == "before-submit":

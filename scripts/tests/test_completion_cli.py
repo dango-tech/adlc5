@@ -84,7 +84,7 @@ def exercise(profile, transport="cli", *, no_story=False):
         (feature / "tasks/code-spec/US-1.md").write_text(
             "---\nstory_id: US-1\nfiles_to_create: []\nfiles_to_modify:\n  - app.py\n"
             "tests:\n  - file: test_app.py\n    name: test_identity\n"
-            "acceptance_criteria:\n  - AC-1\n---\nImplement identity.\n"
+            "acceptance_criteria:\n  - AC-1\nacceptance_checks:\n  AC-1: [test_app.py::test_identity]\n---\nImplement identity.\n"
         )
         (feature / "evidence/checks.json").write_text(json.dumps([
             {"id": "acceptance", "command": "python3 -B test_app.py"},
@@ -143,6 +143,10 @@ def exercise(profile, transport="cli", *, no_story=False):
             verify()
         if profile != "tiny":
             invoke("transition", "implement-3-integrate")
+            if profile == "standard":
+                (feature / "evidence/integration.json").write_text(json.dumps({"status": "completed"}))
+                invoke("evidence", "integrate", "--file", str(feature / "evidence/integration.json"))
+                assert json.loads((feature / "state.json").read_text())["implement"]["integration"]["status"] == "completed"
         if profile == "high_risk":
             clearance = workspace / ".qa/demo/deployment-clearance.md"
             clearance.parent.mkdir(parents=True)

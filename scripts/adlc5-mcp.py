@@ -128,6 +128,27 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
         },
         "build": lambda a: _args_pilot(a),
     },
+    "adlc5_run": {
+        "description": "Run the script-driven lifecycle using the configured Codex headless adapter",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "feature": {"type": "string"},
+                "workspace": {"type": "string"},
+                "host": {"type": "string", "enum": ["codex"]},
+                "summary": {"type": "string", "enum": ["off", "brief", "detailed"]},
+                "accept_defaults": {"type": "boolean"},
+            },
+            "required": ["feature"],
+            "additionalProperties": False,
+        },
+        "build": lambda a: ["run", "--feature", a["feature"], *_opt("--workspace", a.get("workspace")), *_opt("--host", a.get("host")), *_opt("--summary", a.get("summary")), *( ["--accept-defaults"] if a.get("accept_defaults") else [])],
+    },
+    "adlc5_answer": {
+        "description": "Record the human's reply to a pending runner question",
+        "inputSchema": {"type": "object", "properties": {"question_id": {"type": "string"}, "answer": {"type": "string"}, "workspace": {"type": "string"}}, "required": ["question_id", "answer"], "additionalProperties": False},
+        "build": lambda a: ["answer", a["question_id"], "--text", a["answer"], *_opt("--workspace", a.get("workspace"))],
+    },
     "adlc5_state_get": {
         "description": "Read feature state.json (→ adlc5 state get)",
         "inputSchema": {
