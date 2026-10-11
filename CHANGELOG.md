@@ -10,6 +10,11 @@
 ### Fixed
 
 - **Runner adapters and recovery:** Cursor token usage is read from the CLI's actual camelCase counters; Claude Code's observed model is read from `modelUsage`; usage from failed attempts is kept in the ledger. The runner now reuses a host-created worktree that is on its own named branch, no longer resets uncommitted changes when resuming after a human question, hands off at PR review with exit code 10 instead of failing, reads the worker deadline from the feature's `wall_clock_cap_minutes`, requires an explicit host, passes `--trust` to headless Cursor, uses the QA brief for the QA step, and never moves a reasoning-tier step down a tier on retry. Worker prompts put the per-attempt id last so workers share a cacheable prefix.
+- **Verification could never pass:** closed attempt records did not carry the step or story, so the runner found no coder sessions for the review and the retry ladder never escalated. They now do.
+- **Rework loop:** failed checks or a rejected review route to a coder with the findings, then to a fresh review, capped by `verification_per_story`.
+- **Worktree for a dirty main checkout** is created at `.worktrees/FEATURE` and the feature state is moved, not copied; later runs from the main checkout are redirected.
+- **Cost:** Codex cached input is no longer double-counted; OpenAI list prices added to `core/model-prices.yaml`; `~/.adlc5/model-prices.yaml` layers user prices on top.
+- **Summary:** deviations are recorded and listed, including briefs over the per-tier pack budget.
 
 ### Changed
 

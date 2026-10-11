@@ -83,6 +83,74 @@ def read_json_line(line: str) -> dict[str, Any] | None:
         return None
 
 
+class ReworkNeeded(RuntimeError):
+    """Verification found defects in the code; a coder must fix them before the next review."""
+
+
+def deviation(feature_dir: Path, kind: str, **detail: Any) -> None:
+    """Record a departure from the configured settings; listed in the end summary."""
+    append(feature_dir / "pilot/deviations.jsonl", {"kind": kind, "at": now(), **detail})
+
+
+def rework_findings(events: list[dict[str, Any]], budget: int) -> str | None:
+    """Findings to fix when the latest verify attempt was rejected; None when a review is due."""
+    closed = [item for item in events if item.get("checkpoint") == "closed" and item.get("step") == "implement-2-verify"]
+    if not closed or not closed[-1].get("rework"):
+        return None
+    if sum(1 for item in closed if item.get("kind") == "rework") >= budget:
+        raise RuntimeError(f"verification still failing after {budget} rework attempts; human review required")
+    return str(closed[-1].get("findings") or "verification failed")
+
+
+def isolate_in_worktree(workspace: Path, feature: str, feature_dir: Path, branch: str) -> Path:
+    """Create the feature's one worktree under .worktrees/ and move its state there."""
+    base = git(workspace, "rev-parse", "HEAD")
+    target = workspace / ".worktrees" / feature
+    if target.exists():
+        raise RuntimeError(f"ADLC5 worktree target already exists: {target}")
+    if subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0:
+        raise RuntimeError(f"feature branch {branch} already exists; attach a worktree for that branch and resume there")
+    # Excluded locally, so the tracked .gitignore is never edited.
+    exclude = Path(git(workspace, "rev-parse", "--git-path", "info/exclude"))
+    if not exclude.is_absolute():
+        exclude = workspace / exclude
+    if ".worktrees/" not in (exclude.read_text(encoding="utf-8").splitlines() if exclude.is_file() else []):
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open("a", encoding="utf-8") as stream:
+            stream.write(".worktrees/\n")
+    subprocess.run(["git", "-C", str(workspace), "worktree", "add", "-q", "-b", branch, str(target), base], check=True)
+    target_feature = target / ".adlc5" / feature
+    target_feature.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock"))
+    # State changes are validated through the canonical kernel command.
+    patch_file = target_feature / "pilot/runner-isolation.json"
+    patch_file.parent.mkdir(parents=True, exist_ok=True)
+    patch_file.write_text(json.dumps({"git": {"isolation": "worktree", "branch_name": branch,
+        "base_branch": base, "worktree_path": str(target)}}), encoding="utf-8")
+    saved = call(target, "state", "set", "--feature", feature, "--file", str(patch_file), check=False)
+    patch_file.unlink(missing_ok=True)
+    if saved.returncode:
+        subprocess.run(["git", "-C", str(workspace), "worktree", "remove", "--force", str(target)], check=False)
+        subprocess.run(["git", "-C", str(workspace), "branch", "-D", branch], check=False, capture_output=True)
+        raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "could not transfer feature state to runner worktree")
+    # Moved, not copied: one feature has one working directory and one copy of its state.
+    shutil.rmtree(feature_dir)
+    print(json.dumps({"status": "isolated", "worktree": str(target), "branch": branch,
+                      "note": "feature state moved here; later runs from the main checkout are redirected"}), file=sys.stderr)
+    return target
+
+
+def feature_worktree(workspace: Path, feature: str) -> Path | None:
+    """Another worktree of this repository that holds the feature's state."""
+    listing = git(workspace, "worktree", "list", "--porcelain", check=False)
+    for line in listing.splitlines():
+        if line.startswith("worktree "):
+            path = Path(line[9:])
+            if path.resolve() != workspace and (path / ".adlc5" / feature / "state.json").is_file():
+                return path.resolve()
+    return None
+
+
 def acquire_lock(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"pid": os.getpid(), "started_at": now()}
@@ -137,29 +205,7 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
         if not runner_owned:
             if git(workspace, "branch", "--show-current") not in ("main", "master"):
                 raise RuntimeError("runner requires a clean feature branch; preserve or commit existing changes before running")
-            base = git(workspace, "rev-parse", "HEAD")
-            shared = Path(git(workspace, "rev-parse", "--git-common-dir"))
-            if not shared.is_absolute():
-                shared = (workspace / shared).resolve()
-            target = shared / "adlc5-worktrees" / feature
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                raise RuntimeError(f"ADLC5 worktree target already exists: {target}")
-            if subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0:
-                raise RuntimeError(f"feature branch {branch} already exists; attach a worktree for that branch and resume there")
-            subprocess.run(["git", "-C", str(workspace), "worktree", "add", "-b", branch, str(target), base], check=True)
-            target_feature = target / ".adlc5" / feature
-            target_feature.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock"))
-            # State changes are validated through the canonical kernel command.
-            patch_file = target_feature / "pilot/runner-isolation.json"
-            patch_file.write_text(json.dumps({"git": {"isolation": "worktree", "branch_name": branch,
-                "base_branch": base, "worktree_path": str(target)}}), encoding="utf-8")
-            saved = call(target, "state", "set", "--feature", feature, "--file", str(patch_file), check=False)
-            patch_file.unlink(missing_ok=True)
-            if saved.returncode:
-                subprocess.run(["git", "-C", str(workspace), "worktree", "remove", "--force", str(target)], check=False)
-                raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "could not transfer feature state to runner worktree")
+            target = isolate_in_worktree(workspace, feature, feature_dir, branch)
             return run(argparse.Namespace(**{**vars(args), "workspace": str(target)}))
     common = Path(git(workspace, "rev-parse", "--git-common-dir"))
     if not common.is_absolute():
@@ -185,7 +231,7 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
     return branch, "worktree" if linked else "branch"
 
 
-def stage_brief(workspace: Path, feature: str, step: str, gates: Any) -> tuple[str, str | None]:
+def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: str | None = None) -> tuple[str, str | None]:
     state = load_feature_state(workspace, feature) or {}
     stage = str(state.get("current_stage", "specify"))
     skill = "qa" if step == "implement-4-qa" else stage
@@ -197,13 +243,17 @@ def stage_brief(workspace: Path, feature: str, step: str, gates: Any) -> tuple[s
         packs = []
         for story_id in targets:
             proc = subprocess.run([str(SCRIPTS / "memory/generate-pack.sh"), "--feature", feature,
-                                   "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") else "tester",
+                                   "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") or rework else "tester",
                                    "--workspace", str(workspace)], cwd=workspace, capture_output=True, text=True)
             if proc.returncode:
                 raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"context pack failed for {story_id}")
             packs.append((workspace / json.loads(proc.stdout)["pack"]).read_text(encoding="utf-8"))
         if packs:
-            return "\n\n---\n\n".join(packs) + "\n\nGate feedback:\n" + json.dumps(gates, indent=2), story
+            text = "\n\n---\n\n".join(packs) + "\n\nGate feedback:\n" + json.dumps(gates, indent=2)
+            if rework:
+                text = ((ROOT / "skills/adlc5-assure-reworker/SKILL.md").read_text(encoding="utf-8") + "\n\n---\n\n" + text +
+                        "\n\nVerification findings to fix (do not review; fix the code):\n" + rework)
+            return text, story
     paths = sorted((ROOT / "skills" / skill / "phases").glob("*.md")) or [ROOT / "skills" / skill / "SKILL.md"]
     chunks = [f"## {path.name}\n\n{path.read_text(encoding='utf-8')}" for path in paths if path.is_file()]
     answers = workspace / ".adlc5" / feature / "pilot/answers.jsonl"
@@ -415,6 +465,8 @@ def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result:
                                 for line in ledger.read_text(encoding="utf-8").splitlines()):
         return
     usage = result.get("usage") or {}
+    if not usage:
+        deviation(workspace / ".adlc5" / feature, "usage_unavailable", step=attempt["step"], attempt_id=attempt["attempt_id"])
     extra = {"attempt_id": attempt["attempt_id"], "requested_model_id": model.get("model_id") or "host-default",
              "observed_model_id": result.get("model_id"), "config_sha256": attempt["config_sha256"],
              "host_session_id": result.get("host_session_id"),
@@ -451,7 +503,7 @@ def ingest(workspace: Path, feature: str, attempt: dict[str, Any], result: dict[
     elif step == "implement-2-verify":
         check = call(workspace, "evidence", "check", "--feature", feature, check=False)
         if check.returncode:
-            raise RuntimeError(check.stdout or check.stderr or "verification checks failed")
+            raise ReworkNeeded(check.stdout or check.stderr or "verification checks failed")
         review = result.get("review")
         if not isinstance(review, dict) or not coder or not result.get("session_id"):
             raise ValueError("verification requires a review plus recorded coder and verifier sessions")
@@ -492,7 +544,8 @@ def record_checkpoint(path: Path, attempt: dict[str, Any], name: str, **fields: 
 
 
 def close_attempt(path: Path, attempt: dict[str, Any], number: int, outcome: str, **fields: Any) -> None:
-    record_checkpoint(path, attempt, "closed", number=number, outcome=outcome, **fields)
+    record_checkpoint(path, attempt, "closed", number=number, outcome=outcome, step=attempt.get("step"),
+                      story=attempt.get("story"), kind=attempt.get("kind", "work"), **fields)
 
 
 def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, Any]], run_id: str) -> None:
@@ -506,8 +559,10 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
         used = attempt_event(events, attempt_id, "usage_recorded")
         result = read_json(result_path)
         if validated and result and not ingested:
-            coder = [row for row in events if row.get("step") == "implement-1-build" and row.get("outcome") == "pass" and row.get("session_id")]
-            ingest(workspace, feature, attempt, result, coder)
+            if attempt.get("kind") != "rework":
+                coder = [row for row in events if row.get("outcome") == "pass" and row.get("session_id") and
+                         (row.get("step") == "implement-1-build" or row.get("kind") == "rework")]
+                ingest(workspace, feature, attempt, result, coder)
             record_checkpoint(path, attempt, "evidence_ingested")
             ingested = {"checkpoint": "evidence_ingested"}
         if ingested and result and not used:
@@ -515,7 +570,7 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
             record_checkpoint(path, attempt, "usage_recorded")
             used = {"checkpoint": "usage_recorded"}
         if used:
-            passed = check_gate(workspace, feature, attempt.get("gate", ""))
+            passed = attempt.get("kind") == "rework" or check_gate(workspace, feature, attempt.get("gate", ""))
             if attempt.get("step") == "implement-1-build" and result:
                 passed = result.get("story_id", attempt.get("story")) == attempt.get("story")
             if passed:
@@ -545,6 +600,9 @@ def finish_summary(workspace: Path, feature: str, status: str, branch: str, mode
     summary = {"status": status, "branch": branch, "stories_delivered": sum(1 for item in stories if item.get("status") == "verified"),
                "checks_passed": sum(1 for item in checks.get("results", []) if item.get("status") == "pass"), "repairs": repairs,
                "pr": (((state.get("implement") or {}).get("pr") or {}).get("url"))}
+    deviations_path = workspace / ".adlc5" / feature / "pilot/deviations.jsonl"
+    deviations = journal(deviations_path) if deviations_path.is_file() else []
+    summary["deviations"] = deviations
     if mode == "detailed":
         proc = subprocess.run([sys.executable, str(SCRIPTS / "memory/usage-ledger.py"), "summary", "--feature", feature,
                                "--workspace", str(workspace), "--format", "json"], capture_output=True, text=True)
@@ -552,13 +610,18 @@ def finish_summary(workspace: Path, feature: str, status: str, branch: str, mode
             summary["usage"] = json.loads(proc.stdout) if proc.returncode == 0 else {"status": "unavailable"}
         except json.JSONDecodeError:
             summary["usage"] = {"status": "unavailable"}
-    print((f"{status}: {feature}" + (f" — {summary['pr']}" if summary.get("pr") else "")) if mode == "off" else json.dumps(summary, indent=2))
+    print((f"{status}: {feature}" + (f" — {summary['pr']}" if summary.get("pr") else "") +
+           (f" ({len(deviations)} deviations)" if deviations else "")) if mode == "off" else json.dumps(summary, indent=2))
 
 
 def run(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).resolve()
     feature_dir = workspace / ".adlc5" / args.feature
     if not (feature_dir / "state.json").is_file():
+        peer = feature_worktree(workspace, args.feature)
+        if peer:
+            print(json.dumps({"status": "redirected", "worktree": str(peer)}), file=sys.stderr)
+            return run(argparse.Namespace(**{**vars(args), "workspace": str(peer)}))
         raise RuntimeError("state.json missing; initialize the ADLC5 feature first")
     policies = load_policies(workspace, args.feature)
     lock = feature_dir / "pilot/runner.lock"
@@ -647,7 +710,10 @@ def run(args: argparse.Namespace) -> int:
                 print(json.dumps({"status": "handoff", "step": step, "branch": branch,
                                   "next": "review and approve the PR with the in-agent PR workflow, then run again"}, indent=2))
                 return 10
-            tier = str(action.get("model_tier_resolved") or "balanced")
+            budget = int(((policies.get("autopilot") or {}).get("retry_budgets") or {}).get("verification_per_story") or 3)
+            findings = rework_findings(journal(journal_path), budget) if step == "implement-2-verify" else None
+            # A rejected review goes back to a coder on the execution tier, then to a fresh review.
+            tier = "execution" if findings else str(action.get("model_tier_resolved") or "balanced")
             model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
             model["tier"] = tier
             prior = [item for item in journal(journal_path) if item.get("step") == step and item.get("checkpoint") == "closed"]
@@ -656,14 +722,18 @@ def run(args: argparse.Namespace) -> int:
                 if item.get("outcome") != "fail":
                     break
                 consecutive += 1
-            attempt_no = consecutive + 1
+            attempt_no = 1 if findings else consecutive + 1
             if attempt_no >= 3 and tier != "reasoning":
                 tier = "reasoning"
                 model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
                 model["tier"] = tier
             elif attempt_no >= 2:
                 model["effort"] = {"minimal": "low", "low": "medium", "medium": "high", "high": "xhigh"}.get(model.get("effort") or "medium", "xhigh")
-            if step == "implement-2-verify" and model.get("verifier_different_model"):
+            if attempt_no >= 2:
+                deviation(feature_dir, "retry_escalation", step=step, attempt=attempt_no, tier=tier, effort=model.get("effort"))
+            if findings:
+                deviation(feature_dir, "rework", step=step, findings=findings[:500])
+            if step == "implement-2-verify" and not findings and model.get("verifier_different_model"):
                 coder_models = {item.get("model_id") for item in journal(journal_path)
                                 if item.get("step") == "implement-1-build" and item.get("outcome") == "pass" and item.get("model_id")}
                 candidates = [model] + [hosts.resolve_model(ROOT, workspace, args.feature, candidate, host)
@@ -675,13 +745,20 @@ def run(args: argparse.Namespace) -> int:
                     raise RuntimeError("verification requires a configured model different from every implementer model")
                 tier = model.get("tier") or tier
                 model["tier"] = tier
-            brief, story = stage_brief(workspace, args.feature, step, action.get("gates"))
+            brief, story = stage_brief(workspace, args.feature, step, action.get("gates"), findings)
+            pack_budgets = {"reasoning": 60000, "balanced": 60000, "execution": 30000,
+                            **(config.get("pack_budget_tokens") if isinstance(config.get("pack_budget_tokens"), dict) else {})}
+            if len(brief) // 4 > int(pack_budgets.get(tier, 60000)):
+                deviation(feature_dir, "pack_over_budget", step=step, tier=tier, estimated_tokens=len(brief) // 4,
+                          budget=int(pack_budgets.get(tier, 60000)))
+            if str(model.get("model_id") or "host default").lower() in ("host default", "inherit", ""):
+                deviation(feature_dir, "host_default_model", step=step, tier=tier)
             start_commit = git(workspace, "rev-parse", "HEAD")
             entry = {"attempt_id": str(uuid.uuid4()), "run_id": run_id, "step": step, "story": story,
                      "number": attempt_no, "pack_sha256": hashlib.sha256(brief.encode()).hexdigest(), "config_sha256": config_hash,
                      "start_commit": start_commit, "kernel_fingerprint": fingerprint(workspace, args.feature),
                      "requested_model_id": model.get("model_id"), "tier": tier, "gate": action.get("gate"), "at": now(),
-                     "host": host, "mode": mode}
+                     "host": host, "mode": mode, "kind": "rework" if findings else "work"}
             append(journal_path, entry)
             record_checkpoint(journal_path, entry, "launched")
             try:
@@ -696,18 +773,23 @@ def run(args: argparse.Namespace) -> int:
                     question = {"id": entry["attempt_id"], "question": result.get("question", "Human input required"), "step": step,
                                 "denied_actions": result.get("denied_actions", []), "host": host}
                     (feature_dir / "pilot/pending-question.json").write_text(json.dumps(question, indent=2) + "\n")
+                    if question["denied_actions"]:
+                        deviation(feature_dir, "denied_action", step=step, denied_actions=question["denied_actions"])
                     record_usage(workspace, args.feature, entry, result, model)
                     record_checkpoint(journal_path, entry, "usage_recorded")
                     close_attempt(journal_path, entry, attempt_no, "needs_human")
                     print(json.dumps({"status": "needs_human", **question}, indent=2))
                     return 10
-                coders = [item for item in journal(journal_path) if item.get("step") == "implement-1-build" and item.get("outcome") == "pass" and item.get("story") and item.get("session_id")]
+                # Everyone who wrote the code under review: build workers and rework workers.
+                coders = [item for item in journal(journal_path) if item.get("outcome") == "pass" and item.get("session_id") and
+                          (item.get("step") == "implement-1-build" and item.get("story") or item.get("kind") == "rework")]
                 coder = coders if step == "implement-2-verify" else next((item for item in reversed(coders) if item.get("story") == entry.get("story")), None)
-                ingest(workspace, args.feature, entry, result, coder)
+                if not findings:
+                    ingest(workspace, args.feature, entry, result, coder)
                 record_checkpoint(journal_path, entry, "evidence_ingested")
                 record_usage(workspace, args.feature, entry, result, model)
                 record_checkpoint(journal_path, entry, "usage_recorded")
-                passed = check_gate(workspace, args.feature, str(action.get("gate") or ""))
+                passed = bool(findings) or check_gate(workspace, args.feature, str(action.get("gate") or ""))
                 if step == "implement-1-build":
                     passed = result.get("story_id", entry.get("story")) == entry.get("story")
                 if passed:
@@ -716,8 +798,12 @@ def run(args: argparse.Namespace) -> int:
                     if staged == 1:
                         subprocess.run(["git", "-C", str(workspace), "commit", "-m", f"feat({args.feature}): complete {step}"], check=True)
                 outcome = "pass" if passed else "fail"
+                review = result.get("review") if isinstance(result.get("review"), dict) else {}
+                rejected = step == "implement-2-verify" and not passed and (
+                    review.get("disposition") != "pass" or bool(review.get("blocking_findings")))
                 close_attempt(journal_path, entry, attempt_no, outcome, session_id=result.get("session_id"), model_id=result.get("model_id"),
-                              **({} if passed else {"reason": "gate failed"}))
+                              **({} if passed else {"reason": "gate failed"}),
+                              **({"rework": True, "findings": json.dumps(review.get("blocking_findings") or "review rejected")[:4000]} if rejected else {}))
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", outcome)
             except KeyboardInterrupt:
                 raise
@@ -726,7 +812,8 @@ def run(args: argparse.Namespace) -> int:
                     subprocess.run(["git", "-C", str(workspace), "reset", "--hard", start_commit], check=False)
                     subprocess.run(["git", "-C", str(workspace), "clean", "-fd"], check=False)
                 record_usage(workspace, args.feature, entry, {**result, "model_id": result.get("model_id") or model.get("model_id") or "unknown"}, model)
-                close_attempt(journal_path, entry, attempt_no, "fail", reason=str(exc))
+                close_attempt(journal_path, entry, attempt_no, "fail", reason=str(exc)[:4000],
+                              **({"rework": True, "findings": str(exc)[:4000]} if isinstance(exc, ReworkNeeded) else {}))
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", "fail", check=False)
                 print(f"attempt {entry['attempt_id']} failed: {exc}", file=sys.stderr)
                 if attempt_no >= 3:

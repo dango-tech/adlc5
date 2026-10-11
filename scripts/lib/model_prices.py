@@ -31,9 +31,16 @@ def prices_path(root: Path) -> Path:
     return root / "core" / "model-prices.yaml"
 
 
-def load_prices(root: Path) -> dict[str, Any]:
-    """Load and parse core/model-prices.yaml; {} when absent or unparseable."""
-    path = prices_path(root)
+def load_prices(root: Path, user_path: Path | None = None) -> dict[str, Any]:
+    """Load core/model-prices.yaml, with the user's ~/.adlc5/model-prices.yaml models layered on top."""
+    prices = _load_file(prices_path(root))
+    user = _load_file(user_path or Path.home() / ".adlc5" / "model-prices.yaml")
+    if isinstance(user.get("models"), dict):
+        prices = {**prices, "models": {**(prices.get("models") or {}), **user["models"]}}
+    return prices
+
+
+def _load_file(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     text = path.read_text(encoding="utf-8")

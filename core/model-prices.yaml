@@ -10,8 +10,11 @@
 # missing here reports cost_usd: null with the model listed under
 # unpriced_models instead of silently defaulting to $0.
 #
-# Prices are USD per 1,000,000 tokens (MTok), first-party Anthropic API list
-# pricing. model_id must match the exact strings used in
+# A user file at ~/.adlc5/model-prices.yaml with the same `models:` shape is
+# layered on top of this one, so a model missing here can be priced locally.
+#
+# Prices are USD per 1,000,000 tokens (MTok), first-party API list pricing,
+# standard tier, short context. model_id must match the exact strings used in
 # platform_profiles/model_profiles (core/guides/model-matrix.md,
 # config.example.yaml) — a host-specific option suffix such as
 # "[reasoning=extra-high]" or "[thinking=true,...]" is stripped before
@@ -62,3 +65,26 @@ models:
   claude-haiku-4-5:
     input: 1.00
     output: 5.00
+
+  # OpenAI — verified 2026-10-11 against https://developers.openai.com/api/docs/pricing
+  # (standard tier, up to 272K input tokens). Cached input is a subset of input
+  # in OpenAI usage reports; record uncached input in --input-tokens.
+  gpt-6.1-sol:
+    input: 2.00
+    output: 10.00
+    cache_read_multiplier: 0.05
+  gpt-6-sol:
+    input: 2.00
+    output: 10.00
+  gpt-6-luna:
+    input: 0.10
+    output: 0.50
+  gpt-5.6-sol:
+    input: 4.00
+    output: 20.00
+  gpt-5.3-codex:
+    input: 1.75
+    output: 14.00
+  gpt-5.2:
+    input: 1.75
+    output: 14.00

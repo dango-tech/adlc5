@@ -28,6 +28,31 @@ its own branch, the runner creates or switches to the feature branch in place
 and never adds another worktree. It does not reset uncommitted changes when a
 run resumes, except to restore an attempt that was interrupted mid-flight.
 
+Started from a main checkout with uncommitted changes, the runner creates one
+worktree at `.worktrees/FEATURE` (excluded through `.git/info/exclude`, so
+`.gitignore` is not edited) and moves the feature's `.adlc5/FEATURE` state
+into it. There is one copy of the state. A later `adlc5 run` from the main
+checkout is redirected to that worktree.
+
+When verification fails its checks or the reviewer rejects the change, the
+next attempt is a rework: a coder on the execution tier receives the findings
+and fixes the code, then a fresh review runs. The number of reworks is capped
+by `autopilot.retry_budgets.verification_per_story` (default 3); after that
+the run stops for human review.
+
+The `brief` and `detailed` summaries list deviations from the configured
+settings, and `off` reports their count: retry escalations, reworks, a tier
+running on the host's default model, denied actions, unavailable usage, and
+worker briefs larger than the tier's budget. Budgets default to 30,000
+estimated tokens for the execution tier and 60,000 for the others; override
+them with `pack_budget_tokens` in config. An over-budget brief is reported,
+not blocked.
+
+Cost uses the host's own figure when it reports one, otherwise
+`core/model-prices.yaml`. Add or override entries in
+`~/.adlc5/model-prices.yaml` using the same `models:` layout. A model with no
+price is shown as unpriced, never as zero.
+
 | Host | Default mode | Unattended | Chat launch | Boundary |
 |---|---|---:|---:|---|
 | Codex | confined | yes | no | `codex exec` uses `workspace-write` |

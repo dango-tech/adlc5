@@ -142,6 +142,9 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
                     {"input": "input_tokens", "cache_read": "cached_input_tokens", "cache_creation": "cache_write_input_tokens",
                      "output": "output_tokens", "thinking": "reasoning_output_tokens"}))
                 session_id = payload.get("session_id") or session_id
+        # Codex counts cached tokens inside input_tokens; the ledger prices them separately.
+        if "input" in usage and "cache_read" in usage:
+            usage["input"] = max(0, usage["input"] - usage["cache_read"])
         return {"text": final, "usage": usage, "model_id": model, "session_id": session_id, "calls": calls}
     try:
         data = json.loads(text)
