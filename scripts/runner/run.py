@@ -21,6 +21,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from runner import hosts  # noqa: E402
 from lib.completion_evidence import fingerprint, records as evidence_records  # noqa: E402
+from lib.config_layers import config_paths  # noqa: E402
 from lib.model_routing import load_yaml_file, merge_model_config  # noqa: E402
 from lib.policies_load import CANONICAL_STEPS, load_policies, next_step_for_profile, profile_name, step_enabled  # noqa: E402
 from lib.state_v2 import load_feature_state  # noqa: E402
@@ -82,6 +83,74 @@ def read_json_line(line: str) -> dict[str, Any] | None:
         return None
 
 
+class ReworkNeeded(RuntimeError):
+    """Verification found defects in the code; a coder must fix them before the next review."""
+
+
+def deviation(feature_dir: Path, kind: str, **detail: Any) -> None:
+    """Record a departure from the configured settings; listed in the end summary."""
+    append(feature_dir / "pilot/deviations.jsonl", {"kind": kind, "at": now(), **detail})
+
+
+def rework_findings(events: list[dict[str, Any]], budget: int) -> str | None:
+    """Findings to fix when the latest verify attempt was rejected; None when a review is due."""
+    closed = [item for item in events if item.get("checkpoint") == "closed" and item.get("step") == "implement-2-verify"]
+    if not closed or not closed[-1].get("rework"):
+        return None
+    if sum(1 for item in closed if item.get("kind") == "rework") >= budget:
+        raise RuntimeError(f"verification still failing after {budget} rework attempts; human review required")
+    return str(closed[-1].get("findings") or "verification failed")
+
+
+def isolate_in_worktree(workspace: Path, feature: str, feature_dir: Path, branch: str) -> Path:
+    """Create the feature's one worktree under .worktrees/ and move its state there."""
+    base = git(workspace, "rev-parse", "HEAD")
+    target = workspace / ".worktrees" / feature
+    if target.exists():
+        raise RuntimeError(f"ADLC5 worktree target already exists: {target}")
+    if subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0:
+        raise RuntimeError(f"feature branch {branch} already exists; attach a worktree for that branch and resume there")
+    # Excluded locally, so the tracked .gitignore is never edited.
+    exclude = Path(git(workspace, "rev-parse", "--git-path", "info/exclude"))
+    if not exclude.is_absolute():
+        exclude = workspace / exclude
+    if ".worktrees/" not in (exclude.read_text(encoding="utf-8").splitlines() if exclude.is_file() else []):
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open("a", encoding="utf-8") as stream:
+            stream.write(".worktrees/\n")
+    subprocess.run(["git", "-C", str(workspace), "worktree", "add", "-q", "-b", branch, str(target), base], check=True)
+    target_feature = target / ".adlc5" / feature
+    target_feature.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock"))
+    # State changes are validated through the canonical kernel command.
+    patch_file = target_feature / "pilot/runner-isolation.json"
+    patch_file.parent.mkdir(parents=True, exist_ok=True)
+    patch_file.write_text(json.dumps({"git": {"isolation": "worktree", "branch_name": branch,
+        "base_branch": base, "worktree_path": str(target)}}), encoding="utf-8")
+    saved = call(target, "state", "set", "--feature", feature, "--file", str(patch_file), check=False)
+    patch_file.unlink(missing_ok=True)
+    if saved.returncode:
+        subprocess.run(["git", "-C", str(workspace), "worktree", "remove", "--force", str(target)], check=False)
+        subprocess.run(["git", "-C", str(workspace), "branch", "-D", branch], check=False, capture_output=True)
+        raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "could not transfer feature state to runner worktree")
+    # Moved, not copied: one feature has one working directory and one copy of its state.
+    shutil.rmtree(feature_dir)
+    print(json.dumps({"status": "isolated", "worktree": str(target), "branch": branch,
+                      "note": "feature state moved here; later runs from the main checkout are redirected"}), file=sys.stderr)
+    return target
+
+
+def feature_worktree(workspace: Path, feature: str) -> Path | None:
+    """Another worktree of this repository that holds the feature's state."""
+    listing = git(workspace, "worktree", "list", "--porcelain", check=False)
+    for line in listing.splitlines():
+        if line.startswith("worktree "):
+            path = Path(line[9:])
+            if path.resolve() != workspace and (path / ".adlc5" / feature / "state.json").is_file():
+                return path.resolve()
+    return None
+
+
 def acquire_lock(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"pid": os.getpid(), "started_at": now()}
@@ -109,7 +178,6 @@ def acquire_lock(path: Path) -> None:
 def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: argparse.Namespace) -> tuple[str, str] | int:
     branch_prefix = "feat"
     # git_branch_prefix is retained in repository config independently of model setup.
-    from lib.config_layers import config_paths
     for _source, path in config_paths(workspace):
         if path.is_file():
             for line in path.read_text(encoding="utf-8").splitlines():
@@ -137,36 +205,8 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
         if not runner_owned:
             if git(workspace, "branch", "--show-current") not in ("main", "master"):
                 raise RuntimeError("runner requires a clean feature branch; preserve or commit existing changes before running")
-            base = git(workspace, "rev-parse", "HEAD")
-            shared = Path(git(workspace, "rev-parse", "--git-common-dir"))
-            if not shared.is_absolute():
-                shared = (workspace / shared).resolve()
-            target = shared / "adlc5-worktrees" / feature
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                raise RuntimeError(f"ADLC5 worktree target already exists: {target}")
-            if subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0:
-                raise RuntimeError(f"feature branch {branch} already exists; attach a worktree for that branch and resume there")
-            subprocess.run(["git", "-C", str(workspace), "worktree", "add", "-b", branch, str(target), base], check=True)
-            target_feature = target / ".adlc5" / feature
-            target_feature.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock"))
-            # State changes are validated through the canonical kernel command.
-            patch_file = target_feature / "pilot/runner-isolation.json"
-            patch_file.write_text(json.dumps({"git": {"isolation": "worktree", "branch_name": branch,
-                "base_branch": base, "worktree_path": str(target)}}), encoding="utf-8")
-            saved = call(target, "state", "set", "--feature", feature, "--file", str(patch_file), check=False)
-            patch_file.unlink(missing_ok=True)
-            if saved.returncode:
-                subprocess.run(["git", "-C", str(workspace), "worktree", "remove", "--force", str(target)], check=False)
-                raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "could not transfer feature state to runner worktree")
+            target = isolate_in_worktree(workspace, feature, feature_dir, branch)
             return run(argparse.Namespace(**{**vars(args), "workspace": str(target)}))
-        closed = attempt_event(events, resumable_attempt["attempt_id"], "closed")
-        has_ingested_result = bool(closed and closed.get("outcome") == "fail" and
-                                   attempt_event(events, resumable_attempt["attempt_id"], "evidence_ingested"))
-        if not has_ingested_result:
-            subprocess.run(["git", "-C", str(workspace), "reset", "--hard", resumable_attempt["start_commit"]], check=True)
-            subprocess.run(["git", "-C", str(workspace), "clean", "-fd"], check=True)
     common = Path(git(workspace, "rev-parse", "--git-common-dir"))
     if not common.is_absolute():
         common = (workspace / common).resolve()
@@ -174,9 +214,8 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
     linked = gitdir.resolve() != common.resolve()
     current = git(workspace, "branch", "--show-current")
     if current != branch:
-        if linked and current:
-            raise RuntimeError(f"linked worktree is already on {current}; refusing to switch host-owned worktree")
-        if current and current not in ("main", "master"):
+        # A host-created worktree is reused as is: only the branch changes, in place.
+        if not linked and current and current not in ("main", "master"):
             raise RuntimeError(f"runner is on branch {current}; use a host-created worktree for {branch}")
         exists = subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0
         subprocess.run(["git", "-C", str(workspace), "switch", branch] if exists else
@@ -192,10 +231,10 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
     return branch, "worktree" if linked else "branch"
 
 
-def stage_brief(workspace: Path, feature: str, step: str, gates: Any) -> tuple[str, str | None]:
+def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: str | None = None) -> tuple[str, str | None]:
     state = load_feature_state(workspace, feature) or {}
     stage = str(state.get("current_stage", "specify"))
-    skill = {"specify": "specify", "plan": "plan", "tasks": "tasks", "implement": "implement"}.get(stage, stage)
+    skill = "qa" if step == "implement-4-qa" else stage
     story = None
     if step in ("implement-1-build", "implement-2-verify"):
         stories = (state.get("tasks") or {}).get("stories", [])
@@ -204,13 +243,17 @@ def stage_brief(workspace: Path, feature: str, step: str, gates: Any) -> tuple[s
         packs = []
         for story_id in targets:
             proc = subprocess.run([str(SCRIPTS / "memory/generate-pack.sh"), "--feature", feature,
-                                   "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") else "tester",
+                                   "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") or rework else "tester",
                                    "--workspace", str(workspace)], cwd=workspace, capture_output=True, text=True)
             if proc.returncode:
                 raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"context pack failed for {story_id}")
             packs.append((workspace / json.loads(proc.stdout)["pack"]).read_text(encoding="utf-8"))
         if packs:
-            return "\n\n---\n\n".join(packs) + "\n\nGate feedback:\n" + json.dumps(gates, indent=2), story
+            text = "\n\n---\n\n".join(packs) + "\n\nGate feedback:\n" + json.dumps(gates, indent=2)
+            if rework:
+                text = ((ROOT / "skills/adlc5-assure-reworker/SKILL.md").read_text(encoding="utf-8") + "\n\n---\n\n" + text +
+                        "\n\nVerification findings to fix (do not review; fix the code):\n" + rework)
+            return text, story
     paths = sorted((ROOT / "skills" / skill / "phases").glob("*.md")) or [ROOT / "skills" / skill / "SKILL.md"]
     chunks = [f"## {path.name}\n\n{path.read_text(encoding='utf-8')}" for path in paths if path.is_file()]
     answers = workspace / ".adlc5" / feature / "pilot/answers.jsonl"
@@ -269,10 +312,13 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                        "summary": {"type": "string"}, "question": {"type": "string"},
                        "story_id": {"type": "string"}, "state_patch": {"type": "object"},
                        "review": {"type": "object"}}, "additionalProperties": True}, indent=2))
+    # Fixed rules first and the per-attempt id last, so separate workers share a cacheable prefix.
     result_prompt = ("You are an ADLC5 worker. Do only the current step. Do not run transitions, change lifecycle state, "
-              "commit, push, create worktrees, or perform the next step. Write only in the workspace. Return JSON "
-              f"matching the supplied schema with attempt_id {attempt_id}. For a human decision return needs_human and a question.\n\n"
-              f"Feature: {feature}\nStep: {attempt['step']}\n\n{brief}")
+              "commit, push, create worktrees, or perform the next step, even where the brief below says to. "
+              "Write only in the workspace. Return one JSON object with attempt_id, status "
+              "(completed, needs_human or failed), summary, and any story_id, state_patch or review the step requires. "
+              "For a human decision return needs_human and a question.\n\n"
+              f"Feature: {feature}\nStep: {attempt['step']}\n\n{brief}\n\nattempt_id: {attempt_id}")
     prompt = result_prompt
     if mode == "attended" or host == "hermes":
         prompt += (f"\n\nWhen finished, write the final JSON object to {last}. Include attempt_id {attempt_id}, "
@@ -326,9 +372,22 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                 proc.wait()
     log_text = log.read_text(encoding="utf-8", errors="replace")
     events = hosts.parse_events(host, log_text)
+    if host == "hermes" and usage_file.is_file():
+        usage_data = read_json(usage_file, {})
+        if isinstance(usage_data, dict):
+            events["usage"] = {name: usage_data[key] for name, key in {
+                "input": "input_tokens", "output": "output_tokens", "thinking": "reasoning_tokens",
+                "cache_read": "cache_read_tokens", "cache_creation": "cache_write_tokens"}.items()
+                if type(usage_data.get(key)) is int and usage_data[key] >= 0}
+            events["model_id"] = usage_data.get("model")
+            events["host_reported_cost_usd"] = usage_data.get("estimated_cost_usd")
+            events["calls"] = usage_data.get("api_calls", 1)
+            events["is_error"] = any(usage_data.get(flag) is True for flag in ("failed", "interrupted", "partial"))
+    # Failed attempts still spent tokens: every error result carries what the host reported.
+    spent = {key: events[key] for key in ("usage", "model_id", "host_reported_cost_usd", "calls") if events.get(key)}
     if mode == "attended" or host == "hermes":
         if not last.is_file():
-            return proc.returncode or 1, {"error": "worker exited without writing the attempt result file"}, log_text
+            return proc.returncode or 1, {"error": "worker exited without writing the attempt result file", **spent}, log_text
     if events.get("denied_actions") and interaction_mode == "hitl":
         denied = events["denied_actions"]
         question = "The worker was denied: " + json.dumps(denied, ensure_ascii=False) + ". Reply 'allow' to add its command to this feature allowlist, or 'deny'."
@@ -345,28 +404,15 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                 raise ValueError("structured result did not match the active attempt; host must return the schema object")
             last.write_text(json.dumps(result_data), encoding="utf-8")
         except (json.JSONDecodeError, ValueError, AttributeError, TypeError) as exc:
-            return proc.returncode or 1, {"error": f"invalid {host} worker result: {exc}"}, log_text
+            return proc.returncode or 1, {"error": f"invalid {host} worker result: {exc}", **spent}, log_text
     if not last.is_file():
-        return (124 if timed_out else 130 if stopped else proc.returncode or 1), {"error": "missing result file"}, log_text
+        return (124 if timed_out else 130 if stopped else proc.returncode or 1), {"error": "missing result file", **spent}, log_text
     try:
         worker = json.loads(last.read_text(encoding="utf-8"))
         if not isinstance(worker, dict) or worker.get("attempt_id") != attempt_id or worker.get("status") not in ("completed", "needs_human", "failed"):
             raise ValueError("result identity or status mismatch")
     except (ValueError, json.JSONDecodeError) as exc:
-        return (proc.returncode or 1), {"error": f"invalid result: {exc}"}, log_text
-    if host == "hermes" and usage_file.is_file():
-        usage_data = read_json(usage_file, {})
-        if isinstance(usage_data, dict):
-            events["usage"] = {name: usage_data[key] for name, key in {
-                "input": "input_tokens", "output": "output_tokens", "thinking": "reasoning_tokens",
-                "cache_read": "cache_read_tokens", "cache_creation": "cache_write_tokens"}.items()
-                if type(usage_data.get(key)) is int and usage_data[key] >= 0}
-            events["model_id"] = usage_data.get("model")
-            events["host_reported_cost_usd"] = usage_data.get("estimated_cost_usd")
-            events["calls"] = usage_data.get("api_calls", 1)
-            events["is_error"] = any(usage_data.get(flag) is True for flag in ("failed", "interrupted", "partial"))
-        if events.get("is_error"):
-            return proc.returncode or 1, {"error": "Hermes usage report indicates an incomplete or failed run", **events}, log_text
+        return (proc.returncode or 1), {"error": f"invalid result: {exc}", **spent}, log_text
     host_session_id = events.get("session_id")
     if host == "cursor" and session_file.is_file():
         session_record = read_json(session_file, {})
@@ -419,6 +465,8 @@ def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result:
                                 for line in ledger.read_text(encoding="utf-8").splitlines()):
         return
     usage = result.get("usage") or {}
+    if not usage:
+        deviation(workspace / ".adlc5" / feature, "usage_unavailable", step=attempt["step"], attempt_id=attempt["attempt_id"])
     extra = {"attempt_id": attempt["attempt_id"], "requested_model_id": model.get("model_id") or "host-default",
              "observed_model_id": result.get("model_id"), "config_sha256": attempt["config_sha256"],
              "host_session_id": result.get("host_session_id"),
@@ -455,7 +503,7 @@ def ingest(workspace: Path, feature: str, attempt: dict[str, Any], result: dict[
     elif step == "implement-2-verify":
         check = call(workspace, "evidence", "check", "--feature", feature, check=False)
         if check.returncode:
-            raise RuntimeError(check.stdout or check.stderr or "verification checks failed")
+            raise ReworkNeeded(check.stdout or check.stderr or "verification checks failed")
         review = result.get("review")
         if not isinstance(review, dict) or not coder or not result.get("session_id"):
             raise ValueError("verification requires a review plus recorded coder and verifier sessions")
@@ -496,7 +544,8 @@ def record_checkpoint(path: Path, attempt: dict[str, Any], name: str, **fields: 
 
 
 def close_attempt(path: Path, attempt: dict[str, Any], number: int, outcome: str, **fields: Any) -> None:
-    record_checkpoint(path, attempt, "closed", number=number, outcome=outcome, **fields)
+    record_checkpoint(path, attempt, "closed", number=number, outcome=outcome, step=attempt.get("step"),
+                      story=attempt.get("story"), kind=attempt.get("kind", "work"), **fields)
 
 
 def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, Any]], run_id: str) -> None:
@@ -510,8 +559,10 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
         used = attempt_event(events, attempt_id, "usage_recorded")
         result = read_json(result_path)
         if validated and result and not ingested:
-            coder = [row for row in events if row.get("step") == "implement-1-build" and row.get("outcome") == "pass" and row.get("session_id")]
-            ingest(workspace, feature, attempt, result, coder)
+            if attempt.get("kind") != "rework":
+                coder = [row for row in events if row.get("outcome") == "pass" and row.get("session_id") and
+                         (row.get("step") == "implement-1-build" or row.get("kind") == "rework")]
+                ingest(workspace, feature, attempt, result, coder)
             record_checkpoint(path, attempt, "evidence_ingested")
             ingested = {"checkpoint": "evidence_ingested"}
         if ingested and result and not used:
@@ -519,7 +570,7 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
             record_checkpoint(path, attempt, "usage_recorded")
             used = {"checkpoint": "usage_recorded"}
         if used:
-            passed = check_gate(workspace, feature, attempt.get("gate", ""))
+            passed = attempt.get("kind") == "rework" or check_gate(workspace, feature, attempt.get("gate", ""))
             if attempt.get("step") == "implement-1-build" and result:
                 passed = result.get("story_id", attempt.get("story")) == attempt.get("story")
             if passed:
@@ -549,6 +600,9 @@ def finish_summary(workspace: Path, feature: str, status: str, branch: str, mode
     summary = {"status": status, "branch": branch, "stories_delivered": sum(1 for item in stories if item.get("status") == "verified"),
                "checks_passed": sum(1 for item in checks.get("results", []) if item.get("status") == "pass"), "repairs": repairs,
                "pr": (((state.get("implement") or {}).get("pr") or {}).get("url"))}
+    deviations_path = workspace / ".adlc5" / feature / "pilot/deviations.jsonl"
+    deviations = journal(deviations_path) if deviations_path.is_file() else []
+    summary["deviations"] = deviations
     if mode == "detailed":
         proc = subprocess.run([sys.executable, str(SCRIPTS / "memory/usage-ledger.py"), "summary", "--feature", feature,
                                "--workspace", str(workspace), "--format", "json"], capture_output=True, text=True)
@@ -556,13 +610,18 @@ def finish_summary(workspace: Path, feature: str, status: str, branch: str, mode
             summary["usage"] = json.loads(proc.stdout) if proc.returncode == 0 else {"status": "unavailable"}
         except json.JSONDecodeError:
             summary["usage"] = {"status": "unavailable"}
-    print((f"{status}: {feature}" + (f" — {summary['pr']}" if summary.get("pr") else "")) if mode == "off" else json.dumps(summary, indent=2))
+    print((f"{status}: {feature}" + (f" — {summary['pr']}" if summary.get("pr") else "") +
+           (f" ({len(deviations)} deviations)" if deviations else "")) if mode == "off" else json.dumps(summary, indent=2))
 
 
 def run(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).resolve()
     feature_dir = workspace / ".adlc5" / args.feature
     if not (feature_dir / "state.json").is_file():
+        peer = feature_worktree(workspace, args.feature)
+        if peer:
+            print(json.dumps({"status": "redirected", "worktree": str(peer)}), file=sys.stderr)
+            return run(argparse.Namespace(**{**vars(args), "workspace": str(peer)}))
         raise RuntimeError("state.json missing; initialize the ADLC5 feature first")
     policies = load_policies(workspace, args.feature)
     lock = feature_dir / "pilot/runner.lock"
@@ -572,7 +631,9 @@ def run(args: argparse.Namespace) -> int:
         events = journal(journal_path) if journal_path.exists() else []
         config = merge_model_config(ROOT, workspace)
         profiles = config.get("platform_profiles") if isinstance(config.get("platform_profiles"), dict) else {}
-        host = str(args.host or config.get("default_host") or "codex")
+        host = str(args.host or config.get("default_host") or "")
+        if not host:
+            raise RuntimeError("no host selected; pass --host or set default_host with 'adlc5 setup models'")
         if host not in hosts.HOSTS:
             raise RuntimeError(f"unsupported host: {host}")
         profile = profiles.get(host) if isinstance(profiles.get(host), dict) else {}
@@ -616,6 +677,9 @@ def run(args: argparse.Namespace) -> int:
         config_path = feature_dir / "pilot/run-config.json"
         config_path.write_text(json.dumps({"host": host, "mode": mode, "preset": (config.get("model_routing") or {}).get("strategy", "balanced"),
             "summary": summary_mode, "effective_config": config, "sha256": config_hash, "isolation": isolation}, indent=2) + "\n")
+        print(json.dumps({"status": "starting", "host": host, "mode": mode, "summary": summary_mode, "isolation": isolation,
+                          "tiers": {tier: profile.get(tier) or "host default" for tier in ("reasoning", "balanced", "execution")},
+                          "config_layers": [source for source, path in config_paths(workspace) if path.is_file()]}), file=sys.stderr)
         recover(workspace, args.feature, journal_path, events, run_id)
         while True:
             nav = subprocess.run([str(SCRIPTS / "pilot-autopilot.sh"), "--feature", args.feature, "--workspace", str(workspace)],
@@ -642,8 +706,14 @@ def run(args: argparse.Namespace) -> int:
                 raise RuntimeError(f"unsupported navigator action: {action.get('action')}")
             step = str(action.get("phase") or "")
             if step == "implement-5-pr":
-                raise RuntimeError("PR review and scoped approval remain chat-owned; use the in-agent PR workflow for this step")
-            tier = str(action.get("model_tier_resolved") or "balanced")
+                # PR review and scoped approval are human-owned: hand off instead of failing the run.
+                print(json.dumps({"status": "handoff", "step": step, "branch": branch,
+                                  "next": "review and approve the PR with the in-agent PR workflow, then run again"}, indent=2))
+                return 10
+            budget = int(((policies.get("autopilot") or {}).get("retry_budgets") or {}).get("verification_per_story") or 3)
+            findings = rework_findings(journal(journal_path), budget) if step == "implement-2-verify" else None
+            # A rejected review goes back to a coder on the execution tier, then to a fresh review.
+            tier = "execution" if findings else str(action.get("model_tier_resolved") or "balanced")
             model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
             model["tier"] = tier
             prior = [item for item in journal(journal_path) if item.get("step") == step and item.get("checkpoint") == "closed"]
@@ -652,14 +722,18 @@ def run(args: argparse.Namespace) -> int:
                 if item.get("outcome") != "fail":
                     break
                 consecutive += 1
-            attempt_no = consecutive + 1
-            if attempt_no == 2:
-                model["effort"] = {"minimal": "low", "low": "medium", "medium": "high", "high": "xhigh"}.get(model.get("effort") or "medium", "xhigh")
-            elif attempt_no >= 3:
-                tier = "reasoning" if tier != "reasoning" else "balanced"
+            attempt_no = 1 if findings else consecutive + 1
+            if attempt_no >= 3 and tier != "reasoning":
+                tier = "reasoning"
                 model = hosts.resolve_model(ROOT, workspace, args.feature, tier, host)
                 model["tier"] = tier
-            if step == "implement-2-verify" and model.get("verifier_different_model"):
+            elif attempt_no >= 2:
+                model["effort"] = {"minimal": "low", "low": "medium", "medium": "high", "high": "xhigh"}.get(model.get("effort") or "medium", "xhigh")
+            if attempt_no >= 2:
+                deviation(feature_dir, "retry_escalation", step=step, attempt=attempt_no, tier=tier, effort=model.get("effort"))
+            if findings:
+                deviation(feature_dir, "rework", step=step, findings=findings[:500])
+            if step == "implement-2-verify" and not findings and model.get("verifier_different_model"):
                 coder_models = {item.get("model_id") for item in journal(journal_path)
                                 if item.get("step") == "implement-1-build" and item.get("outcome") == "pass" and item.get("model_id")}
                 candidates = [model] + [hosts.resolve_model(ROOT, workspace, args.feature, candidate, host)
@@ -671,17 +745,25 @@ def run(args: argparse.Namespace) -> int:
                     raise RuntimeError("verification requires a configured model different from every implementer model")
                 tier = model.get("tier") or tier
                 model["tier"] = tier
-            brief, story = stage_brief(workspace, args.feature, step, action.get("gates"))
+            brief, story = stage_brief(workspace, args.feature, step, action.get("gates"), findings)
+            pack_budgets = {"reasoning": 60000, "balanced": 60000, "execution": 30000,
+                            **(config.get("pack_budget_tokens") if isinstance(config.get("pack_budget_tokens"), dict) else {})}
+            if len(brief) // 4 > int(pack_budgets.get(tier, 60000)):
+                deviation(feature_dir, "pack_over_budget", step=step, tier=tier, estimated_tokens=len(brief) // 4,
+                          budget=int(pack_budgets.get(tier, 60000)))
+            if str(model.get("model_id") or "host default").lower() in ("host default", "inherit", ""):
+                deviation(feature_dir, "host_default_model", step=step, tier=tier)
             start_commit = git(workspace, "rev-parse", "HEAD")
             entry = {"attempt_id": str(uuid.uuid4()), "run_id": run_id, "step": step, "story": story,
                      "number": attempt_no, "pack_sha256": hashlib.sha256(brief.encode()).hexdigest(), "config_sha256": config_hash,
                      "start_commit": start_commit, "kernel_fingerprint": fingerprint(workspace, args.feature),
                      "requested_model_id": model.get("model_id"), "tier": tier, "gate": action.get("gate"), "at": now(),
-                     "host": host, "mode": mode}
+                     "host": host, "mode": mode, "kind": "rework" if findings else "work"}
             append(journal_path, entry)
             record_checkpoint(journal_path, entry, "launched")
             try:
-                timeout = min(args.timeout, max(1, worker_deadline(workspace, args.feature)))
+                result: dict[str, Any] = {}
+                timeout = min(args.timeout, max(1, worker_deadline(workspace, args.feature, policies)))
                 rc, result, _log = run_worker(workspace, args.feature, entry, brief, model, timeout, host, mode,
                                               current_interaction_mode)
                 if rc or result.get("status") == "failed":
@@ -691,18 +773,23 @@ def run(args: argparse.Namespace) -> int:
                     question = {"id": entry["attempt_id"], "question": result.get("question", "Human input required"), "step": step,
                                 "denied_actions": result.get("denied_actions", []), "host": host}
                     (feature_dir / "pilot/pending-question.json").write_text(json.dumps(question, indent=2) + "\n")
+                    if question["denied_actions"]:
+                        deviation(feature_dir, "denied_action", step=step, denied_actions=question["denied_actions"])
                     record_usage(workspace, args.feature, entry, result, model)
                     record_checkpoint(journal_path, entry, "usage_recorded")
                     close_attempt(journal_path, entry, attempt_no, "needs_human")
                     print(json.dumps({"status": "needs_human", **question}, indent=2))
                     return 10
-                coders = [item for item in journal(journal_path) if item.get("step") == "implement-1-build" and item.get("outcome") == "pass" and item.get("story") and item.get("session_id")]
+                # Everyone who wrote the code under review: build workers and rework workers.
+                coders = [item for item in journal(journal_path) if item.get("outcome") == "pass" and item.get("session_id") and
+                          (item.get("step") == "implement-1-build" and item.get("story") or item.get("kind") == "rework")]
                 coder = coders if step == "implement-2-verify" else next((item for item in reversed(coders) if item.get("story") == entry.get("story")), None)
-                ingest(workspace, args.feature, entry, result, coder)
+                if not findings:
+                    ingest(workspace, args.feature, entry, result, coder)
                 record_checkpoint(journal_path, entry, "evidence_ingested")
                 record_usage(workspace, args.feature, entry, result, model)
                 record_checkpoint(journal_path, entry, "usage_recorded")
-                passed = check_gate(workspace, args.feature, str(action.get("gate") or ""))
+                passed = bool(findings) or check_gate(workspace, args.feature, str(action.get("gate") or ""))
                 if step == "implement-1-build":
                     passed = result.get("story_id", entry.get("story")) == entry.get("story")
                 if passed:
@@ -711,8 +798,12 @@ def run(args: argparse.Namespace) -> int:
                     if staged == 1:
                         subprocess.run(["git", "-C", str(workspace), "commit", "-m", f"feat({args.feature}): complete {step}"], check=True)
                 outcome = "pass" if passed else "fail"
+                review = result.get("review") if isinstance(result.get("review"), dict) else {}
+                rejected = step == "implement-2-verify" and not passed and (
+                    review.get("disposition") != "pass" or bool(review.get("blocking_findings")))
                 close_attempt(journal_path, entry, attempt_no, outcome, session_id=result.get("session_id"), model_id=result.get("model_id"),
-                              **({} if passed else {"reason": "gate failed"}))
+                              **({} if passed else {"reason": "gate failed"}),
+                              **({"rework": True, "findings": json.dumps(review.get("blocking_findings") or "review rejected")[:4000]} if rejected else {}))
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", outcome)
             except KeyboardInterrupt:
                 raise
@@ -720,8 +811,9 @@ def run(args: argparse.Namespace) -> int:
                 if git(workspace, "rev-parse", "HEAD") == start_commit:
                     subprocess.run(["git", "-C", str(workspace), "reset", "--hard", start_commit], check=False)
                     subprocess.run(["git", "-C", str(workspace), "clean", "-fd"], check=False)
-                record_usage(workspace, args.feature, entry, {"usage": {}, "model_id": model.get("model_id") or "unknown"}, model)
-                close_attempt(journal_path, entry, attempt_no, "fail", reason=str(exc))
+                record_usage(workspace, args.feature, entry, {**result, "model_id": result.get("model_id") or model.get("model_id") or "unknown"}, model)
+                close_attempt(journal_path, entry, attempt_no, "fail", reason=str(exc)[:4000],
+                              **({"rework": True, "findings": str(exc)[:4000]} if isinstance(exc, ReworkNeeded) else {}))
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", "fail", check=False)
                 print(f"attempt {entry['attempt_id']} failed: {exc}", file=sys.stderr)
                 if attempt_no >= 3:
@@ -730,13 +822,18 @@ def run(args: argparse.Namespace) -> int:
         lock.unlink(missing_ok=True)
 
 
-def worker_deadline(workspace: Path, feature: str) -> int:
+def worker_deadline(workspace: Path, feature: str, policies: dict[str, Any] | None = None) -> int:
     meta = read_json(workspace / ".adlc5" / feature / "pilot/meta.json", {}) or {}
     try:
         started = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00")).timestamp()
     except (KeyError, ValueError, TypeError):
         return 3600
-    return int(started + 360 * 60 - time.time())
+    # Same cap and default as pilot-check-kill-switch.sh.
+    try:
+        cap = int(((policies or {}).get("autopilot") or {}).get("wall_clock_cap_minutes") or 360)
+    except (TypeError, ValueError):
+        cap = 360
+    return int(started + cap * 60 - time.time())
 
 
 def main() -> int:

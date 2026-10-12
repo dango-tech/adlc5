@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -73,6 +74,73 @@ def main() -> None:
             json.dumps({"type": "assistant", "message": {"model": "claude-sonnet", "usage": {
                 "input_tokens": 8, "output_tokens": 3, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0}}}),
         ]))
+        # The worker deadline follows the feature's policy cap, with the kill switch's 360-minute default.
+        meta = workspace / ".adlc5/feature/pilot/meta.json"
+        meta.write_text(json.dumps({"started_at": runner.now()}))
+        assert 170 * 60 < runner.worker_deadline(workspace, "feature", {"autopilot": {"wall_clock_cap_minutes": 180}}) <= 180 * 60
+        assert 350 * 60 < runner.worker_deadline(workspace, "feature", {}) <= 360 * 60
+        # A host-created worktree on its own named branch is reused: the feature branch is made in place.
+        repo, host_tree = Path(temp) / "origin", Path(temp) / "host-tree"
+        repo.mkdir()
+        git = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), "-c", "user.email=t@x", "-c", "user.name=t", *a],
+                                             check=True, capture_output=True, text=True).stdout
+        git(repo, "init", "-q", "-b", "main")
+        (repo / "README.md").write_text("x\n")
+        git(repo, "add", "."), git(repo, "commit", "-qm", "init")
+        git(repo, "worktree", "add", "-q", "-b", "host/session", str(host_tree))
+        subprocess.run([str(ROOT / "scripts/init-feature.sh"), "--feature", "wt-feature", "--workspace", str(host_tree),
+                        "--mode", "brownfield", "--interaction", "autonomous"], check=True, capture_output=True)
+        git(host_tree, "add", "-A"), git(host_tree, "commit", "-qm", "scaffold", "--allow-empty")
+        before = git(repo, "worktree", "list").count("\n")
+        branch, isolation = runner.ensure_isolation(host_tree.resolve(), "wt-feature", host_tree.resolve() / ".adlc5/wt-feature", SimpleNamespace())
+        assert (branch, isolation) == ("feat/wt-feature", "worktree")
+        assert git(host_tree, "branch", "--show-current").strip() == "feat/wt-feature"
+        assert git(repo, "worktree", "list").count("\n") == before
+        # Closed records carry step, story and kind: verification and the retry ladder look attempts up by them.
+        work = {"attempt_id": "b1", "step": "implement-1-build", "story": "US-1", "start_commit": "x"}
+        runner.append(journal, work)
+        runner.close_attempt(journal, work, 1, "pass", session_id="s1", model_id="m1")
+        closed = runner.journal(journal)[-1]
+        assert (closed["step"], closed["story"], closed["kind"], closed["outcome"]) == ("implement-1-build", "US-1", "work", "pass")
+        # A rejected review routes to a rework, then back to review, within a budget.
+        verify = {"attempt_id": "v1", "step": "implement-2-verify", "start_commit": "x"}
+        assert runner.rework_findings(runner.journal(journal), 3) is None
+        runner.close_attempt(journal, verify, 1, "fail", rework=True, findings="missing null check")
+        assert runner.rework_findings(runner.journal(journal), 3) == "missing null check"
+        runner.close_attempt(journal, {**verify, "attempt_id": "r1", "kind": "rework"}, 1, "pass", session_id="s2")
+        assert runner.rework_findings(runner.journal(journal), 3) is None
+        runner.close_attempt(journal, {**verify, "attempt_id": "v2"}, 1, "fail", rework=True, findings="still failing")
+        try:
+            runner.rework_findings(runner.journal(journal), 1)
+        except RuntimeError as exc:
+            assert "human review required" in str(exc)
+        else:
+            raise AssertionError("an exhausted rework budget must stop the run")
+        # A dirty main checkout gets one worktree under .worktrees/, and the feature state moves into it.
+        main_repo = Path(temp) / "main-repo"
+        main_repo.mkdir()
+        git(main_repo, "init", "-q", "-b", "main")
+        (main_repo / "README.md").write_text("x\n")
+        git(main_repo, "add", "."), git(main_repo, "commit", "-qm", "init")
+        subprocess.run([str(ROOT / "scripts/init-feature.sh"), "--feature", "moved", "--workspace", str(main_repo),
+                        "--mode", "brownfield", "--interaction", "autonomous"], check=True, capture_output=True)
+        main_repo = main_repo.resolve()
+        target = runner.isolate_in_worktree(main_repo, "moved", main_repo / ".adlc5/moved", "feat/moved")
+        assert target == main_repo / ".worktrees/moved" and (target / ".adlc5/moved/state.json").is_file()
+        assert not (main_repo / ".adlc5/moved").exists()
+        assert ".worktrees" not in git(main_repo, "status", "--porcelain")
+        assert runner.feature_worktree(main_repo, "moved") == target
+        assert json.loads((target / ".adlc5/moved/state.json").read_text())["git"]["worktree_path"] == str(target)
+        # Deviations are recorded for the end summary.
+        runner.deviation(target / ".adlc5/moved", "host_default_model", step="specify-0-git", tier="balanced")
+        assert runner.journal(target / ".adlc5/moved/pilot/deviations.jsonl")[0]["kind"] == "host_default_model"
+        # A user price file is layered over the shipped table.
+        from lib.model_prices import estimate_cost_usd, load_prices
+        user_prices = Path(temp) / "model-prices.yaml"
+        user_prices.write_text("models:\n  local-model:\n    input: 1.0\n    output: 2.0\n")
+        prices = load_prices(ROOT, user_prices)
+        assert estimate_cost_usd({"input": 1_000_000}, "local-model", prices) == (1.0, True)
+        assert estimate_cost_usd({"input": 1_000_000}, "gpt-6-luna", prices)[1] is True
         usage, model = runner.claude_session_usage("session-1", projects)
         assert usage == {"input": 20, "output": 7, "cache_read": 6, "cache_creation": 2}
         assert model == "claude-sonnet"

@@ -21,16 +21,22 @@ def main() -> None:
     ]))
     assert events["session_id"] == "session-1"
     assert events["text"] == '{"status":"completed"}'
-    assert events["usage"] == {"input": 10, "cache_read": 8, "cache_creation": 1, "output": 2, "thinking": 1}
+    # Cached input is a subset of Codex's input_tokens; only the uncached part is recorded as input.
+    assert events["usage"] == {"input": 2, "cache_read": 8, "cache_creation": 1, "output": 2, "thinking": 1}
     usage_record = hosts.parse_events("codex", '{"type":"token_usage_record","payload":{"session_id":"s2","usage":{"input_tokens":31,"cached_input_tokens":16,"cache_write_input_tokens":7,"output_tokens":4,"reasoning_output_tokens":2}}}')
-    assert usage_record["usage"] == {"input": 31, "cache_read": 16, "cache_creation": 7, "output": 4, "thinking": 2}
+    assert usage_record["usage"] == {"input": 15, "cache_read": 16, "cache_creation": 7, "output": 4, "thinking": 2}
     assert usage_record["session_id"] == "s2"
     claude = hosts.command(host="claude", mode="allowlist", workspace=workspace, prompt="work", model="sonnet",
                            effort="low", allowlist=["Bash(pytest)"])
     assert "--permission-mode" in claude and "acceptEdits" in claude and "--allowedTools" in claude
     cursor = hosts.command(host="cursor", mode="confined", workspace=workspace, prompt="work", model="gpt-5",
                            effort=None)
-    assert "--sandbox" in cursor and "enabled" in cursor and "--force" not in cursor
+    assert "--sandbox" in cursor and "enabled" in cursor and "--force" not in cursor and "--trust" in cursor
+    # Payload shapes measured from the real CLIs.
+    measured = hosts.parse_events("cursor", '{"result":"OK","usage":{"inputTokens":20760,"outputTokens":39,"cacheReadTokens":1152,"cacheWriteTokens":0}}')
+    assert measured["usage"] == {"input": 20760, "output": 39, "cache_read": 1152, "cache_creation": 0}
+    claude_result = hosts.parse_events("claude", '{"result":"OK","usage":{"input_tokens":10},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10}}}')
+    assert claude_result["model_id"] == "claude-haiku-4-5-20251001"
     for host, mode in (("codex", "confined"), ("claude", "allowlist"), ("cursor", "confined"), ("hermes", "attended")):
         with patch.object(hosts.os, "isatty", return_value=True):
             default_model = hosts.command(host=host, mode=mode, workspace=workspace, prompt="work",
