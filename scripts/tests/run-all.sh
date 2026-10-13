@@ -1469,6 +1469,8 @@ for name, stories in cases.items():
     feature_dir.mkdir(parents=True)
     batches = {}
     for story in stories:
+        story["acceptance"] = [{"id": story["id"] + "-AC-1", "owner": "test",
+                                "evidence": {"type": "command", "value": "python3 -B tests/test_graph.py"}}]
         if isinstance(story.get("batch"), int):
             batches.setdefault(story["batch"], []).append(story["id"])
     parallel_batches = [
@@ -1588,6 +1590,8 @@ git -C "$ROUTE_WS" add README.md
 git -C "$ROUTE_WS" -c user.name='ADLC5 fixture' -c user.email='fixture@example.test' commit -qm 'fixture baseline'
 for profile in tiny standard high_risk; do
   feature="route-${profile//_/-}"
+  approval=false
+  if [[ "$profile" == high_risk ]]; then approval=true; fi
   mkdir -p "$ROUTE_WS"
   ./scripts/init-feature.sh --feature "$feature" --workspace "$ROUTE_WS" \
     --mode brownfield --interaction autonomous >/dev/null
@@ -1596,6 +1600,7 @@ for profile in tiny standard high_risk; do
 autopilot:
   interaction_mode: autonomous
   profile: ${profile}
+  require_human_pr_approval: ${approval}
 persona_mode:
   enabled: true
   verifier_different_model: true
@@ -2962,7 +2967,7 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
-for test in test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
+for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done

@@ -29,6 +29,10 @@ def parse_scalar(raw: str) -> Any:
         return False
     if low in ("null", "~"):
         return None
+    if s == "{}":
+        return {}
+    if (s.startswith("[") and not s.endswith("]")) or (s.startswith("{") and not s.endswith("}")):
+        raise ValueError(f"unterminated flow collection: {raw!r}")
     if re.fullmatch(r"-?\d+", s):
         return int(s)
     if re.fullmatch(r"-?\d+\.\d+", s):
@@ -98,6 +102,8 @@ def parse(text: str) -> dict:
         val = val.strip()
         if not isinstance(parent, dict):
             continue
+        if key in parent:
+            raise ValueError(f"duplicate YAML key: {key}")
         if val == "":
             child_container = _next_container(lines, i, indent)
             parent[key] = child_container

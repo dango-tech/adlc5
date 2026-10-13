@@ -198,6 +198,13 @@ def process(state: dict, workspace: Path, *, lock: bool) -> tuple[list[dict], li
     checks: list[dict] = []
     locked = 0
     unlocked_commands = 0
+    if lock and not stories:
+        checks.append({"id": "acceptance_defined", "status": "fail", "reason": "missing_acceptance",
+                       "message": "no stories to lock; define story acceptance before locking"})
+    for story in stories:
+        if not story.get("acceptance"):
+            checks.append({"id": str(story.get("id")), "status": "fail", "reason": "missing_acceptance",
+                           "message": "story has no acceptance criteria; populate tasks.stories[].acceptance before locking"})
     criterion_ids = [
         criterion.get("id")
         for story in stories

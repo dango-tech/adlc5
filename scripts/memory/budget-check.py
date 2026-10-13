@@ -46,7 +46,11 @@ def main() -> int:
         print(json.dumps({"status": "error", "message": "state.json missing"}))
         return 3
 
-    policies = load_policies(workspace, args.feature)
+    try:
+        policies = load_policies(workspace, args.feature)
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}))
+        return 3
     budget = int((state.get("memory") or {}).get("context_budget_tokens") or 8000)
     paths = list(args.paths)
 

@@ -1,7 +1,7 @@
 ---
 name: adlc5-tasks
 description: ADLC5 Stage 3 Tasks — user stories, parallel batches, TDD code specs. Invoke via @adlc5-tasks.
-version: 5.0.0
+version: 5.0.1
 ---
 
 # ADLC5 — Tasks
@@ -27,6 +27,12 @@ Load [analyst.md](../../templates/personas/analyst.md) or [architect.md](../../t
 | `tasks-2-code-spec` | Tests listed before code; frontmatter linted (`spec-lint.py`) | `tasks/code-spec/{story-id}.md` |
 
 ## Scripts
+
+Populate each story's `acceptance` entries (unique ID, owner, file/command evidence)
+in canonical `state.tasks.stories` while authoring `tasks/stories.json`. Criteria
+only in code-spec prose/frontmatter do not populate state. Use `state set` for
+Tasks metadata before locking; preserve story statuses. Every story needs criteria,
+and an empty anchor lock fails without creating a manifest or Git trust ref.
 
 For volatile versions, APIs, protocols, provider capabilities, or security
 guidance carried into stories/code specs, recheck official primary sources and

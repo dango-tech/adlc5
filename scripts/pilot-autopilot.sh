@@ -32,6 +32,21 @@ source "${ROOT}/scripts/lib/telemetry.sh"
 export ADLC5_WORKSPACE="$WORKSPACE"
 WORKSPACE="$(cd "$WORKSPACE" && pwd)"
 
+if ! python3 - "$ROOT" "$WORKSPACE" "$FEATURE" <<'PY'
+import json, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+from lib.policies_load import load_policies
+try:
+    load_policies(Path(sys.argv[2]), sys.argv[3])
+except (ValueError, OSError) as exc:
+    print(json.dumps({"action": "halt", "stop_reason": "invalid_policy", "error": str(exc)}))
+    sys.exit(2)
+PY
+then
+  exit 2
+fi
+
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 STATE="${FEATURE_DIR}/state.json"
 PILOT_META="${FEATURE_DIR}/pilot/meta.json"

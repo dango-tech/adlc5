@@ -252,11 +252,24 @@ def load_policies_file(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     try:
         import yaml  # type: ignore
+    except ImportError:
+        from lib.simple_yaml import parse
+        return parse(text)
 
-        loaded = yaml.safe_load(text)
-        return loaded if isinstance(loaded, dict) else {}
-    except Exception:
-        return _parse_simple(text)
+    class UniqueLoader(yaml.SafeLoader):
+        def construct_mapping(self, node, deep=False):
+            keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+            if len(keys) != len(set(keys)):
+                raise ValueError(f"duplicate YAML key in {path}")
+            return super().construct_mapping(node, deep=deep)
+
+    try:
+        loaded = yaml.load(text, Loader=UniqueLoader)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid policies YAML in {path}: {exc}") from exc
+    if loaded is not None and not isinstance(loaded, dict):
+        raise ValueError(f"policies must be a mapping: {path}")
+    return loaded or {}
 
 
 def find_policies_path(workspace: Path, feature: str) -> Path | None:
@@ -276,6 +289,8 @@ def load_policies(workspace: Path, feature: str) -> dict:
     autopilot = raw.get("autopilot") or {}
     merged = _merge_dict(defaults, {k: v for k, v in raw.items() if k not in ("defaults", "autopilot")})
     merged["autopilot"] = _merge_dict(merged.get("autopilot") or {}, autopilot)
+    if profile_name(merged) == "high_risk" and merged["autopilot"].get("require_human_pr_approval") is not True:
+        raise ValueError("high_risk requires autopilot.require_human_pr_approval: true")
     return merged
 
 

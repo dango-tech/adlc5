@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "adlc5",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "ADLC5 workflow skills and local kernel tools for AI coding agents.",
   "author": {
     "name": "Dango Tech",

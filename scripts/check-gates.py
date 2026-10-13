@@ -31,6 +31,7 @@ from lib.policies_load import (  # noqa: E402
 from lib.state_v2 import (  # noqa: E402
     is_v2_state,
     load_feature_state,
+    iter_v2_stories,
     v2_to_delivery_compat,
 )
 
@@ -965,11 +966,15 @@ def check_v2_plan_complete(
 
 def check_v2_tasks_stories_complete(workspace: Path, feature: str, state: dict) -> list[dict]:
     checks: list[dict] = []
-    pairs = iter_stories(v2_to_delivery_compat(state))
+    pairs = iter_v2_stories(state)
     if not pairs:
         checks.append({"id": "stories_defined", "status": "fail", "message": "no stories in state.tasks"})
     else:
         checks.append({"id": "stories_defined", "status": "pass", "message": f"{len(pairs)} stories defined"})
+        for sid, story in pairs:
+            checks.append({"id": f"acceptance_defined_{sid}",
+                           "status": "pass" if story.get("acceptance") else "fail",
+                           "message": f"{sid}: declare acceptance criteria in state.tasks.stories[].acceptance"})
     return checks
 
 
@@ -1190,7 +1195,11 @@ def main() -> int:
     lifecycle_path = workspace / ".adlc5" / args.feature / "state.json"
 
     lifecycle = load_json(lifecycle_path)
-    policies = load_policies(workspace, args.feature)
+    try:
+        policies = load_policies(workspace, args.feature)
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"gate": args.gate, "status": "fail", "error": str(exc), "checks": []}))
+        return 3
     gate_id = normalize_gate_id(args.gate)
     from lib.completion_evidence import records, fingerprint, completion_checks
     try:

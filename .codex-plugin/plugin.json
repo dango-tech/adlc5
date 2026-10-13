@@ -1,6 +1,6 @@
 {
   "name": "adlc5",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "ADLC5 workflow skills and local kernel tools for Codex.",
   "author": {
     "name": "Dango Tech",

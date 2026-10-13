@@ -708,6 +708,12 @@ def cmd_completion(args, *, evidence=False):
                     raise ValueError("missing coder_model_id(s)")
                 if result["disposition"] not in ("pass", "reject") or not isinstance(result.get("blocking_findings", []), list):
                     raise ValueError("invalid review disposition/findings")
+                if result["disposition"] == "pass":
+                    from lib.completion_evidence import review_failures
+                    from lib.policies_load import load_policies
+                    failures = review_failures(result, load_policies(workspace, ns.feature))
+                    if failures:
+                        raise ValueError("review rejected: " + ", ".join(failures))
             elif ns.action == "integrate":
                 state = load_feature_state(workspace, ns.feature)
                 if not state or state.get("current_step") != "implement-3-integrate" or result != {"status": "completed"}:
