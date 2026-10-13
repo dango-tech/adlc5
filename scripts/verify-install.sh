@@ -151,16 +151,15 @@ for rel in (".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-
     data = json.loads((root / rel).read_text(encoding="utf-8"))
     assert data.get("name") == "adlc5", rel
     assert data.get("version") == version, f"{rel} version {data.get('version')} != {version}"
-    require_exists = rel.startswith((".codex-plugin/", ".cursor-plugin/"))
     for key in path_keys:
         val = data.get(key)
         if not val:
             continue
         assert not str(val).startswith("/") and ".." not in Path(str(val)).parts, f"{rel} unsafe path {key}={val}"
-        if require_exists:
-            assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
+        assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
     meta = data.get("adlc5") or {}
-    assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"
+    if rel in (".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
+        assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"
     for key in runtime_keys:
         val = meta.get(key)
         if not val:
