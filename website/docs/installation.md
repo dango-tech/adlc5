@@ -22,6 +22,16 @@ Availability of an adapter does not establish equal end-to-end delivery validati
 See the [cross-platform reference](https://github.com/dango-tech/adlc5/blob/main/shared/docs/CROSS-PLATFORM.md)
 for qualification and host-specific steps.
 
+### Native agent plugins: Codex, Claude Code, and Cursor
+
+The repository provides buildable packages for all three plugin hosts. From an
+ADLC5 checkout, run `python3 scripts/package-plugin.py --check` and then
+`python3 scripts/package-plugin.py --out /tmp/adlc5-dist`. This creates the three
+host-specific packages and local Codex and Claude Code marketplaces. See the
+[all-host plugin guide](https://github.com/dango-tech/adlc5/blob/main/docs/agent-plugins.md)
+for building one host, registering and installing each package, and submitting
+to the Codex, Cursor, and Claude marketplaces/directories.
+
 Keep the distribution clone available: installed skills and rules link to it.
 Configure install targets and model routing in the clone's `config.yaml`;
 do not point install targets at the clone's own `skills/` directory.
