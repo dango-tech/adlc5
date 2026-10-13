@@ -32,7 +32,8 @@ cp config.example.yaml config.yaml
 To build and register the host-native **Codex, Claude Code, and Cursor plugins**, see
 [Build and install the ADLC5 agent plugins](docs/agent-plugins.md). Each plugin bundles
 the shared framework with host-specific metadata; the local package builder creates all
-three packages from this checkout.
+three packages from this checkout and includes registration and public marketplace
+submission steps for each host.
 
 **Experimental supervised runner:** configure per-host tiers with
 `./scripts/adlc5 setup models --host HOST`, then run
