@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from lib.state_v2 import load_feature_state, set_feature_state, is_human_approver
@@ -106,9 +107,12 @@ def config(workspace, feature):
 
 
 def run_checks(workspace, feature):
+    load_policies(workspace, feature)
     checks = config(workspace, feature)
     before = fingerprint(workspace, feature)
     results = []
+    executed = {}
+    started = time.monotonic()
     dest = folder(workspace, feature)
     for index, item in enumerate(checks):
         command = item.get('command')
@@ -120,16 +124,44 @@ def run_checks(workspace, feature):
             raise ValueError('check cwd must be inside workspace')
         output = dest / f'check-{index}-{before[:16]}-{datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")}.log'
         timeout = item.get('timeout_seconds', 300)
+        key = (command, str(cwd), timeout)
+        if key in executed and fingerprint(workspace, feature) == before:
+            results.append({**executed[key], 'id': item['id'], 'required': item.get('required', True),
+                            'reused_from': executed[key]['id'], 'duration_ms': 0})
+            continue
+        check_started = time.monotonic()
         with output.open('w') as stream:
             try:
                 proc = subprocess.run(command, shell=True, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
             except subprocess.TimeoutExpired:
-                results.append({'id': item['id'], 'required': item.get('required', True), 'command': command, 'cwd': str(cwd), 'status': 'fail', 'reason': f'timeout after {timeout} seconds', 'output': str(output.relative_to(workspace))})
+                results.append({'id': item['id'], 'required': item.get('required', True), 'command': command, 'cwd': str(cwd), 'status': 'fail', 'reason': f'timeout after {timeout} seconds', 'output': str(output.relative_to(workspace)), 'duration_ms': round((time.monotonic() - check_started) * 1000)})
                 continue
-        results.append({'id': item['id'], 'required': item.get('required', True), 'command': command, 'cwd': str(cwd), 'exit_code': proc.returncode, 'status': 'pass' if proc.returncode == 0 else 'fail', 'output': str(output.relative_to(workspace))})
-    event = {'kind': 'checks', 'fingerprint': before, 'stable': before == fingerprint(workspace, feature), 'results': results}
+        result = {'id': item['id'], 'required': item.get('required', True), 'command': command, 'cwd': str(cwd), 'exit_code': proc.returncode, 'status': 'pass' if proc.returncode == 0 else 'fail', 'output': str(output.relative_to(workspace)), 'duration_ms': round((time.monotonic() - check_started) * 1000)}
+        results.append(result)
+        if proc.returncode == 0:
+            executed[key] = result
+    event = {'kind': 'checks', 'fingerprint': before, 'stable': before == fingerprint(workspace, feature), 'results': results, 'duration_ms': round((time.monotonic() - started) * 1000)}
     append(workspace, feature, event)
     return event
+
+
+def review_failures(record, policies):
+    failures = []
+    if record.get('disposition') != 'pass' or record.get('blocking_findings'):
+        failures.append('fresh passing diff review')
+    persona = policies.get('persona_mode') or {}
+    coder_sessions = record.get('coder_session_ids') or [record.get('coder_session_id')]
+    if (profile_name(policies) in ('standard', 'high_risk', 'full') or persona.get('fresh_subagent_per_persona')) and (
+            not all(coder_sessions) or not record.get('verifier_session_id') or record['verifier_session_id'] in coder_sessions):
+        failures.append('independent reviewer session')
+    coder_models = record.get('coder_model_ids') or [record.get('coder_model_id')]
+    verifier_model = record.get('verifier_model_id')
+    unknown = {'unknown', 'host default', 'host-default', 'inherit', ''}
+    if persona.get('verifier_different_model') and (
+            not all(coder_models) or not verifier_model or verifier_model in coder_models
+            or any(str(model).strip().lower() in unknown for model in [*coder_models, verifier_model])):
+        failures.append('different reviewer model (observed model IDs required)')
+    return failures
 
 
 def completion_checks(workspace, feature, policies=None, *, approval=True, review=True):
@@ -147,16 +179,7 @@ def completion_checks(workspace, feature, policies=None, *, approval=True, revie
             failures.append('required integration command')
         if review:
             review_record = next((r for r in reversed(fresh) if r.get('kind') == 'review'), {})
-            persona = policies.get('persona_mode') or {}
-            independent = profile_name(policies) in ('standard', 'high_risk', 'full') or persona.get('fresh_subagent_per_persona')
-            if review_record.get('disposition') != 'pass' or review_record.get('blocking_findings'):
-                failures.append('fresh passing diff review')
-            coder_sessions = review_record.get('coder_session_ids') or [review_record.get('coder_session_id')]
-            if independent and (not all(coder_sessions) or not review_record.get('verifier_session_id') or review_record.get('verifier_session_id') in coder_sessions):
-                failures.append('independent reviewer session')
-            coder_models = review_record.get('coder_model_ids') or [review_record.get('coder_model_id')]
-            if persona.get('verifier_different_model') and (not all(coder_models) or not review_record.get('verifier_model_id') or review_record.get('verifier_model_id') in coder_models):
-                failures.append('different reviewer model')
+            failures.extend(review_failures(review_record, policies))
         if approval and ((policies.get('autopilot') or {}).get('require_human_pr_approval') or policies.get('require_human_pr_approval')):
             latest_approval = next((r for r in reversed(fresh) if r.get('kind') == 'approval' and r.get('type') == 'pr_approval'), {})
             if latest_approval.get('decision') != 'approve' or not is_human_approver(latest_approval.get('approved_by')):

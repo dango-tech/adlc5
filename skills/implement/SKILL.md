@@ -1,7 +1,7 @@
 ---
 name: adlc5-implement
 description: ADLC5 Stage 4 Implement — TDD build, verify, integrate, QA, PR. Invoke via @adlc5-implement.
-version: 5.0.0
+version: 5.0.1
 ---
 
 # ADLC5 — Implement
@@ -25,14 +25,18 @@ require a fresh review session; different models are required only when policy s
 Example identity fields (alongside disposition and blocking findings):
 
 ```json
-"implement": { "verification": { "independence": {
-  "fresh_session": true,
-  "coder_session_id": "...", "verifier_session_id": "...",
-  "coder_model_id": "...", "verifier_model_id": "..."
-} } }
+{
+  "coder_session_id": "actual-coder-session", "verifier_session_id": "actual-reviewer-session",
+  "coder_model_id": "actual-coder-model", "verifier_model_id": "actual-reviewer-model",
+  "disposition": "pass", "blocking_findings": []
+}
 ```
 
 `implement-2-verify` and `pr-ready` enforce the selected session/model separation policy. A human may explicitly approve a `clarity.history` `verifier_waiver`; agents must not self-approve it.
+Submit the result as soon as the reviewer finishes, then inspect the command's
+status. A passing review that violates policy is rejected before ingestion.
+When different models are required, select distinct observed model IDs before
+spawning; `host default`, `inherit`, and `unknown` cannot establish separation.
 
 ## Substeps
 
@@ -72,6 +76,9 @@ Stories reach `verified` only with verification report citing code-spec line ref
 
 At Build, submit `evidence build --file build.json` with implemented `story_ids`.
 Configure required commands in `evidence/checks.json`, then run `adlc5 evidence check`.
+When one suite covers several required check IDs, use the same command, cwd, and
+timeout so the kernel can reuse its passing result within the run. Keep distinct
+commands for distinct coverage; do not weaken checks to avoid failures.
 Submit the independent review via `evidence review`; use `transition TARGET` for
 progression and `transition completed` at the terminal gate. Do not patch verification
 or completion fields. Any relevant patch/acceptance/config change invalidates evidence.
@@ -103,4 +110,5 @@ Never write this entry without an explicit user response — autopilot halts her
 ./scripts/adlc5 resolve-model --tier reasoning [--platform <host>]
 ```
 
-Default `execution_policy: inherit` — omit `model` on `@build-implementer` / verify subagents. See [model-matrix.md](../../core/guides/model-matrix.md). Never use `fast` for implement/verify or `@qa`.
+Use configured host tiers and honor the selected session/model separation policy.
+Legacy `execution_policy` is ignored. See [model-matrix.md](../../core/guides/model-matrix.md).

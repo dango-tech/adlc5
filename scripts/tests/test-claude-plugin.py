@@ -7,6 +7,7 @@ disposable consumer repositories. Live Claude sessions are qualified separately.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
@@ -73,9 +75,32 @@ class PluginTest(unittest.TestCase):
 
     def test_versions_agree(self):
         version = (SRC / "core/VERSION").read_text().strip()
-        for rel in (".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
+        for rel in ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
             self.assertEqual(json.loads((SRC / rel).read_text())["version"], version, rel)
         self.assertIn(f'framework_version: "{version}"', (SRC / "core/skill-registry.yaml").read_text())
+
+    def test_packager_rejects_stale_release_metadata(self):
+        spec = importlib.util.spec_from_file_location("packager", SRC / "scripts/package-plugin.py")
+        packager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packager)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            names = set((*packager.REQUIRED_BASE, *packager.REQUIRED_BY_HOST["claude"],
+                         "platform/codex-plugin/plugin.json", "core/skill-registry.yaml"))
+            for name in names:
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((SRC / name).read_bytes())
+            with patch.object(packager, "candidates", return_value=sorted(names)):
+                packager.collect(root, "claude")
+                for name in ("platform/codex-plugin/plugin.json", "core/skill-registry.yaml"):
+                    target = root / name
+                    original = target.read_text()
+                    version = (root / "core/VERSION").read_text().strip()
+                    target.write_text(original.replace(version, "0.0.0"))
+                    with self.assertRaisesRegex(SystemExit, "version differs from core/VERSION"):
+                        packager.collect(root, "claude")
+                    target.write_text(original)
 
     def test_archive_contents_and_modes(self):
         names = {p.relative_to(self.pkg).as_posix() for p in self.pkg.rglob("*") if p.is_file()}

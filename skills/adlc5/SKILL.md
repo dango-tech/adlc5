@@ -1,7 +1,7 @@
 ---
 name: adlc5
 description: ADLC5 — 4-stage SDD orchestrator (Specify → Plan → Tasks → Implement) with integrated autopilot. Invoke via @adlc5 for [feature].
-version: 5.0.0
+version: 5.0.1
 ---
 
 # ADLC5 — Orchestrator
@@ -19,6 +19,13 @@ Core spec: [core/sdd-model.md](../../core/sdd-model.md)
 ## On every invocation
 
 1. **Framework repo guard** — lifecycle delivery belongs in consumer repos, not the adlc5 clone (unless explicit dogfood).
+   Resolve one absolute consumer workspace and use it as every command's `cwd` and
+   `--workspace`, including subagents. Reuse a suitable attached worktree. Before
+   creating state or starting workers, confirm the host permits writes to that
+   checkout, shared Git metadata, `.adlc5/`, and test/build output paths. A created
+   worktree is not proof of write permission; use the host's supported attachment
+   or approval path before proceeding. On resume, compare `state.git.worktree_path`
+   and `branch_name` with the actual checkout before any edit.
 2. **Bootstrap** if missing state (auto-detects greenfield/brownfield and wiki need):
    ```bash
    ./scripts/init-feature.sh --feature "{feature}"
@@ -47,9 +54,16 @@ Core spec: [core/sdd-model.md](../../core/sdd-model.md)
    ./scripts/adlc5 gate --feature "{feature}" --gate pr-ready
    ```
 
+Resolve invalid policy and workspace errors before artifact work. Preserve approved
+scope and interaction choices on resume. Reuse an existing reviewed plan after
+reconciling it with current source; generate only missing artifacts.
+
 When `policies.yaml` → `persona_mode.forbid_orchestrator_implement: true`, **route only** — spawn stage skills/subagents; never edit product source from the orchestrator session.
 
 ## AskQuestion (mandatory on start)
+
+Ask only for choices not already supplied by the user or recorded for this
+feature. A resume preserves the approved scope and mode.
 
 1. **Stage scope:** full lifecycle | specify only | plan only | tasks only | implement only | resume current
 2. **Interaction mode:** `hitl` | `autonomous` (sets `autopilot.mode`)

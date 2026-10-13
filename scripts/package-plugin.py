@@ -130,9 +130,12 @@ def collect(root: Path, host: str) -> dict[str, tuple[bytes, int]]:
     if problems:
         raise SystemExit("package refused:\n  " + "\n  ".join(problems))
     version = files["core/VERSION"][0].decode().strip()
-    for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json", ".cursor-plugin/plugin.json"):
+    for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json", ".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
         if manifest in files and json.loads(files[manifest][0]).get("version") != version:
             raise SystemExit(f"{manifest} version differs from core/VERSION {version!r}")
+    registry = files.get("core/skill-registry.yaml")
+    if registry and f'framework_version: "{version}"' not in registry[0].decode():
+        raise SystemExit(f"core/skill-registry.yaml version differs from core/VERSION {version!r}")
     files[".adlc5-package.json"] = (build_manifest(version), 0o644)
     return dict(sorted(files.items()))
 

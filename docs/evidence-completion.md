@@ -55,6 +55,15 @@ invocation; freshness gates reuse those results. Each check accepts an optional
 positive integer `timeout_seconds` (default 300); increase it for longer suites.
 Changes to check configuration or the active feature/fallback policy invalidate evidence.
 
+Duplicate policy keys and high-risk policies without human PR approval fail before
+checks run. Each evidence run records total and per-command `duration_ms`.
+Identical passing commands with the same working directory and timeout reuse one
+result within that run while the input fingerprint remains unchanged; each named
+check keeps its own result and `reused_from` identifies the original. Failures and
+timeouts rerun. Results are never cached across evidence runs.
+Avoid repeating a whole suite under several names when the same suite covers those
+criteria; coverage must explicitly measure the changed files it claims to cover.
+
 ```json
 [
   {"id": "acceptance", "command": "python3 acceptance.py", "required": true},
