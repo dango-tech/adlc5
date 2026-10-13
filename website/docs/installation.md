@@ -33,8 +33,8 @@ templates. Build it from the distribution checkout; no separate clone is needed
 at runtime:
 
 ```bash
-python3 scripts/package-plugin.py --out /tmp/adlc5-dist
-claude --plugin-dir /tmp/adlc5-dist/adlc5-plugin-5.0.0.zip
+python3 scripts/package-plugin.py --host claude --out /tmp/adlc5-dist
+claude --plugin-dir /tmp/adlc5-dist/claude/adlc5
 ```
 
 The session-local command changes no global configuration. Skills appear as

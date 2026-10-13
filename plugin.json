@@ -13,7 +13,15 @@
   "keywords": ["agent-workflow", "skills", "mcp", "sdd"],
   "extensions": {
     "com.openai": {
-      "onboardingSkill": "./skills/adlc5-setup/SKILL.md"
+      "onboardingSkill": "./skills/adlc5-setup/SKILL.md",
+      "interface": {
+        "displayName": "ADLC5",
+        "shortDescription": "Evidence-driven software delivery for coding agents.",
+        "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+        "developerName": "Dango Tech",
+        "category": "Developer tools",
+        "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"]
+      }
     }
   }
 }

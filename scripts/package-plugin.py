@@ -27,6 +27,7 @@ import gzip
 import io
 import json
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -59,7 +60,7 @@ REQUIRED_BY_HOST = {
     ".claude-plugin/plugin.json", ".mcp.json", "hooks/claude.json", "bin/adlc5", "bin/adlc5-run",
     ".claude/hooks/claude-usage.sh", ".claude/hooks/engagement-gate.sh", "LICENSE",
     ),
-    "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json"),
+    "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json", ".mcp.json"),
     "cursor": (".cursor-plugin/plugin.json", ".cursor-plugin/mcp.json", ".cursor-plugin/run-mcp.sh"),
 }
 
@@ -67,7 +68,7 @@ HOST_ONLY_PREFIXES = {
     # Keep repository marketplace metadata outside the distributable Claude plugin.
     # The builder emits a Claude-only marketplace catalog as a sibling directory.
     "claude": (".claude-plugin/marketplace.json", ".codex-plugin/", ".cursor-plugin/", "platform/codex-plugin/", "mcp.json"),
-    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", ".mcp.json", "bin/", "platform/codex-plugin/"),
+    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "bin/", "platform/codex-plugin/"),
     "cursor": (".claude-plugin/", ".claude/", ".codex-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/", "mcp.json"),
 }
 
@@ -147,14 +148,30 @@ def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> di
         # .codex-plugin/plugin.json as the documented compatibility fallback.
         manifest = json.loads(result["plugin.json"][0])
         manifest["version"] = version
+        manifest.setdefault("extensions", {}).setdefault("com.openai", {})["interface"] = {
+            "displayName": "ADLC5",
+            "shortDescription": "Evidence-driven software delivery for coding agents.",
+            "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+            "developerName": "Dango Tech",
+            "category": "Developer tools",
+            "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
+        }
         result["plugin.json"] = (json.dumps(manifest, indent=2).encode() + b"\n", 0o644)
         compatibility = {
             "name": "adlc5",
             "version": version,
             "description": "ADLC5 workflow skills and local kernel tools for Codex.",
+            "author": {"name": "Dango Tech", "url": "https://github.com/dango-tech"},
             "skills": "./skills/",
-            "mcpServers": "./mcp.json",
-            "extensions": {"com.openai": {"onboardingSkill": "./skills/adlc5-setup/SKILL.md"}},
+            "mcpServers": "./.mcp.json",
+            "interface": {
+                "displayName": "ADLC5",
+                "shortDescription": "Evidence-driven software delivery for coding agents.",
+                "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+                "developerName": "Dango Tech",
+                "category": "Developer tools",
+                "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
+            },
         }
         result[".codex-plugin/plugin.json"] = (json.dumps(compatibility, indent=2).encode() + b"\n", 0o644)
         mcp = {
@@ -169,6 +186,15 @@ def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> di
             },
         }
         result["mcp.json"] = (json.dumps(mcp, indent=2).encode() + b"\n", 0o644)
+        compatibility_mcp = {
+            "mcpServers": {
+                "adlc5": {
+                    "command": "python3",
+                    "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/adlc5-mcp.py"],
+                }
+            }
+        }
+        result[".mcp.json"] = (json.dumps(compatibility_mcp, indent=2).encode() + b"\n", 0o644)
     result[".adlc5-package.json"] = (build_manifest(version), 0o644)
     return dict(sorted(result.items()))
 
@@ -177,8 +203,7 @@ def write_marketplace(root: Path, host: str, package_dir: Path) -> None:
     """Create an installable local marketplace for Codex or Claude Code."""
     plugins = root / "plugins"
     plugins.mkdir(parents=True, exist_ok=True)
-    import shutil
-    shutil.copytree(package_dir, plugins / "adlc5", dirs_exist_ok=True)
+    shutil.copytree(package_dir, plugins / "adlc5")
     if host == "codex":
         marketplace = {
             "name": "adlc5-local",
@@ -245,7 +270,15 @@ def main() -> int:
     for host, files in files_by_host.items():
         label = "claude-code" if host == "claude" else host
         package_dir = out / host / "adlc5"
-        package_dir.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(out / host, ignore_errors=True)
+        marketplace_root = out / f"{host}-marketplace"
+        shutil.rmtree(marketplace_root, ignore_errors=True)
+        for archive in out.glob(f"adlc5-{label}-plugin-*"):
+            archive.unlink()
+        if host == "claude":
+            for archive in out.glob("adlc5-plugin-*"):
+                archive.unlink()
+        package_dir.mkdir(parents=True)
         for name, (data, _mode) in files.items():
             dest = package_dir / name
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -259,7 +292,6 @@ def main() -> int:
         tar_prefix = f"adlc5-{version}" if host == "claude" else f"adlc5-{label}-{version}"
         write_tar(files, tar_path, tar_prefix)
         if host in ("codex", "claude"):
-            marketplace_root = out / f"{host}-marketplace"
             write_marketplace(marketplace_root, host, package_dir)
             outputs[host] = {"directory": str(package_dir), "zip": str(zip_path), "tar": str(tar_path), "marketplace": str(marketplace_root)}
         else:
