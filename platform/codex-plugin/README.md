@@ -1,28 +1,28 @@
-# Codex plugin metadata (ADLC5 4.0)
+# Codex plugin source metadata (ADLC5 5.0)
 
-`plugin.json` is packaging metadata for Codex plugin discovery. The coherent Agent Plugin (skills + kernel + MCP) lives at the **distribution repo root**; this folder does not re-bundle the kernel.
+The distribution root `plugin.json` is the portable Agent Plugins manifest; `.codex-plugin/plugin.json` is retained as Codex's compatibility fallback. The build script creates a self-contained Codex package and local marketplace; developers do not need to assemble a plugin by copying metadata by hand.
 
 ## Surfaces
 
 | Surface | Where |
 |---------|--------|
 | Skills (classic) | `./scripts/install.sh --platform codex` → `~/.codex/skills` |
-| Skills (plugin dir) | `plugin.json` → `./skills/` after you link/copy skills beside this folder |
-| Kernel CLI | `$ADLC5_ROOT/scripts/adlc5` (distribution root) |
-| MCP | `$ADLC5_ROOT/scripts/adlc5-mcp.py` (see also `.cursor-plugin/mcp.json`) |
+| Skills + runtime package | `python3 scripts/package-plugin.py --host codex --out /tmp/adlc5-dist` |
+| Local marketplace | `/tmp/adlc5-dist/codex-marketplace/` |
+| Package metadata | generated root `plugin.json`, `.codex-plugin/plugin.json` fallback, and `mcp.json` |
 
 Set `ADLC5_ROOT` to your adlc5 clone when invoking kernel/MCP from a host that did not start in the repo.
 
 ## Plugin load vs classic install
 
-**Classic (recommended for Codex):**
+**Native Codex plugin:** follow [the cross-host build and install guide](../../docs/agent-plugins.md#codex-desktop).
+
+**Classic skills install:**
 
 ```bash
 ./scripts/install.sh --platform codex
 ./scripts/verify-install.sh --platform codex
 ```
-
-**Plugin UI:** point Codex at this directory only if `./skills/` is populated (symlink to distribution `skills/` is fine). Kernel/MCP still require the distribution clone — do not invent a second runtime here.
 
 **Cursor Agent Plugin:** use [`.cursor-plugin/`](../../.cursor-plugin/README.md) at the distribution root.
 

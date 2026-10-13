@@ -1,0 +1,33 @@
+name: Release host plugin packages
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Build host packages
+        run: python3 scripts/package-plugin.py --out /tmp/adlc5-release-packages
+      - name: Attach Codex, Claude Code, and Cursor archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(tr -d '[:space:]' < core/VERSION)"
+          gh release upload "$GITHUB_REF_NAME" \
+            "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.zip" \
+            "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.tar.gz" \
+            "/tmp/adlc5-release-packages/adlc5-claude-code-plugin-${version}.zip" \
+            "/tmp/adlc5-release-packages/adlc5-claude-code-plugin-${version}.tar.gz" \
+            "/tmp/adlc5-release-packages/adlc5-cursor-plugin-${version}.zip" \
+            "/tmp/adlc5-release-packages/adlc5-cursor-plugin-${version}.tar.gz"

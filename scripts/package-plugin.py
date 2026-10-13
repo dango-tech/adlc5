@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build the deterministic, self-contained ADLC5 plugin archive (Claude Code; shared with Codex).
+"""Build deterministic, self-contained ADLC5 packages for Codex, Claude Code, and Cursor.
 
-  scripts/package-plugin.py [--out DIR] [--check]
+  scripts/package-plugin.py [--out DIR] [--host all|codex|claude|cursor] [--check]
 
-Writes DIR/adlc5-plugin-<version>.tar.gz and .zip (default DIR: <tmp>/adlc5-dist, never inside
-the source tree). Both hold the same files under the package root (the zip loads directly with
-`claude --plugin-dir <zip>`). One package serves every host: Claude, Codex and Cursor metadata
-travel together when present.
+Writes a host-specific directory and zip for each selected host (default DIR:
+<tmp>/adlc5-dist, never inside the source tree). Codex and Claude outputs also include local
+marketplace roots so developers can register and install the packages using each host's native
+workflow. Cursor's output is a local plugin directory suitable for ~/.cursor/plugins/local.
 
 Safety model:
   * candidates come from `git ls-files --cached --others --exclude-standard`, so ignored files
@@ -27,6 +27,7 @@ import gzip
 import io
 import json
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -45,16 +46,31 @@ INCLUDE_PREFIXES = (
     "config.example.yaml", "LICENSE", "README.md", "CHANGELOG.md",
 )
 EXCLUDE_PREFIXES = (
-    "scripts/tests/", "docs/plans/", "docs/adr/", "dogfood/", "platform/runner/",
+    "scripts/tests/", "docs/plans/", "docs/adr/", "dogfood/", "platform/runner/", ".agents/",
 )
 EXCLUDE_NAMES = {"__pycache__", ".DS_Store"}
 EXCLUDE_SUFFIXES = (".pyc", ".swp", ".bak", ".orig", ".log")
-REQUIRED = (
-    ".claude-plugin/plugin.json", ".mcp.json", "hooks/claude.json", "bin/adlc5", "bin/adlc5-run",
-    "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
+REQUIRED_BASE = (
     "core/VERSION", "core/gates.yaml", "skills/adlc5/SKILL.md", "skills/adlc5-setup/SKILL.md",
-    ".claude/hooks/claude-usage.sh", ".claude/hooks/engagement-gate.sh", "LICENSE",
+    "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
+    "LICENSE",
 )
+REQUIRED_BY_HOST = {
+    "claude": (
+    ".claude-plugin/plugin.json", ".mcp.json", "hooks/claude.json", "bin/adlc5", "bin/adlc5-run",
+    ".claude/hooks/claude-usage.sh", ".claude/hooks/engagement-gate.sh", "LICENSE",
+    ),
+    "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json", ".mcp.json"),
+    "cursor": (".cursor-plugin/plugin.json", ".cursor-plugin/mcp.json", ".cursor-plugin/run-mcp.sh"),
+}
+
+HOST_ONLY_PREFIXES = {
+    # Keep repository marketplace metadata outside the distributable Claude plugin.
+    # The builder emits a Claude-only marketplace catalog as a sibling directory.
+    "claude": (".claude-plugin/marketplace.json", ".codex-plugin/", ".cursor-plugin/", "platform/codex-plugin/", "mcp.json"),
+    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "bin/", "platform/codex-plugin/"),
+    "cursor": (".claude-plugin/", ".claude/", ".codex-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/", "mcp.json"),
+}
 
 SECRET = re.compile(rb"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_\-]{30,}|\bAKIA[A-Z0-9]{16}\b")
 HOME = re.compile(rb"/(?:Users|home)/(?!USER\b|username\b|user\b|you\b|example\b|test\b)[A-Za-z][A-Za-z0-9_-]+/")
@@ -92,7 +108,7 @@ def build_manifest(version: str) -> bytes:
     return (json.dumps(data, indent=2) + "\n").encode()
 
 
-def collect(root: Path) -> dict[str, tuple[bytes, int]]:
+def collect(root: Path, host: str) -> dict[str, tuple[bytes, int]]:
     files: dict[str, tuple[bytes, int]] = {}
     problems: list[str] = []
     for name in selected(candidates(root), root):
@@ -109,7 +125,7 @@ def collect(root: Path) -> dict[str, tuple[bytes, int]]:
             problems.append(f"personal filesystem path: {name}")
         mode = 0o755 if path.stat().st_mode & stat.S_IXUSR else 0o644
         files[name] = (data, mode)
-    missing = [r for r in REQUIRED if r not in files]
+    missing = [r for r in (*REQUIRED_BASE, *REQUIRED_BY_HOST[host]) if r not in files]
     problems += [f"required file missing from package: {m}" for m in missing]
     if problems:
         raise SystemExit("package refused:\n  " + "\n  ".join(problems))
@@ -119,6 +135,97 @@ def collect(root: Path) -> dict[str, tuple[bytes, int]]:
             raise SystemExit(f"{manifest} version differs from core/VERSION {version!r}")
     files[".adlc5-package.json"] = (build_manifest(version), 0o644)
     return dict(sorted(files.items()))
+
+
+def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> dict[str, tuple[bytes, int]]:
+    omitted = HOST_ONLY_PREFIXES[host]
+    result = {
+        name: value for name, value in files.items()
+        if not any(name == prefix or name.startswith(prefix) for prefix in omitted)
+    }
+    if host == "codex":
+        # Root plugin.json is the portable Agent Plugins entry point; retain
+        # .codex-plugin/plugin.json as the documented compatibility fallback.
+        manifest = json.loads(result["plugin.json"][0])
+        manifest["version"] = version
+        manifest.setdefault("extensions", {}).setdefault("com.openai", {})["interface"] = {
+            "displayName": "ADLC5",
+            "shortDescription": "Evidence-driven software delivery for coding agents.",
+            "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+            "developerName": "Dango Tech",
+            "category": "Developer tools",
+            "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
+        }
+        result["plugin.json"] = (json.dumps(manifest, indent=2).encode() + b"\n", 0o644)
+        compatibility = {
+            "name": "adlc5",
+            "version": version,
+            "description": "ADLC5 workflow skills and local kernel tools for Codex.",
+            "author": {"name": "Dango Tech", "url": "https://github.com/dango-tech"},
+            "skills": "./skills/",
+            "mcpServers": "./.mcp.json",
+            "interface": {
+                "displayName": "ADLC5",
+                "shortDescription": "Evidence-driven software delivery for coding agents.",
+                "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+                "developerName": "Dango Tech",
+                "category": "Developer tools",
+                "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
+            },
+        }
+        result[".codex-plugin/plugin.json"] = (json.dumps(compatibility, indent=2).encode() + b"\n", 0o644)
+        mcp = {
+            "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+            "mcpServers": {
+                "adlc5": {
+                    "type": "stdio",
+                    "command": "python3",
+                    "args": ["./scripts/adlc5-mcp.py"],
+                    "cwd": "${PLUGIN_ROOT}",
+                }
+            },
+        }
+        result["mcp.json"] = (json.dumps(mcp, indent=2).encode() + b"\n", 0o644)
+        compatibility_mcp = {
+            "mcpServers": {
+                "adlc5": {
+                    "command": "python3",
+                    "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/adlc5-mcp.py"],
+                }
+            }
+        }
+        result[".mcp.json"] = (json.dumps(compatibility_mcp, indent=2).encode() + b"\n", 0o644)
+    result[".adlc5-package.json"] = (build_manifest(version), 0o644)
+    return dict(sorted(result.items()))
+
+
+def write_marketplace(root: Path, host: str, package_dir: Path) -> None:
+    """Create an installable local marketplace for Codex or Claude Code."""
+    plugins = root / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(package_dir, plugins / "adlc5")
+    if host == "codex":
+        marketplace = {
+            "name": "adlc5-local",
+            "interface": {"displayName": "ADLC5 local build"},
+            "plugins": [{
+                "name": "adlc5",
+                "source": {"source": "local", "path": "./plugins/adlc5"},
+                "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                "category": "Developer tools",
+            }],
+        }
+        path = root / ".agents" / "plugins" / "marketplace.json"
+    else:
+        marketplace = {
+            "name": "adlc5-local",
+            "description": "Local ADLC5 plugin build",
+            "owner": {"name": "ADLC5"},
+            "plugins": [{"name": "adlc5", "source": "./plugins/adlc5", "description": "ADLC5 workflow skills and kernel tools"}],
+        }
+        path = root / ".claude-plugin" / "marketplace.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(marketplace, indent=2) + "\n", encoding="utf-8")
 
 
 def write_tar(files: dict[str, tuple[bytes, int]], dest: Path, prefix: str) -> None:
@@ -146,21 +253,54 @@ def write_zip(files: dict[str, tuple[bytes, int]], dest: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "adlc5-dist"))
-    parser.add_argument("--check", action="store_true", help="validate the file selection only; write nothing")
+    parser.add_argument("--host", choices=("all", "codex", "claude", "cursor"), default="all")
+    parser.add_argument("--check", action="store_true", help="validate host package inputs only; write nothing")
     ns = parser.parse_args()
-    files = collect(ROOT)
-    version = files["core/VERSION"][0].decode().strip()
+    hosts = ("codex", "claude", "cursor") if ns.host == "all" else (ns.host,)
+    files_by_host = {host: for_host(collect(ROOT, host), host, (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()) for host in hosts}
+    version = (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()
     if ns.check:
-        print(json.dumps({"status": "ok", "version": version, "files": len(files)}))
+        print(json.dumps({"status": "ok", "version": version, "hosts": {host: len(files) for host, files in files_by_host.items()}}))
         return 0
     out = Path(ns.out).resolve()
     if out == ROOT or ROOT in out.parents:
         raise SystemExit(f"--out must be outside the source tree: {out}")
     out.mkdir(parents=True, exist_ok=True)
-    tar_path, zip_path = out / f"adlc5-plugin-{version}.tar.gz", out / f"adlc5-plugin-{version}.zip"
-    write_tar(files, tar_path, f"adlc5-{version}")
-    write_zip(files, zip_path)
-    print(json.dumps({"status": "ok", "version": version, "files": len(files), "tar": str(tar_path), "zip": str(zip_path)}, indent=2))
+    outputs = {}
+    for host, files in files_by_host.items():
+        label = "claude-code" if host == "claude" else host
+        package_dir = out / host / "adlc5"
+        shutil.rmtree(out / host, ignore_errors=True)
+        marketplace_root = out / f"{host}-marketplace"
+        shutil.rmtree(marketplace_root, ignore_errors=True)
+        for archive in out.glob(f"adlc5-{label}-plugin-*"):
+            archive.unlink()
+        if host == "claude":
+            for archive in out.glob("adlc5-plugin-*"):
+                archive.unlink()
+        package_dir.mkdir(parents=True)
+        for name, (data, _mode) in files.items():
+            dest = package_dir / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+        for name, (_data, mode) in files.items():
+            path = package_dir / name
+            path.chmod(mode)
+        zip_path = out / f"adlc5-{label}-plugin-{version}.zip"
+        tar_path = out / f"adlc5-{label}-plugin-{version}.tar.gz"
+        write_zip(files, zip_path)
+        tar_prefix = f"adlc5-{version}" if host == "claude" else f"adlc5-{label}-{version}"
+        write_tar(files, tar_path, tar_prefix)
+        if host in ("codex", "claude"):
+            write_marketplace(marketplace_root, host, package_dir)
+            outputs[host] = {"directory": str(package_dir), "zip": str(zip_path), "tar": str(tar_path), "marketplace": str(marketplace_root)}
+        else:
+            outputs[host] = {"directory": str(package_dir), "zip": str(zip_path), "tar": str(tar_path)}
+    result = {"status": "ok", "version": version, "packages": outputs}
+    if "claude" in outputs:
+        # Retain the original Claude package keys for scripts that consumed the 4.x builder.
+        result.update({"files": len(files_by_host["claude"]), "tar": outputs["claude"]["tar"], "zip": outputs["claude"]["zip"]})
+    print(json.dumps(result, indent=2))
     return 0
 
 

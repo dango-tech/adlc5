@@ -151,12 +151,12 @@ Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`
 
 | Host | Manifest | Notes |
 |------|----------|-------|
-| Cursor | [`.cursor-plugin/plugin.json`](../.cursor-plugin/plugin.json) | skills `skills/`, MCP `.cursor-plugin/mcp.json`, shims `run-adlc5.sh` / `run-mcp.sh` |
-| Codex | [`platform/codex-plugin/plugin.json`](../platform/codex-plugin/plugin.json) | metadata + `adlc5.kernel/mcp`; skills via `install.sh` |
-| Claude Code | [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json) | skills `skills/`, MCP `.mcp.json`, hooks `hooks/claude.json`, `bin/` on PATH; archive via `scripts/package-plugin.py` |
+| Cursor | [`.cursor-plugin/plugin.json`](../.cursor-plugin/plugin.json) | native package built by `scripts/package-plugin.py`; local import and marketplace metadata |
+| Codex | [`plugin.json`](../plugin.json) and [`.codex-plugin/plugin.json`](../.codex-plugin/plugin.json) | portable package manifest plus compatibility fallback; skills, local MCP, onboarding; local/repo marketplace |
+| Claude Code | [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json) | native package with skills, MCP, hooks, `bin/`; local/repo marketplace |
 | Antigravity | install stub `plugin.json` + `ADLC5_ROOT` file | skills linked under plugin; kernel stays in clone |
 
-**Plugin load vs classic install:** see [`.cursor-plugin/README.md`](../.cursor-plugin/README.md). Classic `./scripts/install.sh` still symlinks skills/rules for all seven hosts; it prints `ADLC5_ROOT` so agents can find the kernel/MCP.
+**Plugin build and registration:** see [the all-host guide](agent-plugins.md). Classic `./scripts/install.sh` still symlinks skills/rules for all supported hosts; it prints `ADLC5_ROOT` so agents can find the kernel/MCP.
 
 Manifest paths are relative with **no `..` traversal**. Runtime shims resolve the distribution root at invoke time.
 

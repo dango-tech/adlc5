@@ -60,24 +60,18 @@ Dry run:
 
 Backup-replace: existing skill/rule entries are backed up under `install_backup_root` (default `~/.adlc5-install-backup/<timestamp>/`), replaced with symlinks, then the backup is removed after successful verify. On failure, the backup is kept for manual restore. `--keep-backup` skips deletion on success.
 
-## Claude Code plugin (optional)
+## Native plugins (Codex, Claude Code, Cursor)
 
-`.claude-plugin/plugin.json` + `.mcp.json` + `hooks/claude.json` at the distribution root; `scripts/package-plugin.py` builds the self-contained archive. Skills are discovered from `skills/` and namespaced `adlc5:<frontmatter name>`; `bin/adlc5` and `bin/adlc5-run` give shell instructions a package-relative entry point. Setup: skill `adlc5-setup`. Details: [INSTALL.md](INSTALL.md#claude-code-plugin-local-package). Classic `./scripts/install.sh --platform claude` is unchanged.
+The repository builds three host-specific packages from one shared framework source. Each package carries its own manifest and runtime files; local marketplace manifests support Codex and Claude Code, while Cursor supports local plugin imports and team/public marketplace distribution. Build and registration steps are in [the host plugin guide](../../docs/agent-plugins.md). Invoke `adlc5-setup` after installing or updating a plugin.
 
-## Codex plugin (optional)
+Classic **skills-only install** remains available for all hosts:
 
-From the repo root:
-
-```text
-.cursor-plugin/plugin.json            →  skills skills/; mcpServers → .cursor-plugin/mcp.json; adlc5.kernel/mcp
-.cursor-plugin/run-adlc5.sh|run-mcp.sh →  shims set ADLC5_ROOT → scripts/adlc5|adlc5-mcp.py
-platform/codex-plugin/plugin.json  →  metadata + adlc5.kernel/mcp (skills via install.sh)
-Runtime kernel                        →  $ADLC5_ROOT/scripts/adlc5 (install.sh prints ADLC5_ROOT)
+```bash
+./scripts/install.sh --platform <host>
+./scripts/verify-install.sh --platform <host>
 ```
 
-**Cursor plugin load:** see [`.cursor-plugin/README.md`](../../.cursor-plugin/README.md). **Classic:** `./scripts/install.sh --platform <host>` (unchanged symlink matrix).
-
-Install via Codex plugin UI or point your Codex config at `platform/codex-plugin/` only if `./skills/` is populated. Prefer `./scripts/install.sh --platform codex` for skills. Enable multi-agent for Delivery parallel implementation:
+Enable multi-agent for Delivery parallel implementation:
 
 ```toml
 # ~/.codex/config.toml

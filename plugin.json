@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "adlc5",
+  "version": "5.0.0",
+  "description": "ADLC5 workflow skills and local kernel tools for AI coding agents.",
+  "author": {
+    "name": "Dango Tech",
+    "url": "https://github.com/dango-tech"
+  },
+  "homepage": "https://github.com/dango-tech/adlc5",
+  "repository": "https://github.com/dango-tech/adlc5",
+  "license": "MIT",
+  "keywords": ["agent-workflow", "skills", "mcp", "sdd"],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/adlc5-setup/SKILL.md",
+      "interface": {
+        "displayName": "ADLC5",
+        "shortDescription": "Evidence-driven software delivery for coding agents.",
+        "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+        "developerName": "Dango Tech",
+        "category": "Developer tools",
+        "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"]
+      }
+    }
+  }
+}

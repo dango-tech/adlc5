@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "adlc5": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["./scripts/adlc5-mcp.py"],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}

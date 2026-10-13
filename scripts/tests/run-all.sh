@@ -2300,8 +2300,33 @@ for key in ('kernel', 'mcp', 'kernel_shim', 'mcp_shim'):
     assert '..' not in Path(meta[key]).parts, key
 codex = json.loads((root / 'platform/codex-plugin/plugin.json').read_text(encoding='utf-8'))
 assert codex['version'] == version and codex['adlc5']['kernel'] == 'scripts/adlc5'
+codex_plugin = json.loads((root / '.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+assert codex_plugin['version'] == version
+assert (root / codex_plugin['skills']).is_dir()
+assert codex_plugin['author']['name'] and codex_plugin['interface']['displayName']
+assert 'extensions' not in codex_plugin
+assert codex_plugin['mcpServers'] == './.mcp.json'
+assert (root / codex_plugin['mcpServers']).is_file()
+assert (root / 'mcp.json').is_file()
+portable = json.loads((root / 'plugin.json').read_text(encoding='utf-8'))
+assert portable['extensions']['com.openai']['interface']['displayName'] == 'ADLC5'
+claude_market = json.loads((root / '.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
+assert claude_market['plugins'][0]['name'] == 'adlc5' and claude_market['plugins'][0]['source'] == './'
+cursor_market = json.loads((root / '.cursor-plugin/marketplace.json').read_text(encoding='utf-8'))
+assert cursor_market['plugins'][0]['version'] == version
 PY
 pass "plugin packaging contract"
+
+# Rebuilding a selected host removes stale files from its package and marketplace trees.
+package_out="${TMPDIR:-/tmp}/adlc5-package-rebuild-$$"
+python3 scripts/package-plugin.py --host codex --out "$package_out" >/dev/null
+mkdir -p "$package_out/codex/adlc5/obsolete" "$package_out/codex-marketplace/plugins/adlc5/obsolete"
+touch "$package_out/codex/adlc5/obsolete/stale" "$package_out/codex-marketplace/plugins/adlc5/obsolete/stale"
+python3 scripts/package-plugin.py --host codex --out "$package_out" >/dev/null
+[[ ! -e "$package_out/codex/adlc5/obsolete/stale" ]] || fail "stale Codex package file survived rebuild"
+[[ ! -e "$package_out/codex-marketplace/plugins/adlc5/obsolete/stale" ]] || fail "stale Codex marketplace file survived rebuild"
+rm -rf "$package_out"
+pass "plugin package rebuild cleanup"
 
 # Release-coupled lifecycle skills and SOUL track the framework; auxiliary skills version independently.
 python3 - <<'PY'

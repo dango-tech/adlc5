@@ -1,0 +1,19 @@
+{
+  "name": "adlc5",
+  "version": "5.0.0",
+  "description": "ADLC5 workflow skills and local kernel tools for Codex.",
+  "author": {
+    "name": "Dango Tech",
+    "url": "https://github.com/dango-tech"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ADLC5",
+    "shortDescription": "Evidence-driven software delivery for coding agents.",
+    "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+    "developerName": "Dango Tech",
+    "category": "Developer tools",
+    "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"]
+  }
+}

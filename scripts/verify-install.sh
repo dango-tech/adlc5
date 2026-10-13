@@ -127,7 +127,10 @@ for f in core/VERSION core/sdd-model.md core/state-schema.json core/gates.yaml c
   scripts/update-adlc5.sh \
   docs/ADLC5.md docs/ADLC5-kernel.md docs/telemetry.md docs/evaluation.md FRAMEWORK.md \
   templates/policies-tiny.yaml.example templates/policies-small-feature.yaml.example templates/policies-high-risk.yaml.example \
-  scripts/adlc5 scripts/adlc5-mcp.py .cursor-plugin/plugin.json .cursor-plugin/mcp.json \
+  scripts/adlc5 scripts/adlc5-mcp.py plugin.json .codex-plugin/plugin.json mcp.json \
+  .claude-plugin/plugin.json .claude-plugin/marketplace.json \
+  .cursor-plugin/plugin.json .cursor-plugin/marketplace.json .cursor-plugin/mcp.json \
+  docs/agent-plugins.md \
   .cursor-plugin/README.md .cursor-plugin/run-adlc5.sh .cursor-plugin/run-mcp.sh \
   platform/codex-plugin/plugin.json platform/codex-plugin/README.md; do
   [[ -r "${ROOT}/${f}" ]] && echo "  OK: ${f}" || { echo "  FAIL: ${f}" >&2; errors=$((errors + 1)); }
@@ -138,22 +141,25 @@ import json
 from pathlib import Path
 root = Path(".")
 version = (root / "core/VERSION").read_text(encoding="utf-8").strip()
+portable = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
+assert portable.get("name") == "adlc5" and portable.get("version") == version, "plugin.json identity/version mismatch"
+onboarding = portable.get("extensions", {}).get("com.openai", {}).get("onboardingSkill")
+assert onboarding and (root / onboarding.removeprefix("./")).is_file(), "portable Codex onboarding skill missing"
 path_keys = ("skills", "rules", "agents", "commands", "hooks", "mcpServers")
 runtime_keys = ("kernel", "mcp", "kernel_shim", "mcp_shim", "version_file", "docs")
-for rel in (".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
+for rel in (".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
     data = json.loads((root / rel).read_text(encoding="utf-8"))
     assert data.get("name") == "adlc5", rel
     assert data.get("version") == version, f"{rel} version {data.get('version')} != {version}"
-    require_exists = rel.startswith(".cursor-plugin/")
     for key in path_keys:
         val = data.get(key)
         if not val:
             continue
         assert not str(val).startswith("/") and ".." not in Path(str(val)).parts, f"{rel} unsafe path {key}={val}"
-        if require_exists:
-            assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
+        assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
     meta = data.get("adlc5") or {}
-    assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"
+    if rel in (".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
+        assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"
     for key in runtime_keys:
         val = meta.get(key)
         if not val:
@@ -168,6 +174,10 @@ args = mcp["mcpServers"]["adlc5"].get("args") or []
 assert any("run-mcp.sh" in str(a) or str(a).endswith("adlc5-mcp.py") for a in args), (
     "mcp.json must point at run-mcp.sh or adlc5-mcp.py"
 )
+codex_mcp = json.loads((root / "mcp.json").read_text(encoding="utf-8"))
+assert codex_mcp.get("mcpServers", {}).get("adlc5", {}).get("type") == "stdio", "Codex mcp.json missing stdio server"
+cursor_market = json.loads((root / ".cursor-plugin/marketplace.json").read_text(encoding="utf-8"))
+assert cursor_market["plugins"][0]["version"] == version, "Cursor marketplace version differs from core/VERSION"
 print("  OK: plugin.json metadata")
 PY
 for s in scripts/init-feature.sh scripts/pilot-autopilot.sh scripts/resolve-model.sh scripts/git-orchestrate.sh \

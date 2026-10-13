@@ -1,0 +1,23 @@
+{
+  "name": "adlc5",
+  "owner": {
+    "name": "Dango Tech"
+  },
+  "metadata": {
+    "description": "ADLC5 agent workflow plugin for Cursor."
+  },
+  "plugins": [
+    {
+      "name": "adlc5",
+      "source": ".",
+      "description": "Specify, plan, implement, and verify with ADLC5.",
+      "version": "5.0.0",
+      "author": {
+        "name": "Dango Tech"
+      },
+      "repository": "https://github.com/dango-tech/adlc5",
+      "license": "MIT",
+      "keywords": ["agent-workflow", "skills", "mcp", "sdd"]
+    }
+  ]
+}
