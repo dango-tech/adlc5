@@ -1,0 +1,19 @@
+{
+  "name": "adlc5",
+  "description": "ADLC5 plugins for AI coding agents",
+  "owner": {
+    "name": "Dango Tech"
+  },
+  "plugins": [
+    {
+      "name": "adlc5",
+      "source": "./",
+      "description": "Specify, plan, implement, and verify with ADLC5.",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer tools"
+    }
+  ]
+}

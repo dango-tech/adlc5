@@ -25,9 +25,14 @@ Consumer checks and kernel tests do not require an AI subscription.
 git clone https://github.com/dango-tech/adlc5.git
 cd adlc5
 cp config.example.yaml config.yaml
-./scripts/install.sh --platform codex  # or your host
+./scripts/install.sh --platform codex  # classic skills install; or claude|cursor|all
 ./scripts/verify-install.sh --platform codex
 ```
+
+To build and register the host-native **Codex, Claude Code, and Cursor plugins**, see
+[Build and install the ADLC5 agent plugins](docs/agent-plugins.md). Each plugin bundles
+the shared framework with host-specific metadata; the local package builder creates all
+three packages from this checkout.
 
 **Experimental supervised runner:** configure per-host tiers with
 `./scripts/adlc5 setup models --host HOST`, then run
@@ -44,11 +49,8 @@ In your application repository:
 /path/to/adlc5/scripts/init-feature.sh --feature my-feature --interaction hitl
 ```
 
-**Claude Code plugin (no clone needed at runtime):** build the local package with
-`python3 scripts/package-plugin.py --out /tmp/adlc5-dist`, start a session with
-`claude --plugin-dir /tmp/adlc5-dist/adlc5-plugin-<version>.zip`, then invoke the
-`adlc5-setup` skill in your repository. Skills appear as `adlc5:<name>`. See the
-[Claude plugin guide](shared/docs/INSTALL.md#claude-code-plugin-local-package).
+**Plugin users:** build/install the package for your host, then invoke the `adlc5-setup`
+skill in your consumer repository. See [host plugin instructions](docs/agent-plugins.md).
 
 Then invoke **`@adlc5 for my-feature`**. Use the framework in consumer repositories;
 this repository distributes the framework and its portable `dogfood/` example.
@@ -148,10 +150,9 @@ comparative quality results; the pilot and outside-contributor trial remain pend
 ## Host support
 
 The contract-test CI matrix covers Ubuntu and macOS; disposable installation smoke
-covers Claude skill links and kernel verification, and the Claude Code plugin package
-has archive, MCP stdio, bootstrap and hook tests plus a recorded live local session. Codex and Cursor have packaged
-adapter/hook tests. Other install adapters remain available but do not imply equal
-end-to-end delivery validation. See [cross-platform details](shared/docs/CROSS-PLATFORM.md).
+covers Claude skill links and kernel verification. See [cross-platform details](shared/docs/CROSS-PLATFORM.md)
+and the [host plugin build/install guide](docs/agent-plugins.md) for package creation,
+registration, and host-specific qualification boundaries.
 Live delivery/resume qualification must be recorded per host before broader claims.
 See [distribution contents](docs/distribution.md) for archive exclusions and publication checks.
 

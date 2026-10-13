@@ -2300,6 +2300,15 @@ for key in ('kernel', 'mcp', 'kernel_shim', 'mcp_shim'):
     assert '..' not in Path(meta[key]).parts, key
 codex = json.loads((root / 'platform/codex-plugin/plugin.json').read_text(encoding='utf-8'))
 assert codex['version'] == version and codex['adlc5']['kernel'] == 'scripts/adlc5'
+codex_plugin = json.loads((root / '.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+assert codex_plugin['version'] == version
+assert (root / codex_plugin['skills']).is_dir()
+assert (root / codex_plugin['mcpServers']).is_file()
+assert (root / 'mcp.json').is_file()
+claude_market = json.loads((root / '.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
+assert claude_market['plugins'][0]['name'] == 'adlc5' and claude_market['plugins'][0]['source'] == './'
+cursor_market = json.loads((root / '.cursor-plugin/marketplace.json').read_text(encoding='utf-8'))
+assert cursor_market['plugins'][0]['version'] == version
 PY
 pass "plugin packaging contract"
 

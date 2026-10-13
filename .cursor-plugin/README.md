@@ -1,6 +1,6 @@
-# ADLC5 Cursor Agent Plugin (3.0)
+# ADLC5 Cursor Plugin (5.0)
 
-Package root is the **adlc5 distribution repo** (parent of this folder). Manifest: `plugin.json`.
+Build the self-contained Cursor package with `python3 scripts/package-plugin.py --host cursor --out /tmp/adlc5-dist`. The generated directory at `/tmp/adlc5-dist/cursor/adlc5` contains this manifest, the shared skills, and the runtime.
 
 ## What this plugin declares
 
@@ -14,7 +14,7 @@ Shims set `ADLC5_ROOT` to the distribution root so hosts can invoke kernel/MCP w
 
 ## Load as Cursor plugin vs classic install
 
-**Plugin load (this package):** point Cursor at this repository as a local/marketplace plugin (manifest under `.cursor-plugin/`). Skills resolve from `skills/`; MCP from `mcp.json`.
+**Plugin load:** copy the generated package into `~/.cursor/plugins/local/adlc5`, reload Cursor, then enable it from **Customize**. Teams can distribute it through a team marketplace; the public Cursor Marketplace requires a repository submission and review.
 
 **Classic install (seven-host matrix — unchanged):**
 

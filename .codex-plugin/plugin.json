@@ -1,0 +1,12 @@
+{
+  "name": "adlc5",
+  "version": "5.0.0",
+  "description": "ADLC5 workflow skills and local kernel tools for Codex.",
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/adlc5-setup/SKILL.md"
+    }
+  }
+}
