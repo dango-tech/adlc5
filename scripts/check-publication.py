@@ -62,7 +62,7 @@ def problems(name, data):
         out.append('private artifact link')
     if name.endswith('.md') and (b'PUBLIC-LAUNCH-PLAN.md' in data or b'docs/plans/' in data or b'## Learned User Preferences' in data):
         out.append('private development context')
-    emails = data.replace(b'noreply@github.com', b'noreply@example.invalid').replace(b'noreply@anthropic.com', b'noreply@example.invalid')
+    emails = data.replace(b'noreply@github.com', b'noreply@example.invalid').replace(b'noreply@anthropic.com', b'noreply@example.invalid').replace(b'support@github.com', b'support@example.invalid')
     if any(m.group(1).lower() not in ALLOWED_EMAIL_DOMAINS for m in EMAIL.finditer(emails)):
         out.append('non-public email')
     return out
@@ -75,6 +75,7 @@ def main():
         assert problems('x.txt', b'/Users/' + b'person/project/') == ['personal filesystem path']
         assert problems('.cursor/hooks/state/local.json', b'{}')
         assert not problems('x.txt', b'test@example.invalid contributors@users.noreply.github.com')
+        assert not problems('commit-message', b'Signed-off-by: dependabot[bot] <support@github.com>')
         self_test_history_scope()
         print('PASS: privacy rule regressions'); return
     if args.pre_commit:
