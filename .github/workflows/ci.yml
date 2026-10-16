@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Privacy regressions and complete reachable history
+      - name: Privacy regressions and checked-out history
         run: |
           python3 scripts/check-publication.py --self-test
           python3 scripts/check-publication.py

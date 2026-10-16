@@ -1,3 +1,7 @@
+---
+description: "Explore ADLC5 Intelligence, the fifth pillar that maps repositories, supplies focused agent context, and grounds delivery in current evidence."
+---
+
 # Intelligence
 
 **Intelligence is the fifth pillar of ADLC5:** its ability to gather repository

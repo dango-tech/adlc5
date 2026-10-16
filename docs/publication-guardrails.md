@@ -12,7 +12,9 @@ python3 scripts/check-publication.py --self-test
 python3 scripts/check-publication.py
 ```
 
-The pre-commit gate also checks the proposed author/committer identity. The pre-push gate scans the index, reachable history and commit emails/messages.
+The pre-commit gate also checks the proposed author/committer identity. The
+pre-push gate scans the index, the checked-out commit's reachable history, and
+its commit emails/messages.
 It rejects real home paths, non-public literal emails, recognizable credentials,
 private artifact links, development plans, session state and caches. Only public
 noreply identities and explicitly synthetic example email domains are accepted.
