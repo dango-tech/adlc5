@@ -1,0 +1,17 @@
+# ADLC5
+
+> ADLC5 is a public-preview AI coding delivery workflow for software repositories. It connects Specify, Plan, Tasks, and Implement through repository intelligence and current evidence.
+
+Workflow contracts are tested. Comparative coding-quality results and outside-contributor qualification remain pending. See the [overview](https://dango-tech.github.io/adlc5/) and [completion limits](https://dango-tech.github.io/adlc5/lifecycle/#what-completion-establishes) before making readiness claims.
+
+## Documentation
+
+- [Overview](https://dango-tech.github.io/adlc5/): ADLC5's purpose, five pillars, and recommended starting path.
+- [Installation](https://dango-tech.github.io/adlc5/installation/): supported hosts, prerequisites, setup, and verification.
+- [Quickstart](https://dango-tech.github.io/adlc5/quickstart/): initialize a consumer repository and start a feature.
+- [Lifecycle](https://dango-tech.github.io/adlc5/lifecycle/): Specify → Plan → Tasks → Implement and evidence-backed completion.
+- [Intelligence](https://dango-tech.github.io/adlc5/intelligence/): repository maps, reviewed guidance, focused context, and freshness evidence.
+- [Running agents](https://dango-tech.github.io/adlc5/running/): supervised host execution modes and result handling.
+- [Reference](https://dango-tech.github.io/adlc5/reference/): canonical repository guides, kernel commands, and project overview.
+
+The [XML sitemap](https://dango-tech.github.io/adlc5/sitemap.xml) lists the published documentation pages. The [source repository](https://github.com/dango-tech/adlc5) contains implementation and framework contracts.

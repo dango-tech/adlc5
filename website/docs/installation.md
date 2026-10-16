@@ -1,3 +1,7 @@
+---
+description: "Install ADLC5 for Codex, Claude Code, Cursor, and other supported AI coding hosts, then verify the framework setup."
+---
+
 # Installation
 
 ## Prerequisites

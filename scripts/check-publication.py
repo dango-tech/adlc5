@@ -3,6 +3,7 @@
 import argparse
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,8 +15,39 @@ EMAIL = re.compile(rb'\b[A-Za-z0-9_.+\-]+@([A-Za-z0-9.\-]+\.[A-Za-z]{2,})\b')
 ALLOWED_EMAIL_DOMAINS = {b'example.com', b'example.org', b'example.invalid', b'example.test', b'users.noreply.github.com'}
 
 
-def git(*args):
-    return subprocess.check_output(['git', '-C', str(ROOT), *args])
+def git(*args, cwd=ROOT):
+    return subprocess.check_output(['git', '-C', str(cwd), *args])
+
+
+def publication_history(cwd=ROOT):
+    return (
+        git('rev-list', '--objects', 'HEAD', cwd=cwd),
+        git('log', 'HEAD', '--format=%H%x09%ae%x09%ce', cwd=cwd),
+        git('log', 'HEAD', '--format=%B', cwd=cwd),
+    )
+
+
+def self_test_history_scope():
+    with tempfile.TemporaryDirectory(prefix='adlc5-publication-') as directory:
+        repo = Path(directory)
+        git('init', '-q', '-b', 'main', cwd=repo)
+        git('config', 'user.name', 'Publication Test', cwd=repo)
+        git('config', 'user.email', 'test@example.invalid', cwd=repo)
+        (repo / 'public.txt').write_text('public history\n', encoding='utf-8')
+        git('add', 'public.txt', cwd=repo)
+        git('commit', '-q', '-m', 'public baseline', cwd=repo)
+        git('switch', '-q', '-c', 'unrelated', cwd=repo)
+        (repo / 'unrelated.txt').write_text('unrelated history\n', encoding='utf-8')
+        git('add', 'unrelated.txt', cwd=repo)
+        git('commit', '-q', '-m', 'contains person' + '@' + 'company.invalid', cwd=repo)
+        unrelated_oid = git('rev-parse', 'HEAD', cwd=repo).strip()
+        git('switch', '-q', 'main', cwd=repo)
+
+        objects, commits, messages = publication_history(repo)
+        assert unrelated_oid not in objects
+        assert not problems('commit-metadata', commits)
+        assert not problems('commit-message', messages)
+        assert unrelated_oid in git('rev-list', '--objects', '--all', cwd=repo)
 
 
 def problems(name, data):
@@ -43,6 +75,7 @@ def main():
         assert problems('x.txt', b'/Users/' + b'person/project/') == ['personal filesystem path']
         assert problems('.cursor/hooks/state/local.json', b'{}')
         assert not problems('x.txt', b'test@example.invalid contributors@users.noreply.github.com')
+        self_test_history_scope()
         print('PASS: privacy rule regressions'); return
     if args.pre_commit:
         for identity in ('GIT_AUTHOR_IDENT', 'GIT_COMMITTER_IDENT'):
@@ -53,7 +86,8 @@ def main():
     for entry in git('ls-files', '-s', '-z').split(b'\0'):
         if entry:
             meta, name = entry.split(b'\t', 1); objects.setdefault(meta.split()[1].decode(), set()).add(name.decode())
-    for entry in git('rev-list', '--objects', '--all').decode().splitlines():
+    history_objects, commit_metadata, commit_messages = publication_history()
+    for entry in history_objects.decode().splitlines():
         oid, _, name = entry.partition(' ')
         if name: objects.setdefault(oid, set()).add(name)
     failures = []
@@ -66,11 +100,11 @@ def main():
             for name in names:
                 for reason in problems(name, data): failures.append(f'{reason}: {name} ({oid[:12]})')
     proc.stdin.close(); proc.wait()
-    for line in git('log', '--all', '--format=%H%x09%ae%x09%ce').decode().splitlines():
+    for line in commit_metadata.decode().splitlines():
         oid, author, committer = line.split('\t')
         if any(not e.endswith('@users.noreply.github.com') and e != 'noreply@github.com' for e in (author, committer)):
             failures.append(f'non-public commit email: {oid[:12]}')
-    failures.extend('commit-message '+r for r in problems('commit-message', git('log', '--all', '--format=%B')))
+    failures.extend('commit-message '+r for r in problems('commit-message', commit_messages))
     if failures: raise SystemExit('\n'.join(sorted(set(failures))))
     print('PASS: publication index, reachable history and commit metadata')
 

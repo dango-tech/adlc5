@@ -1,3 +1,7 @@
+---
+description: "Initialize ADLC5 in an application repository, create a feature workspace, and start the Specify, Plan, Tasks, Implement workflow."
+---
+
 # Quickstart
 
 After [installation](installation.md), open your application repository.

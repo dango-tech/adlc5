@@ -1,3 +1,7 @@
+---
+description: "Find the canonical ADLC5 references for installation, lifecycle stages, kernel commands, completion evidence, agent skills, and repository intelligence."
+---
+
 # Reference
 
 The curated site covers getting started. Follow these repository documents for
