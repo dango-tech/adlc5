@@ -1,3 +1,7 @@
+---
+description: "Learn the ADLC5 lifecycle: Specify requirements, Plan the change, define Tasks, and Implement with current checks and review evidence."
+---
+
 # Lifecycle
 
 ADLC5 follows **Specify → Plan → Tasks → Implement**. Skills exercise judgment;

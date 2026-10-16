@@ -1,3 +1,7 @@
+---
+description: "Run ADLC5 supervised coding agents with per-host model profiles, attended or confined execution, and evidence-backed results."
+---
+
 # Running supervised agents
 
 Set a per-host model profile and start a feature run:

@@ -1,3 +1,7 @@
+---
+description: "ADLC5 is an AI coding delivery workflow for software teams: Specify, Plan, Tasks, and Implement, connected by repository intelligence and current evidence."
+---
+
 # Deliver code with ADLC5
 
 <img alt="ADLC5 — AI Development Lifecycle" src="assets/brand/logo-light.svg#only-light" width="480">

@@ -1,9 +1,11 @@
 # Documentation website
 
-The six curated user pages live in `website/docs/`. `mkdocs.yml` supplies the
-navigation, Material theme, search, code copying, and light/dark palettes. Brand
-assets are shared through `website/docs/assets/brand`, a relative symlink to
-`assets/brand/`. Edit the original assets rather than creating copies.
+The curated user pages live in `website/docs/`. `mkdocs.yml` supplies the
+navigation, Material theme, search, code copying, and light/dark palettes. The
+docs directory also contains `robots.txt` and `llms.txt`; MkDocs generates the
+XML sitemap from `site_url`. Brand assets are shared through
+`website/docs/assets/brand`, a relative symlink to `assets/brand/`. Edit the
+original assets rather than creating copies.
 
 ## Preview and validate
 
