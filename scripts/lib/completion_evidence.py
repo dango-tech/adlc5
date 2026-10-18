@@ -36,13 +36,13 @@ def fingerprint(workspace: Path, feature: str) -> str:
     names.add('config.yaml')
     policy_path = find_policies_path(workspace, feature)
     if policy_path is not None:
-        names.add(str(policy_path.relative_to(workspace)))
+        names.add(policy_path.relative_to(workspace).as_posix())
     qa = workspace / '.qa' / feature
     if qa.exists():
-        names.update(str(p.relative_to(workspace)) for p in qa.rglob('*') if p.is_file())
+        names.update(p.relative_to(workspace).as_posix() for p in qa.rglob('*') if p.is_file())
     base = workspace / '.adlc5' / feature
     if base.exists():
-        names.update(str(p.relative_to(workspace)) for p in base.rglob('*') if p.is_file())
+        names.update(p.relative_to(workspace).as_posix() for p in base.rglob('*') if p.is_file())
     from lib.simple_yaml import load_frontmatter
     for spec in (base / 'tasks/code-spec').glob('*.md'):
         fm, _ = load_frontmatter(spec.read_text())
