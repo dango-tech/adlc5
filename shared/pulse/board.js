@@ -67,14 +67,11 @@ function render() {
     const status = feature.lifecycle.stage_status?.[name] || "not recorded";
     const button = make("button", "p-stage");
     button.type = "button";
+    button.dataset.status = status;
     button.setAttribute("aria-pressed", String(selectedStage === name));
     if (stage === name) button.setAttribute("aria-current", "step");
     button.append(make("span", "p-stage-name", `${String(index + 1).padStart(2, "0")} / ${name}`));
     button.append(make("span", "p-stage-state", label(status)));
-    const track = make("span", "p-track");
-    track.setAttribute("aria-hidden", "true");
-    track.append(make("span"));
-    button.append(track);
     button.addEventListener("click", () => { selectedStage = name; render(); panel.querySelector('.p-stage[aria-pressed="true"]')?.focus(); });
     rail.append(button);
   }
