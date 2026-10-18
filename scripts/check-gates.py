@@ -88,8 +88,8 @@ def run_custom_gate(name: str, command: str, workspace: Path, cwd: str | None) -
     run_dir = workspace / cwd if cwd else workspace
     try:
         proc = subprocess.run(
-            command,
-            shell=True,
+            # /bin/sh -c is what shell=True runs on POSIX; Windows would get cmd.exe.
+            ["/bin/sh" if os.name != "nt" else BASH, "-c", command],
             cwd=str(run_dir),
             capture_output=True,
             text=True,
