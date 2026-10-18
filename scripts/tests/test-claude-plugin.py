@@ -104,7 +104,8 @@ class PluginTest(unittest.TestCase):
 
     def test_archive_contents_and_modes(self):
         names = {p.relative_to(self.pkg).as_posix() for p in self.pkg.rglob("*") if p.is_file()}
-        for required in ("bin/adlc5", "bin/adlc5-run", "hooks/claude.json", ".mcp.json", "scripts/adlc5-mcp.py",
+        for required in ("bin/adlc5", "bin/adlc5-run", "hooks/claude.json", "hooks/pulse-band.json",
+                         "hooks/pulse-band.tsx", ".mcp.json", "scripts/adlc5-mcp.py",
                          "skills/implement/SKILL.md", "skills/adlc5-setup/SKILL.md", "core/gates.yaml", ".adlc5-package.json"):
             self.assertIn(required, names)
         for banned in ("CLAUDE.md", "AGENTS.md", "config.yaml", ".gitignore"):
@@ -139,6 +140,22 @@ class PluginTest(unittest.TestCase):
         raw = (self.pkg / "hooks/claude.json").read_text()
         self.assertNotIn("CLAUDE_PROJECT_DIR", raw)  # runtime comes from the package, not the workspace
         self.assertFalse((self.pkg / "hooks/hooks.json").exists())  # nothing auto-discovered besides claude.json
+
+    def test_claude_plugin_registers_native_pulse_band(self):
+        manifest = json.loads((self.pkg / ".claude-plugin/plugin.json").read_text())
+        self.assertIn("./hooks/pulse-band.json", manifest["hooks"])
+        pulse_hooks = json.loads((self.pkg / "hooks/pulse-band.json").read_text())
+        self.assertEqual(pulse_hooks["modules"], ["./pulse-band.tsx"])
+        module = (self.pkg / "hooks/pulse-band.tsx").read_text()
+        for contract in ("AbovePrompt", "turn.complete", "pulse", "Review", "Audit", "Board", "Details"):
+            self.assertIn(contract, module)
+        spec = importlib.util.spec_from_file_location("packager_pulse", SRC / "scripts/package-plugin.py")
+        packager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packager)
+        files = packager.collect(SRC, "codex")
+        version = (SRC / "core/VERSION").read_text().strip()
+        self.assertNotIn("hooks/pulse-band.tsx", packager.for_host(files, "codex", version))
+        self.assertNotIn("hooks/pulse-band.tsx", packager.for_host(files, "cursor", version))
 
     # --- kernel / bin ------------------------------------------------------
 

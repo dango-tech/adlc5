@@ -133,12 +133,12 @@ monitor the repository.
 ./scripts/adlc5 pulse handoff --workspace . --feature my-feature
 ```
 
-The offline board and cached band are generated when requested. Evidence means
-current at capture only; missing usage stays unknown. A local gate pass does not
-mean remote CI, human approval, deployment, or production health. See the
-[Pulse guide](docs/pulse.md). The shared skill and read-only MCP snapshot are in
-the Codex, Claude Code, and Cursor packages. Cursor package tests are present;
-live Cursor IDE qualification is still pending.
+The offline board and cached band are generated when requested. Claude Code also
+shows an interactive Pulse band above the prompt; Codex and Cursor use the shared
+skill, read-only MCP snapshot, and CLI. Evidence means current at capture only;
+missing usage stays unknown. A local gate pass does not mean remote CI, human
+approval, deployment, or production health. See the [Pulse guide](docs/pulse.md)
+for host support and qualification boundaries.
 
 ## What completion establishes
 

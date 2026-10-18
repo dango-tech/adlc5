@@ -45,9 +45,13 @@ The board is self-contained, works offline, follows system light/dark mode, and 
 
 ## Plugin setup
 
-All three plugin packages contain the shared `@adlc5-pulse` skill and `adlc5_pulse` read-only MCP tool. Use the skill or invoke the CLI explicitly to open the local board. The packages do not promise native above-prompt dashboard UI.
+All three plugin packages contain the shared `@adlc5-pulse` skill and `adlc5_pulse` read-only MCP tool. Use the skill or invoke the CLI explicitly to open the local board.
 
-Claude Code users may manually connect the optional cached status-line adapter. The adapter reads the cached feature snapshot only, uses `ADLC5_FEATURE` to disambiguate the feature, and reports that present freshness was not checked. It returns an unavailable line when the cache or binding is missing. Installing ADLC5 does not change an existing status-line setting; see [plugin setup](agent-plugins.md#optional-pulse-status-line).
+The Claude Code plugin also draws a native Pulse band above the prompt. It takes a fresh, read-only snapshot when a session starts and after each completed turn. The compact band shows the selected feature, lifecycle stage, check and local gate status, and known-cost subtotal. **Review** and **Audit** invoke existing ADLC5 skills, **Board** explicitly writes and opens the offline board, and **Details** expands the captured step, review, usage, time, and suggested next action. Set `ADLC5_FEATURE` in the Claude Code environment to pin one feature when the workspace has several; without a selection, the band names the count instead of choosing arbitrarily. The band does not replace or edit Claude's status-line setting. Claude Code mods are supported in interactive sessions; `claude -p` and Agent SDK sessions keep the skill, MCP, and CLI surfaces.
+
+Codex and Cursor expose the same Pulse snapshot through the skill, read-only MCP tool, and CLI. Their documented plugin surfaces do not currently provide a persistent custom band above the prompt, so they use the existing command/board flow rather than claiming visual parity. Claude Code's native band requires a host version with plugin mods enabled; unsupported or noninteractive sessions retain the skill, MCP, and CLI interfaces.
+
+Host capability references: [Claude Code mod interface](https://code.claude.com/docs/en/plugins/mods/interface), [OpenAI plugin extensions](https://developers.openai.com/plugins/build/extensions), and [Cursor hooks](https://docs.cursor.com/hooks).
 
 Cursor package contents and offline generation are covered by package tests. The actual Cursor IDE install/reload, skill discovery, MCP invocation, consumer-root behavior, and stale-evidence display have not yet been qualified; this remains a live-host acceptance check.
 

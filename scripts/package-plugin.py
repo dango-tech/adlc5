@@ -61,6 +61,7 @@ REQUIRED_BASE = (
 REQUIRED_BY_HOST = {
     "claude": (
     ".claude-plugin/plugin.json", ".mcp.json", "hooks/claude.json", "bin/adlc5", "bin/adlc5-run",
+    "hooks/pulse-band.json", "hooks/pulse-band.tsx",
     ".claude/hooks/claude-usage.sh", ".claude/hooks/engagement-gate.sh", "LICENSE",
     ),
     "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json", ".mcp.json"),
@@ -71,7 +72,7 @@ HOST_ONLY_PREFIXES = {
     # Keep repository marketplace metadata outside the distributable Claude plugin.
     # The builder emits a Claude-only marketplace catalog as a sibling directory.
     "claude": (".claude-plugin/marketplace.json", ".codex-plugin/", ".cursor-plugin/", "platform/codex-plugin/", "mcp.json"),
-    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "bin/", "platform/codex-plugin/"),
+    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "hooks/pulse-band.", "bin/", "platform/codex-plugin/"),
     "cursor": (".claude-plugin/", ".claude/", ".codex-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/", "mcp.json"),
 }
 

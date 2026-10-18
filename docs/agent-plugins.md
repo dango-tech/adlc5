@@ -101,9 +101,9 @@ Then sign in to the [Claude developer portal](https://claude.ai/directory/manage
 
 The generated Claude package omits the repository marketplace catalog. The shared source repository includes Codex-specific marketplace policy fields and repo-level `CLAUDE.md`; neither belongs in the packaged plugin submitted for strict validation.
 
-### Optional Pulse status line
+### Pulse plugin surfaces
 
-All three packages expose the shared `@adlc5-pulse` skill and the read-only `adlc5_pulse` MCP snapshot tool. Generate the offline board with `./scripts/adlc5 pulse board --workspace .`; packages do not add native above-prompt dashboard UI.
+All three packages expose the shared `@adlc5-pulse` skill and the read-only `adlc5_pulse` MCP snapshot tool. Generate the offline board with `./scripts/adlc5 pulse board --workspace .`. The Claude Code package additionally registers a native interactive band above the prompt, with Review, Audit, Board, and Details actions. Codex and Cursor keep the shared skill/MCP/CLI experience because their documented plugin surfaces do not expose a persistent custom prompt band.
 
 Claude Code users may manually use the cached adapter after generating a board:
 

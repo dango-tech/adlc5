@@ -7,5 +7,5 @@
   "repository": "https://github.com/dango-tech/adlc5",
   "license": "MIT",
   "keywords": ["adlc5", "lifecycle", "sdd", "gates", "mcp"],
-  "hooks": "./hooks/claude.json"
+  "hooks": ["./hooks/claude.json", "./hooks/pulse-band.json"]
 }
