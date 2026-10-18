@@ -198,7 +198,7 @@ def check_assure_verification(delivery: dict, workspace: Path, feature: str) -> 
         sync = SCRIPT_DIR / "sync-verification-report.sh"
         if sync.is_file():
             proc = subprocess.run(
-                [str(sync), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(sync), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
