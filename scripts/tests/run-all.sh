@@ -2,6 +2,8 @@
 # Run ADLC5 script exit-code contract tests.
 set -euo pipefail
 export ADLC5_SUPPRESS_LEGACY_WARNINGS=1
+# Git for Windows: make ln -s create real symlinks instead of silent copies.
+case "$(uname -s)" in MINGW*|MSYS*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ;; esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
