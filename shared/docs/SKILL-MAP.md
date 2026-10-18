@@ -26,7 +26,7 @@ Registry: [core/skill-registry.yaml](../../core/skill-registry.yaml) · Personas
 
 ## Auxiliary skills
 
-Not separate lifecycle stages — wired via `skill-registry.yaml`. Index: [skills/aux/README.md](../../skills/aux/README.md).
+Not separate lifecycle stages — wired via `skill-registry.yaml`. Index: [skills/auxiliary/README.md](../../skills/auxiliary/README.md).
 
 | Invoke | Skill | Typical stage |
 |--------|-------|---------------|
