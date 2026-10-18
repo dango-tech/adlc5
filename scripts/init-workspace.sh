@@ -256,7 +256,8 @@ append_ignore_rules() {
       marker="# ADLC5 lifecycle artifacts (before git init)"
       echo "  No Git repository found; writing lifecycle exclusions to .gitignore for future git init"
     else
-      [[ "$exclude" == /* ]] || exclude="${PROJECT}/${exclude}"
+      # Git for Windows reports absolute paths as C:/...
+      [[ "$exclude" == /* || "$exclude" =~ ^[A-Za-z]:/ ]] || exclude="${PROJECT}/${exclude}"
       target="$exclude"
       marker="# ADLC5 local lifecycle artifacts"
     fi

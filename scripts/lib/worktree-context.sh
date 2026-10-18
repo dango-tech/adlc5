@@ -16,8 +16,9 @@ adlc5_git_common_dir() {
   local dir="${1:?}" common
   common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || return 0
   [[ -n "$common" ]] || return 0
-  # Relative in the main worktree ('.git'), absolute in linked worktrees.
-  if [[ "$common" != /* ]]; then
+  # Relative in the main worktree ('.git'), absolute in linked worktrees
+  # (C:/... under Git for Windows).
+  if [[ "$common" != /* && ! "$common" =~ ^[A-Za-z]:/ ]]; then
     local top
     top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || return 0
     common="${top}/${common}"
@@ -29,6 +30,8 @@ adlc5_git_common_dir() {
 adlc5_is_linked_worktree() {
   local dir="${1:?}" git_dir common
   git_dir="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 1
+  # Normalise like adlc5_git_common_dir so both sides use the same path form.
+  git_dir="$(cd "$git_dir" 2>/dev/null && pwd)" || return 1
   common="$(adlc5_git_common_dir "$dir")"
   [[ -n "$common" && "$git_dir" != "$common" ]]
 }
