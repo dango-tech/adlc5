@@ -86,6 +86,16 @@ For Cursor's public marketplace:
 
 Cursor's submission checklist requires an open-source plugin, a valid root `plugin.json` or `.cursor-plugin/plugin.json`, a unique lowercase kebab-case name, valid component files and paths, usage documentation, and local testing. This repository includes both manifest formats and a root README; `.cursor-plugin/marketplace.json` describes the repository's plugin catalog. Team marketplaces are private distribution and do not create a public listing.
 
+### Claude Desktop upload
+
+The Desktop upload/directory validator rejects top-level `bin/` executables. Build its package with:
+
+```bash
+python3 scripts/package-plugin.py --host claude --claude-hosted --out /tmp/adlc5-desktop-dist
+```
+
+Upload the generated ZIP through **Customize → Plugins → Add plugin → Upload plugin**. This variant uses the same skills, MCP server, and Pulse mod, but omits automatic shell PATH launchers. Its session hook reports the absolute Python kernel path; the Pulse card invokes that declared runtime directly. The standard local CLI marketplace build keeps the PATH launchers.
+
 ### Claude directory publishing
 
 Claude Code marketplace publishing and Anthropic's public directory are separate routes. The repo marketplace supports Claude Code CLI installation. Anthropic's directory is browsable on claude.ai and in Cowork; a directory installation can sync into Claude Code as `adlc5@synced`.
@@ -93,7 +103,7 @@ Claude Code marketplace publishing and Anthropic's public directory are separate
 Build the Claude package and run strict validation before submitting:
 
 ```bash
-python3 scripts/package-plugin.py --host claude --out /tmp/adlc5-dist
+python3 scripts/package-plugin.py --host claude --claude-hosted --out /tmp/adlc5-dist
 claude plugin validate --strict /tmp/adlc5-dist/claude/adlc5
 ```
 

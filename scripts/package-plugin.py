@@ -262,9 +262,14 @@ def main() -> int:
     parser.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "adlc5-dist"))
     parser.add_argument("--host", choices=("all", "codex", "claude", "cursor"), default="all")
     parser.add_argument("--check", action="store_true", help="validate host package inputs only; write nothing")
+    parser.add_argument("--claude-hosted", action="store_true", help="omit PATH executables for Claude Desktop upload/directory validation")
     ns = parser.parse_args()
+    if ns.claude_hosted and ns.host != "claude":
+        parser.error("--claude-hosted requires --host claude")
     hosts = ("codex", "claude", "cursor") if ns.host == "all" else (ns.host,)
     files_by_host = {host: for_host(collect(ROOT, host), host, (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()) for host in hosts}
+    if ns.claude_hosted:
+        files_by_host["claude"] = {name: value for name, value in files_by_host["claude"].items() if not name.startswith("bin/")}
     version = (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()
     if ns.check:
         print(json.dumps({"status": "ok", "version": version, "hosts": {host: len(files) for host, files in files_by_host.items()}}))

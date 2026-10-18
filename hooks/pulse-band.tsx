@@ -21,21 +21,29 @@ let featureFilter = ''
 let snapshot: Snapshot | undefined
 let showDetails = false
 let loading = false
+let snapshotProblem = 'waiting for refresh'
 
 async function refresh($: EngineInterface) {
   loading = true
   try {
+    snapshotProblem = 'workspace lookup failed'
     cwd = cwd || await $.session.cwd()
-    pluginRoot = pluginRoot || await $.env.get('CLAUDE_PLUGIN_ROOT') || ''
+    snapshotProblem = 'plugin runtime unavailable'
+    pluginRoot = $.plugin.root
+    snapshotProblem = 'feature selection failed'
     featureFilter = featureFilter || await $.env.get('ADLC5_FEATURE') || ''
     if (!cwd || !pluginRoot) throw new Error('Pulse runtime is unavailable')
-    const args = [`${pluginRoot}/bin/adlc5`, 'pulse', 'snapshot', '--workspace', cwd]
+    const args = ['python3', `${pluginRoot}/scripts/adlc5`, 'pulse', 'snapshot', '--workspace', cwd]
     if (featureFilter) args.push('--feature', featureFilter)
+    snapshotProblem = 'snapshot process could not start'
     const result = await $.process.run(args)
+    snapshotProblem = `snapshot process exited ${result.exitCode}`
     if (result.exitCode !== 0 || result.stdout.length > 1024 * 1024) throw new Error('Pulse snapshot failed')
+    snapshotProblem = 'snapshot output invalid'
     const value = JSON.parse(result.stdout)
     if (!value || typeof value !== 'object' || !Array.isArray(value.features)) throw new Error('Invalid Pulse snapshot')
     snapshot = value as Snapshot
+    snapshotProblem = ''
   } catch {
     snapshot = undefined
   } finally {
@@ -56,13 +64,15 @@ const statusColor = (status: string | undefined) =>
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    void refresh($).then(() => $.ui.invalidate('ui.render'))
+    await refresh($)
+    $.ui.invalidate('ui.render')
     return result
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    void refresh($).then(() => $.ui.invalidate('ui.render'))
+    await refresh($)
+    $.ui.invalidate('ui.render')
     return result
   }).catch(($, e, next) => next(e))
 
@@ -79,8 +89,8 @@ export const register: Register = on => {
       : features.length > 1
         ? `${features.length} features · set ADLC5_FEATURE to pin one`
         : features.length === 0
-          ? loading ? 'Reading workspace snapshot…' : snapshot ? 'No feature data in this workspace' : 'Snapshot unavailable · run @adlc5-pulse'
-          : 'Snapshot unavailable · run @adlc5-pulse'
+          ? loading ? 'Reading workspace snapshot…' : snapshot ? 'No feature data in this workspace' : `Snapshot unavailable · ${snapshotProblem}`
+          : `Snapshot unavailable · ${snapshotProblem}`
     const knownCost = feature?.usage?.known_cost_usd
     const metrics = feature?.evaluation
     const savings = typeof metrics?.savings_pct === 'number' ? `${metrics.savings_pct.toFixed(1)}% observed` : 'Not measured'
@@ -92,7 +102,7 @@ export const register: Register = on => {
         : 'Set ADLC5_FEATURE to pin one feature, then start or finish a turn to refresh Pulse.'
     const openBoard = async () => {
       if (!cwd || !pluginRoot) return
-      const args = [`${pluginRoot}/bin/adlc5`, 'pulse', 'board', '--workspace', cwd, '--open']
+      const args = ['python3', `${pluginRoot}/scripts/adlc5`, 'pulse', 'board', '--workspace', cwd, '--open']
       if (feature) args.push('--feature', feature.id)
       const result = await $.process.run(args).catch(() => undefined)
       $.ui.toast(result?.exitCode === 0 ? 'ADLC5 Pulse board opened' : 'ADLC5 Pulse board could not be opened')
@@ -105,8 +115,8 @@ export const register: Register = on => {
           {feature && <Text color={statusColor(feature.evidence?.checks?.status)}>checks {feature.evidence?.checks?.status ?? 'unavailable'}</Text>}
           {feature && <Text color={statusColor(feature.evidence?.pr_ready?.status)}>gate {feature.evidence?.pr_ready?.status ?? 'unavailable'}</Text>}
           {typeof knownCost === 'number' && Number.isFinite(knownCost) && <Text>${knownCost.toFixed(2)} known</Text>}
-          <Button key="review" plain onPress={() => $.command.run({ command: 'adlc5:craftsmanship-code-review', args: feature?.id ?? '' })}>Review</Button>
-          <Button key="audit" plain onPress={() => $.command.run({ command: 'adlc5:qa', args: feature?.id ?? '' })}>Audit</Button>
+          <Button key="review" plain onPress={() => $.command.run({ command: 'adlc5:craftsmanship-code-review', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Review failed: ${String(error).slice(0, 160)}`))}>Review</Button>
+          <Button key="audit" plain onPress={() => $.command.run({ command: 'adlc5:qa', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Audit failed: ${String(error).slice(0, 160)}`))}>Audit</Button>
           <Button key="board" plain onPress={openBoard}>Board</Button>
           <Button key="details" plain onPress={() => { showDetails = !showDetails; $.ui.invalidate('ui.render') }}>{showDetails ? 'Hide' : 'Details'}</Button>
         </Box>

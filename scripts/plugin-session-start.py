@@ -37,7 +37,8 @@ def main() -> int:
     lines = [
         f"ADLC5 plugin {version} runtime: {ROOT}",
         "In ADLC5 skills, `./scripts/X` and `{adlc5_root}/scripts/X` mean that runtime. "
-        "Kernel: `adlc5 <command> --workspace <repo>` (on PATH). Other scripts: `adlc5-run <path under scripts/> ...`. "
+        f"Kernel: `python3 {shlex.quote(str(ROOT / 'scripts/adlc5'))} <command> --workspace <repo>`. "
+        "Run other scripts by their absolute path under that runtime, using bash for shell scripts and python3 for Python scripts. "
         "Lifecycle state belongs in the consumer repository's .adlc5/, never in the plugin directory.",
     ]
     if not (project / ".adlc5").is_dir():

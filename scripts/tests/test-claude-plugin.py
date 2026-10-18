@@ -116,6 +116,24 @@ class PluginTest(unittest.TestCase):
             self.assertTrue(os.access(self.pkg / exe, os.X_OK), exe)
         self.assertFalse([p for p in self.pkg.rglob("*") if p.is_symlink()])
 
+    def test_hosted_desktop_package_omits_path_executables(self):
+        target = self.tmp / "desktop-upload"
+        info = json.loads(run([sys.executable, str(SRC / "scripts/package-plugin.py"), "--host", "claude", "--claude-hosted", "--out", str(target)], check=True).stdout)
+        package = Path(info["packages"]["claude"]["directory"])
+        with zipfile.ZipFile(info["zip"]) as archive:
+            self.assertFalse(any(name.startswith("bin/") for name in archive.namelist()))
+        module = (package / "hooks/pulse-band.tsx").read_text()
+        self.assertNotIn("/bin/adlc5", module)
+        self.assertIn("$.plugin.root", module)
+        self.assertNotIn("void refresh", module)
+        self.assertIn("'python3', `${pluginRoot}/scripts/adlc5`", module)
+        version = run([sys.executable, str(package / "scripts/adlc5"), "version"], check=True)
+        self.assertEqual(version.stdout.strip(), f"adlc5 {info['version']}")
+        startup = run([sys.executable, str(package / "scripts/plugin-session-start.py")], stdin="{}", check=True)
+        context = json.loads(startup.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("python3", context)
+        self.assertNotIn("(on PATH)", context)
+
     def test_archive_is_deterministic_and_zip_matches(self):
         second = self.tmp / "dist2"
         info = json.loads(run([sys.executable, str(SRC / "scripts/package-plugin.py"), "--out", str(second)], check=True).stdout)
@@ -521,6 +539,11 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(self.hook("claude-usage.sh", {"CLAUDE_PROJECT_DIR": str(bare)}, {"session_id": "s", "prompt": "x"}, ("stop",)).returncode, 0)
 
     # --- Claude CLI validator (when installed) -----------------------------
+
+    @unittest.skipUnless(shutil.which("claude"), "claude CLI not installed")
+    def test_pulse_mod_events_and_actions(self):
+        r = run(["claude", "plugin", "test", str(SRC)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     @unittest.skipUnless(shutil.which("claude"), "claude CLI not installed")
     def test_claude_validator_accepts_the_package(self):

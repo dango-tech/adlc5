@@ -70,3 +70,9 @@ Host capability references: [Claude Code mod interface](https://code.claude.com/
 Cursor package contents and offline generation are covered by package tests. The actual Cursor IDE install/reload, skill discovery, MCP invocation, consumer-root behavior, and stale-evidence display have not yet been qualified; this remains a live-host acceptance check.
 
 See [kernel commands and MCP](ADLC5-kernel.md), [plugin build and install](agent-plugins.md), and [the GitHub Wiki Pulse guide](https://github.com/dango-tech/adlc5/wiki/Pulse).
+
+## Live desktop card smoke
+
+On 2026-10-18, the Pulse card was exercised in the local Code tab of Claude Desktop 2.42304.0 on macOS, using a disposable workspace explicitly labeled as synthetic UI data. The test confirmed populated rendering, Details expand/collapse, Review dispatch to `craftsmanship-code-review`, Audit dispatch to `qa`, selected-feature board/cache generation, and turn-complete refresh from measured values to **Not measured** when evaluation exports were held aside, then back when restored. It also confirmed coexistence with Ponytail's band.
+
+The test found and fixed plugin-root resolution and refresh lifetime issues: the mod now uses `$.plugin.root`, invokes the Python kernel directly, and awaits refresh inside its lifecycle hook. Desktop upload/directory builds omit top-level PATH executables with `--claude-hosted`. The test used fixture-only review/audit requests; it does not establish a real application's QA clearance, actual cost savings, or general accuracy. Cursor live qualification remains pending.
