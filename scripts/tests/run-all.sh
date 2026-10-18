@@ -1953,8 +1953,8 @@ EC_DIRECT=$?
 EC_FACADE=$?
 set -e
 [[ "$EC_DIRECT" -eq "$EC_FACADE" ]] || fail "adlc5 clarity exit mismatch"
-python3 - <<'PY'
-import json
+python3 - /tmp/adlc5-clarity-direct.json /tmp/adlc5-clarity-facade.json <<'PY'
+import json, sys
 from pathlib import Path
 def norm(p):
     d = json.loads(Path(p).read_text())
@@ -1962,8 +1962,7 @@ def norm(p):
     if isinstance(d.get("detailed_report"), dict):
         d["detailed_report"].pop("scored_at", None)
     return d
-a = norm("/tmp/adlc5-clarity-direct.json")
-b = norm("/tmp/adlc5-clarity-facade.json")
+a, b = (norm(p) for p in sys.argv[1:])
 if a != b:
     raise SystemExit(f"clarity JSON mismatch:\n{a}\n{b}")
 PY
