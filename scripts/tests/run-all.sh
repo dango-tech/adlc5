@@ -2280,7 +2280,7 @@ pass "patterns lookup + façade"
 
 # adlc5 MCP smoke (tool list + version via same façade invoke path)
 ./scripts/adlc5-mcp.py --smoke >/tmp/adlc5-mcp-smoke.json
-jq -e '.status == "ok" and (.tools | index("adlc5_version")) and (.tools | index("adlc5_gate"))' \
+jq -e '.status == "ok" and .pulse_read_only == true and (.tools | index("adlc5_version")) and (.tools | index("adlc5_gate")) and (.tools | index("adlc5_pulse"))' \
   /tmp/adlc5-mcp-smoke.json >/dev/null || fail "adlc5-mcp smoke tool list"
 grep -Eq 'adlc5 [0-9]+\.[0-9]+\.[0-9]+' /tmp/adlc5-mcp-smoke.json || fail "adlc5-mcp smoke version"
 pass "adlc5-mcp smoke"
@@ -2967,7 +2967,7 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
-for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
+for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done

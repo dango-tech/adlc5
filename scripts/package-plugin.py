@@ -42,7 +42,7 @@ MTIME = 315532800  # 1980-01-01, the earliest zip timestamp
 INCLUDE_PREFIXES = (
     ".claude-plugin/", ".claude/hooks/", ".codex-plugin/", ".codex/hooks/", ".cursor/rules/", ".cursor-plugin/",
     ".mcp.json", "mcp.json", "plugin.json", "bin/", "hooks/", "platform/",
-    "core/", "skills/", "scripts/", "shared/", "templates/", "docs/",
+    "core/", "skills/", "scripts/", "shared/", "templates/", "docs/", "assets/brand/",
     "config.example.yaml", "LICENSE", "README.md", "CHANGELOG.md",
 )
 EXCLUDE_PREFIXES = (
@@ -53,6 +53,9 @@ EXCLUDE_SUFFIXES = (".pyc", ".swp", ".bak", ".orig", ".log")
 REQUIRED_BASE = (
     "core/VERSION", "core/gates.yaml", "skills/adlc5/SKILL.md", "skills/adlc5-setup/SKILL.md",
     "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
+    "core/pulse-snapshot.schema.json", "scripts/pulse.py", "scripts/pulse-statusline.py",
+    "scripts/lib/pulse.py", "skills/pulse/SKILL.md", "shared/pulse/board.html",
+    "shared/pulse/board.css", "shared/pulse/board.js", "assets/brand/icon.svg",
     "LICENSE",
 )
 REQUIRED_BY_HOST = {

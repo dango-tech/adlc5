@@ -73,6 +73,8 @@ cp -R /tmp/adlc5-dist/cursor/adlc5 "$HOME/.cursor/plugins/local/adlc5"
 
 Restart Cursor or run **Developer: Reload Window**. Open **Customize**, find ADLC5 under local plugins, and install/enable it. After install or update, invoke `adlc5-setup` in the consumer repository.
 
+The Cursor MCP config resolves its launcher and working directory through `${CURSOR_PLUGIN_ROOT}` so it remains anchored to the installed package when Cursor starts it from another directory. Cursor does not expand the standard `${PLUGIN_ROOT}` variable in `mcp.json`.
+
 For team distribution, admins can import `https://github.com/dango-tech/adlc5` through **Dashboard → Plugins & MCPs → Add Marketplace** (Teams/Enterprise feature); `.cursor-plugin/marketplace.json` lists the plugin at the repository root.
 
 For Cursor's public marketplace:
@@ -98,6 +100,25 @@ claude plugin validate --strict /tmp/adlc5-dist/claude/adlc5
 Then sign in to the [Claude developer portal](https://claude.ai/directory/manage) and submit the plugin. Submission requires an eligible paid claude.ai plan or an authorized Team/Enterprise organization role. The portal applies additional checks beyond CLI validation. Review the component support matrix before claiming support on claude.ai, Cowork, and Claude Code. Bump the plugin version for each directory release.
 
 The generated Claude package omits the repository marketplace catalog. The shared source repository includes Codex-specific marketplace policy fields and repo-level `CLAUDE.md`; neither belongs in the packaged plugin submitted for strict validation.
+
+### Optional Pulse status line
+
+All three packages expose the shared `@adlc5-pulse` skill and the read-only `adlc5_pulse` MCP snapshot tool. Generate the offline board with `./scripts/adlc5 pulse board --workspace .`; packages do not add native above-prompt dashboard UI.
+
+Claude Code users may manually use the cached adapter after generating a board:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "ADLC5_FEATURE=my-feature python3 /path/to/adlc5/scripts/pulse-statusline.py"
+  }
+}
+```
+
+The adapter reads the consumer's `.agent-cache/pulse/` only and prints “present freshness unverified.” Set `ADLC5_WORKSPACE` when Claude's session input does not identify the consumer directory. Add the snippet manually to the project's Claude settings; plugin installation never changes an existing status line. If Ponytail or another status line is configured, keep it and use the board/skill directly unless you intentionally choose a replacement.
+
+See [ADLC5 Pulse](pulse.md) for commands, data semantics and refresh limits. Cursor package contents are tested; live Cursor IDE qualification remains pending until the package has been installed and exercised in Cursor.
 
 ## Source checkout and classic skills install
 
