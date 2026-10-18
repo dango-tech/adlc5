@@ -191,7 +191,9 @@ jq -e '.run_id == "run-1" and .node_id == "verify" and .parent_node_ids == ["bui
 NOJQ_BIN="${CORR_WS}/no-jq-bin"
 mkdir -p "$NOJQ_BIN"
 for cmd in python3 date mkdir; do
-  ln -s "$(command -v "$cmd")" "${NOJQ_BIN}/${cmd}"
+  # Wrappers, not symlinks: Windows refuses symlinks without Developer Mode.
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v "$cmd")" >"${NOJQ_BIN}/${cmd}"
+  chmod +x "${NOJQ_BIN}/${cmd}"
 done
 ADLC5_WORKSPACE="$CORR_WS" ADLC5_RUN_ID="run-fallback" ADLC5_NODE_ID="build" \
   ADLC5_PARENT_NODE_IDS='["specify"]' ADLC5_ATTEMPT="1" ADLC5_OUTCOME="pass" \

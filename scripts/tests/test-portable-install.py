@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+# System Bash where it exists (macOS 3.2 is the floor); Windows has no /bin/bash.
+BASH = "/bin/bash" if Path("/bin/bash").is_file() else shutil.which("bash")
 
 
 def assert_safe_target(clone, env):
@@ -15,7 +17,7 @@ def assert_safe_target(clone, env):
     configuration = (clone / "config.example.yaml").read_text()
     (clone / "config.yaml").write_text(configuration.replace(
         "claude_skills_target: ~/.claude/skills", f"claude_skills_target: {unsafe}"))
-    result = subprocess.run(["/bin/bash", str(clone / "scripts/install.sh"),
+    result = subprocess.run([BASH, str(clone / "scripts/install.sh"),
                              "--platform", "claude", "--skills-only"], env=env,
                             capture_output=True, text=True, timeout=30)
     assert result.returncode != 0 and "resolves inside the adlc5 clone" in result.stderr, result
@@ -43,23 +45,26 @@ def main():
         missing = base / "missing-tools"
         missing.mkdir()
         for tool in ("dirname", "git", "python3"):
-            (missing / tool).symlink_to(shutil.which(tool))
+            # Wrappers, not symlinks: Windows refuses symlinks without Developer Mode.
+            wrapper = missing / tool
+            wrapper.write_text(f'#!/bin/sh\nexec "{Path(shutil.which(tool)).as_posix()}" "$@"\n')
+            wrapper.chmod(0o755)
         for script in ("install.sh", "verify-install.sh"):
-            result = subprocess.run(["/bin/bash", str(clone / "scripts" / script),
+            result = subprocess.run([BASH, str(clone / "scripts" / script),
                                      "--platform", "claude"],
                                     env=dict(env, PATH=str(missing)),
                                     capture_output=True, text=True)
             assert result.returncode != 0 and "required tool 'jq'" in result.stderr, result
             assert not (clone / "config.yaml").exists()
             assert not list(home.iterdir())
-        subprocess.run(["/bin/bash", str(clone / "scripts/install.sh"),
+        subprocess.run([BASH, str(clone / "scripts/install.sh"),
                         "--platform", "claude", "--dry-run"], env=env, check=True,
                        stdout=subprocess.DEVNULL)
         assert not (clone / "config.yaml").exists()
         assert not list(home.iterdir())
         assert_safe_target(clone, env)
         for script in ("install.sh", "verify-install.sh"):
-            subprocess.run(["/bin/bash", str(clone / "scripts" / script),
+            subprocess.run([BASH, str(clone / "scripts" / script),
                             "--platform", "claude"], env=env, check=True,
                            stdout=subprocess.DEVNULL)
         assert (home / ".claude/skills/adlc5/SKILL.md").is_file()
