@@ -22,6 +22,8 @@ class PulseTests(unittest.TestCase):
         self.workspace = Path(self.tmp.name)
         (self.workspace / ".adlc5").mkdir()
         subprocess.run(["git", "init", "-q", str(self.workspace)], check=True)
+        subprocess.run(["git", "-C", str(self.workspace), "config", "maintenance.auto", "false"], check=True)
+        subprocess.run(["git", "-C", str(self.workspace), "config", "gc.auto", "0"], check=True)
         (self.workspace / "README.md").write_text("fixture\n")
         subprocess.run(["git", "-C", str(self.workspace), "add", "README.md"], check=True)
         subprocess.run(["git", "-C", str(self.workspace), "-c", "user.name=Pulse Test", "-c", "user.email=pulse@example.test", "commit", "-qm", "fixture"], check=True)
