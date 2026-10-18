@@ -124,9 +124,14 @@ expand_path() {
 # Refuse installs into the adlc5 clone (prevents self-referential symlinks under skills/).
 assert_safe_install_target() {
   local target="$1" label="$2"
-  local abs_target abs_skills
-  abs_target="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$target")"
-  abs_skills="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$SKILLS_ROOT")"
+  local abs_target abs_skills skills="$SKILLS_ROOT"
+  # Windows Python cannot read MSYS paths (/c/...); hand it C:/... instead.
+  if command -v cygpath >/dev/null 2>&1; then
+    target="$(cygpath -m -- "$target")"
+    skills="$(cygpath -m -- "$skills")"
+  fi
+  abs_target="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$target")"
+  abs_skills="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$skills")"
   if [[ "$abs_target" == "$abs_skills" || "$abs_target" == "${abs_skills}/"* ]]; then
     echo "ERROR: ${label} resolves inside the adlc5 clone (${abs_target})." >&2
     echo "  Use a user-global path in config.yaml, or init a consumer project:" >&2
