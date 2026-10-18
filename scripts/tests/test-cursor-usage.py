@@ -46,6 +46,7 @@ class CursorUsageTests(unittest.TestCase):
             self.assertEqual(values["CURSOR_USAGE_EMAIL"], "user@example.com")
             self.assertEqual(values["UNRELATED"], "$(touch should-not-run)")
 
+    @unittest.skipIf(os.name == "nt", "Windows has no POSIX mode bits")
     def test_rejects_config_readable_by_other_users(self):
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "cursor-usage.env"

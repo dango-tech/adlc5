@@ -55,7 +55,8 @@ def read_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
             "Run ./scripts/install-cursor-usage.sh first."
         )
     mode = stat.S_IMODE(path.stat().st_mode)
-    if mode & 0o077:
+    # Windows has no POSIX mode bits: st_mode always reports 0o666 there.
+    if os.name != "nt" and mode & 0o077:
         raise ValueError(f"Cursor usage config must have mode 0600: {path}")
 
     values: dict[str, str] = {}
