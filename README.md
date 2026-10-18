@@ -147,6 +147,8 @@ independent frozen acceptance tests and a collector that reports missing observa
 honestly. See [consumer instructions](dogfood/consumer/README.md) and the
 [evaluation contract](docs/evaluation.md). Automated fixture tests are not live
 comparative quality results; the pilot and outside-contributor trial remain pending.
+ADLC5 also supports a separate, disabled-by-default minimized telemetry exporter;
+see [telemetry and privacy boundaries](docs/telemetry.md).
 
 ## Host support
 

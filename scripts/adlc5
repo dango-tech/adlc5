@@ -67,6 +67,7 @@ COMMANDS = {
     "cleanup-features": "Dry-run/archive/delete aged .adlc5/{feature}/ (default: dry-run archive → _archive/)",
     "feature": "Feature helpers (summarize → OKF FEATURE.md)",
     "usage": "Record/summarize/fleet-roll-up model + token usage (→ memory/usage-ledger.py)",
+    "telemetry": "Preview, opt in/out, or explicitly share minimized telemetry and feedback",
     "patterns": "OKF catalog lookup — ids/paths only (→ patterns/lookup.sh)",
     "spec-lint": "Lint code-spec YAML frontmatter (→ tasks/spec-lint.py)",
     "verify-story": "Deterministic per-story pre-check before @assure-verifier (→ verify-story.py)",
@@ -106,6 +107,7 @@ Commands:
   cleanup-features  {COMMANDS['cleanup-features']}
   feature summarize {COMMANDS['feature']}
   usage record|summary {COMMANDS['usage']}
+  telemetry preview|opt-in|opt-out|send|feedback {COMMANDS['telemetry']}
   patterns lookup  {COMMANDS['patterns']}
   spec-lint      {COMMANDS['spec-lint']}
   verify-story   {COMMANDS['verify-story']}
@@ -131,6 +133,9 @@ Examples:
     --input-tokens 1000 --output-tokens 200 --cache-read-tokens 900
   ./scripts/adlc5 usage summary --feature NAME --workspace . --format markdown
   ./scripts/adlc5 usage fleet --workspace . --format markdown
+  ./scripts/adlc5 telemetry preview --workspace .
+  ./scripts/adlc5 telemetry opt-in --workspace .
+  ADLC5_TELEMETRY_ENDPOINT=https://telemetry.example.com ./scripts/adlc5 telemetry send --workspace .
   ./scripts/adlc5 patterns lookup --tags latency,extensibility --limit 3
   ./scripts/adlc5 spec-lint --feature NAME --workspace .
   ./scripts/adlc5 verify-story --feature NAME --story-id US-1 --workspace .
@@ -653,6 +658,11 @@ def cmd_patterns(args: list[str]) -> int:
     return run(["bash", str(script), *rest])
 
 
+def cmd_telemetry(args: list[str]) -> int:
+    script = SCRIPTS / "telemetry-share.py"
+    return run([sys.executable, str(script), *args])
+
+
 def cmd_completion(args, *, evidence=False):
     from lib.completion_evidence import transition, run_checks, fingerprint, append
     parser = argparse.ArgumentParser()
@@ -836,6 +846,7 @@ def main(argv: list[str]) -> int:
         "cleanup-features": cmd_cleanup_features,
         "feature": cmd_feature,
         "usage": cmd_usage,
+        "telemetry": cmd_telemetry,
         "patterns": cmd_patterns,
         "spec-lint": cmd_spec_lint,
         "verify-story": cmd_verify_story,
