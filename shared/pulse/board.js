@@ -1,103 +1,155 @@
 const data = JSON.parse(document.getElementById("snapshot").textContent);
 const selector = document.getElementById("feature");
-const overview = document.getElementById("overview");
 const panel = document.getElementById("features");
-document.getElementById("capture").textContent = `Snapshot captured ${data.generated_at} · on demand; continuous monitoring is off`;
+const stages = ["specify", "plan", "tasks", "implement"];
+const make = (tag, className, text) => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const money = value => typeof value === "number" ? `$${value.toFixed(2)}` : "Unavailable";
+const label = value => value ? String(value).replaceAll("_", " ") : "Not recorded";
+const statusClass = value => ["pass", "completed"].includes(value) ? "p-good" : ["fail", "unstable"].includes(value) ? "p-bad" : "p-warn";
+const evidenceStatus = (title, value, detail = "") => ({ title, value: label(value), detail });
+let selectedStage = null;
+let selectedEvent = null;
 
+document.getElementById("capture").textContent = `Captured ${data.generated_at} · on demand; continuous monitoring is off`;
 for (const feature of data.features) {
-  const option = document.createElement("option");
+  const option = make("option", "", `${feature.archive_id ? "Archived · " : ""}${feature.id}`);
   option.value = feature.identity;
-  option.textContent = `${feature.archive_id ? "Archived · " : ""}${feature.id}`;
   selector.append(option);
-  const item = document.createElement("li");
-  const choose = document.createElement("button");
-  const cost = feature.usage.known_cost_usd === null ? "cost unavailable" : `$${feature.usage.known_cost_usd}`;
-  choose.textContent = `${feature.archive_id ? "Archived · " : ""}${feature.id} · ${feature.lifecycle.stage || "stage unknown"} · ${cost}`;
-  choose.addEventListener("click", () => { selector.value = feature.identity; render(); });
-  item.append(choose);
-  overview.append(item);
 }
 
 function render() {
   const feature = data.features.find(item => item.identity === selector.value);
   panel.replaceChildren();
   if (!feature) {
-    const empty = document.createElement("p");
-    empty.textContent = "No ADLC5 features were found in this workspace.";
-    panel.append(empty);
+    panel.append(make("p", "p-empty", "No ADLC5 features were found in this workspace."));
     return;
   }
-  const title = document.createElement("h2");
-  title.id = "feature-title";
-  title.textContent = `${feature.id}${feature.archive_id ? ` · archived ${feature.archive_id}` : ""}`;
-  panel.append(title);
-  const summary = document.createElement("p");
-  summary.textContent = `${feature.lifecycle.stage || "Stage unknown"} · ${feature.lifecycle.step || "step unknown"} · checks ${feature.evidence.checks.status} · review ${feature.evidence.review.status} · local gate ${feature.evidence.pr_ready.status}`;
-  panel.append(summary);
-  const next = document.createElement("p");
-  next.textContent = `Next: ${feature.next_action.label}`;
-  panel.append(next);
-  const usage = document.createElement("p");
-  usage.textContent = `Usage: ${feature.usage.status}; ${feature.usage.accounted_records}/${feature.usage.observed_records} records accounted; known subtotal ${feature.usage.known_cost_usd === null ? "unavailable" : `$${feature.usage.known_cost_usd}`}`;
-  panel.append(usage);
-  if (feature.usage.token_records) {
-    const tokens = document.createElement("p");
-    const breakdown = feature.usage.tokens;
-    tokens.textContent = `Normalized token counters (${feature.usage.token_records} records): ${Object.entries(breakdown).map(([key, value]) => `${key} ${value}`).join(", ")}. Thinking is informational and may overlap output.`;
-    panel.append(tokens);
-  }
+  const stage = feature.lifecycle.stage;
+  const currentStatus = feature.evidence.pr_ready.status;
+  selectedStage = stages.includes(selectedStage) ? selectedStage : stage;
 
-  const rail = document.createElement("ol");
-  rail.className = "rail";
-  for (const stage of ["specify", "plan", "tasks", "implement"]) {
-    const li = document.createElement("li");
-    const button = document.createElement("button");
-    button.textContent = `${stage} · ${(feature.lifecycle.stage_status || {})[stage] || "not recorded"}`;
-    button.setAttribute("aria-current", feature.lifecycle.stage === stage ? "step" : "false");
-    button.addEventListener("click", () => showReceipts(feature, stage));
-    li.append(button);
-    rail.append(li);
+  const heading = make("div", "heading");
+  const titleGroup = make("div");
+  titleGroup.append(make("div", "eyebrow", feature.archive_id ? `Archived feature · ${feature.archive_id}` : "Feature lifecycle"));
+  titleGroup.append(make("h1", "", feature.id));
+  titleGroup.append(make("div", "sub", `${label(stage)} / ${label(feature.lifecycle.step)} · fingerprint ${feature.capture.input_fingerprint || "unavailable"}`));
+  const state = make("span", `status ${currentStatus === "pass" ? "" : currentStatus === "fail" ? "fail" : "warn"}`, `Local PR-ready · ${label(currentStatus)}`);
+  heading.append(titleGroup, state);
+  panel.append(heading);
+
+  const metrics = make("div", "p-metrics");
+  const checks = feature.evidence.checks;
+  const usage = feature.usage;
+  const metricRows = [
+    ["Required checks", checks.status === "unavailable" ? "Unavailable" : `${checks.recorded_passed || 0} / ${checks.required || 0}`, checks.status],
+    ["Independent review", label(feature.evidence.review.status), "Current repository evidence"],
+    ["Local PR-ready gate", label(currentStatus), "Remote CI and deployment are separate"],
+    ["Known usage cost", money(usage.known_cost_usd), `${usage.accounted_records}/${usage.observed_records} records accounted · ${label(usage.status)}`],
+  ];
+  for (const [name, value, detail] of metricRows) {
+    const metric = make("div", "p-metric");
+    metric.append(make("label", "", name), make("strong", "p-value", value), make("span", "sub", detail));
+    metrics.append(metric);
+  }
+  panel.append(metrics);
+
+  const stageHead = make("div", "p-panel-head");
+  stageHead.append(make("h2", "", "Delivery path"), make("span", "sub", "Select a stage to inspect its receipts"));
+  panel.append(stageHead);
+  const rail = make("div", "p-stages");
+  rail.setAttribute("aria-label", "ADLC5 lifecycle stages");
+  for (const [index, name] of stages.entries()) {
+    const status = feature.lifecycle.stage_status?.[name] || "not recorded";
+    const button = make("button", "p-stage");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(selectedStage === name));
+    if (stage === name) button.setAttribute("aria-current", "step");
+    button.append(make("span", "p-stage-name", `${String(index + 1).padStart(2, "0")} / ${name}`));
+    button.append(make("span", "p-stage-state", label(status)));
+    const track = make("span", "p-track");
+    track.setAttribute("aria-hidden", "true");
+    track.append(make("span"));
+    button.append(track);
+    button.addEventListener("click", () => { selectedStage = name; render(); panel.querySelector('.p-stage[aria-pressed="true"]')?.focus(); });
+    rail.append(button);
   }
   panel.append(rail);
-  const replay = document.createElement("details");
-  const summary2 = document.createElement("summary");
-  summary2.textContent = "Recorded event replay";
-  replay.append(summary2);
-  const events = document.createElement("select");
-  events.setAttribute("aria-label", "Select recorded event");
-  const allEvents = [...feature.receipts, ...feature.events];
-  for (const [index, event] of allEvents.entries()) {
-    const option = document.createElement("option");
-    option.value = String(index);
-    option.textContent = [event.kind, event.status, event.time || event.id].filter(Boolean).join(" · ");
-    events.append(option);
+
+  const next = make("div", "p-next");
+  const nextCopy = make("div");
+  nextCopy.append(make("div", "eyebrow", "Suggested next action"), make("strong", "", feature.next_action.label), make("small", "", `Reason · ${label(feature.next_action.reason_code)}`));
+  next.append(nextCopy);
+  panel.append(next);
+
+  const columns = make("div", "p-columns");
+  const eventSection = make("section");
+  const eventHead = make("div", "p-panel-head");
+  const allEvents = [...feature.events].reverse();
+  eventHead.append(make("h2", "", "Recorded events"), make("span", "sub", `${Math.min(8, allEvents.length)} latest of ${allEvents.length} · source records`));
+  eventSection.append(eventHead);
+  const eventList = make("ol", "p-events");
+  const events = allEvents.slice(0, 8);
+  for (const [index, event] of events.entries()) {
+    const item = make("li");
+    const button = make("button", "", `${label(event.kind)} · ${label(event.status)}`);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(selectedEvent === index));
+    button.addEventListener("click", () => { selectedEvent = index; render(); panel.querySelector(`.p-events button:nth-of-type(${index + 1})`)?.focus(); });
+    const time = make("time", "", event.time || event.id || "Time unavailable");
+    item.append(button, time);
+    eventList.append(item);
   }
-  const replayDetail = document.createElement("p");
-  replayDetail.className = "muted";
-  events.addEventListener("change", () => {
-    const event = allEvents[Number(events.value)];
-    replayDetail.textContent = event ? `Recorded then · ${event.id || "source unavailable"} · ${event.time || "time unknown"}` : "No event selected";
-  });
-  replay.append(events, replayDetail);
-  panel.append(replay);
-  showReceipts(feature, feature.lifecycle.stage);
-  const warnings = document.createElement("p");
-  warnings.className = "muted";
-  warnings.textContent = (feature.warnings || []).join(" · ") || "No capture warnings";
-  panel.append(warnings);
+  eventSection.append(eventList);
+  if (events.length) {
+    const event = events[selectedEvent ?? 0];
+    const receipt = make("div", "p-receipt");
+    receipt.append(make("strong", "", "Selected source record"), make("span", "", `${event.id || "Source unavailable"} · ${event.source || "source unavailable"}${event.line ? `:${event.line}` : ""}`));
+    eventSection.append(receipt);
+  } else {
+    eventSection.append(make("p", "p-empty", "No recorded events are available in this snapshot."));
+  }
+  columns.append(eventSection);
+
+  const evidenceSection = make("section");
+  const evidenceHead = make("div", "p-panel-head");
+  evidenceHead.append(make("h2", "", "Evidence, with provenance"), make("span", "sub", "Current snapshot"));
+  evidenceSection.append(evidenceHead);
+  const table = make("table", "p-evidence");
+  table.setAttribute("aria-label", "Evidence status and provenance");
+  const body = make("tbody");
+  const rows = [
+    evidenceStatus("Checks", checks.status, checks.status === "unavailable" ? "No current check receipt" : `${checks.recorded_passed || 0} passed · ${checks.required || 0} required`),
+    evidenceStatus("Independent review", feature.evidence.review.status),
+    evidenceStatus("Local PR-ready gate", currentStatus, feature.evidence.pr_ready.reason || "Gate receipt bound to current inputs"),
+    evidenceStatus("Capture", feature.capture.stable ? feature.capture.freshness : "unstable", feature.capture.input_fingerprint || "Input fingerprint unavailable"),
+  ];
+  for (const row of rows) {
+    const tr = make("tr");
+    tr.append(make("th", "", row.title));
+    const td = make("td");
+    td.append(make("strong", statusClass(row.value), row.value), make("div", "sub", row.detail));
+    tr.append(td);
+    body.append(tr);
+  }
+  table.append(body);
+  evidenceSection.append(table);
+  const selectedReceipts = feature.receipts.filter(item => !selectedStage || !item.stage || item.stage === selectedStage);
+  const receipt = make("div", "p-receipt");
+  receipt.append(make("strong", "", `${label(selectedStage)} receipts`));
+  receipt.append(make("span", "", selectedReceipts.length
+    ? selectedReceipts.map(item => `${label(item.kind)} · ${label(item.status)} · ${item.id || "source unavailable"}`).join("\n")
+    : "No recorded receipts for this stage."));
+  evidenceSection.append(receipt);
+  columns.append(evidenceSection);
+  panel.append(columns);
+
+  if (feature.warnings?.length) panel.append(make("p", "p-warning muted", `Capture warnings · ${feature.warnings.join(" · ")}`));
 }
 
-function showReceipts(feature, stage) {
-  let output = document.getElementById("stage-receipts");
-  if (!output) {
-    output = document.createElement("p");
-    output.id = "stage-receipts";
-    output.className = "muted";
-    panel.append(output);
-  }
-  const rows = feature.receipts.filter(item => !stage || !item.stage || item.stage === stage);
-  output.textContent = `${stage || "Stage"} receipts: ${rows.length ? rows.map(item => `${item.kind} · ${item.status} · ${item.id || "source unavailable"}`).join("; ") : "no recorded receipts"}`;
-}
-
-selector.addEventListener("change", render);
+selector.addEventListener("change", () => { selectedStage = null; selectedEvent = null; render(); });
 render();
