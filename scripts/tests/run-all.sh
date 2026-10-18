@@ -1630,6 +1630,7 @@ jq -e '.action == "advance" and .suggested_next == "plan-1-engineering-architect
 
 QUOTE_WS="${TMP}/route'space"
 mkdir -p "$QUOTE_WS"
+QUOTE_WS="$(cd "$QUOTE_WS" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ./scripts/init-feature.sh --feature route-quote --workspace "$QUOTE_WS" \
   --mode brownfield --interaction autonomous >/dev/null
 mkdir -p "${QUOTE_WS}/.adlc5/route-quote"

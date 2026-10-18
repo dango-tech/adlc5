@@ -57,7 +57,7 @@ if v is not None and str(v) not in ('null', 'None', ''):
 " 2>/dev/null || true
 }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 STATE="${WORKSPACE}/.adlc5/${FEATURE}/delivery/state.json"
 [[ -f "$STATE" ]] || { echo '{"error":"delivery state not found","ready":false}' ; exit 2; }
 

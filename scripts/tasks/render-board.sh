@@ -17,7 +17,7 @@ done
 [[ -n "$FEATURE" ]] || exit 1
 command -v jq >/dev/null || exit 1
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 STATE="${FEATURE_DIR}/state.json"
 TASKS_DIR="${FEATURE_DIR}/tasks"
