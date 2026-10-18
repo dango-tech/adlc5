@@ -5,6 +5,7 @@
 ### Added
 
 - **ADLC5 Pulse (5.1.0):** on-demand CLI/MCP snapshots, cached terminal band and handoff, a self-contained offline board using the existing brand, read-only gate receipts bound to canonical inputs and mutable dependencies, and the `@adlc5-pulse` skill across all three plugin packages. Usage shows an attributable subtotal with unknown coverage preserved. See [Pulse](docs/pulse.md).
+- Pulse card and board now show evidence-backed outcome success, observed cost savings for matched direct/candidate runs, escaped defects, and rework; unavailable metrics remain Not measured.
 - **Supervised headless Codex runner:** `adlc5 run` drives the existing navigator with isolated Codex CLI workers, worktree isolation, attempt checkpoints, retry escalation, kill-switch and timeout supervision, kernel-ingested evidence, and per-attempt usage records. `adlc5 answer` resumes a pending human question; `adlc5 setup models` and `adlc5 config show` manage and inspect user-selected Codex tiers. MCP exposes run and answer operations.
 - **Acceptance traceability:** code specs map each acceptance criterion to declared named checks; spec lint and story verification reject missing or stale mappings.
 

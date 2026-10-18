@@ -9,6 +9,7 @@ type Feature = {
     pr_ready?: { status?: string }
   }
   usage?: { known_cost_usd?: number | null; status?: string }
+  evaluation?: { success_rate_pct?: number | null; successful?: number; runs?: number; savings_pct?: number | null; reason?: string; escaped_defects?: number | null; rework?: number | null }
   next_action?: { label?: string }
 }
 
@@ -81,8 +82,11 @@ export const register: Register = on => {
           ? loading ? 'Reading workspace snapshot…' : snapshot ? 'No feature data in this workspace' : 'Snapshot unavailable · run @adlc5-pulse'
           : 'Snapshot unavailable · run @adlc5-pulse'
     const knownCost = feature?.usage?.known_cost_usd
+    const metrics = feature?.evaluation
+    const savings = typeof metrics?.savings_pct === 'number' ? `${metrics.savings_pct.toFixed(1)}% observed` : 'Not measured'
+    const quality = typeof metrics?.success_rate_pct === 'number' ? `${metrics.success_rate_pct.toFixed(1)}% (n=${metrics.runs})` : 'Not measured'
     const detail = feature
-      ? `${feature.lifecycle?.step ?? 'step unknown'} · review ${feature.evidence?.review?.status ?? 'unavailable'} · usage ${feature.usage?.status ?? 'unavailable'} · ${snapshot?.generated_at ?? 'capture time unavailable'} · next: ${feature.next_action?.label ?? 'inspect current step'}`
+      ? `${feature.lifecycle?.step ?? 'step unknown'} · review ${feature.evidence?.review?.status ?? 'unavailable'} · usage ${feature.usage?.status ?? 'unavailable'} · ${snapshot?.generated_at ?? 'capture time unavailable'} · next: ${feature.next_action?.label ?? 'inspect current step'} · defects ${metrics?.escaped_defects ?? 'Not measured'} · rework ${metrics?.rework ?? 'Not measured'} · ${metrics?.reason ?? 'Accuracy is not measured'}`
       : featureFilter
         ? 'Change ADLC5_FEATURE to an active feature label or archive ID, then start or finish a turn.'
         : 'Set ADLC5_FEATURE to pin one feature, then start or finish a turn to refresh Pulse.'
@@ -106,6 +110,7 @@ export const register: Register = on => {
           <Button key="board" plain onPress={openBoard}>Board</Button>
           <Button key="details" plain onPress={() => { showDetails = !showDetails; $.ui.invalidate('ui.render') }}>{showDetails ? 'Hide' : 'Details'}</Button>
         </Box>
+        {feature && <Text dimColor wrap="wrap">Projected savings {savings} · outcome success {quality}</Text>}
         {showDetails && <Text dimColor wrap="wrap">{detail}</Text>}
       </Box>
     )

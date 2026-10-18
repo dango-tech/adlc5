@@ -45,11 +45,17 @@ function render() {
   const metrics = make("div", "p-metrics");
   const checks = feature.evidence.checks;
   const usage = feature.usage;
+  const evaluation = feature.evaluation || {};
+  const percent = value => typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : "Not measured";
   const metricRows = [
     ["Required checks", checks.status === "unavailable" ? "Unavailable" : `${checks.recorded_passed || 0} / ${checks.required || 0}`, checks.status],
     ["Independent review", label(feature.evidence.review.status), "Current repository evidence"],
     ["Local PR-ready gate", label(currentStatus), "Remote CI and deployment are separate"],
     ["Known usage cost", money(usage.known_cost_usd), `${usage.accounted_records}/${usage.observed_records} records accounted · ${label(usage.status)}`],
+    ["Outcome success", percent(evaluation.success_rate_pct), `${evaluation.successful || 0}/${evaluation.runs || 0} evaluated runs · ${evaluation.success_interval_pct ? `95% Wilson interval ${evaluation.success_interval_pct.join("–")}%` : label(evaluation.status)}`],
+    ["Projected cost savings", percent(evaluation.savings_pct), evaluation.savings_pct == null ? "Not measured · comparable evaluation required" : `Observed vs direct agent · ${evaluation.matched_cases} matched cases · range ${evaluation.savings_range_pct.join("–")}%`],
+    ["Escaped defects", evaluation.escaped_defects ?? "Not measured", "Recorded observation windows only"],
+    ["Rework", evaluation.rework ?? "Not measured", "Recorded rework count"],
   ];
   for (const [name, value, detail] of metricRows) {
     const metric = make("div", "p-metric");
@@ -57,6 +63,7 @@ function render() {
     metrics.append(metric);
   }
   panel.append(metrics);
+  panel.append(make("p", "sub", `Evaluation · ${evaluation.reason || "Accuracy is not measured"} · source ${evaluation.source || "unavailable"}`));
 
   const stageHead = make("div", "p-panel-head");
   stageHead.append(make("h2", "", "Delivery path"), make("span", "sub", "Select a stage to inspect its receipts"));

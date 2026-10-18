@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import importlib.util
 import json
 import math
 import os
@@ -194,6 +195,8 @@ def _jsonl(reader: Reader, path: Path) -> tuple[list[dict[str, Any]], bool]:
             item["_pulse_source"] = path.relative_to(reader.workspace).as_posix()
             item["_pulse_line"] = line_number
             rows.append(item)
+        else:
+            reader.warnings.append(f"malformed_record:{path.relative_to(reader.workspace).as_posix()}:{line_number}")
     return rows, False
 
 
@@ -356,6 +359,96 @@ def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
     }
 
 
+def _evaluation(directory: Path, reader: Reader) -> dict[str, Any]:
+    """Project local evaluator exports; compare only explicitly matched cohorts."""
+    result = {
+        "status": "not_measured", "runs": 0, "successful": 0,
+        "success_rate_pct": None, "success_interval_pct": None,
+        "escaped_defects": None, "rework": None,
+        "savings_pct": None, "savings_range_pct": None, "matched_cases": 0,
+        "reason": "No complete evaluation records; accuracy is not measured",
+        "source": str((directory / "evaluation").relative_to(reader.workspace)),
+    }
+    warning_start = len(reader.warnings)
+    records = []
+    for name in ("telemetry", "usage", "outcomes"):
+        rows, limited = _jsonl(reader, directory / "evaluation" / (name + ".jsonl"))
+        records.append(rows)
+        if limited:
+            return {**result, "status": "partial", "reason": "Evaluation input exceeded limits"}
+    telemetry, usage, outcomes = records
+    if not any(records) and len(reader.warnings) == warning_start:
+        return result
+    spec = importlib.util.spec_from_file_location("pulse_evaluator", SCRIPTS / "evaluate-runs.py")
+    scorer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(scorer)
+    # The CLI scorer expects structured records; Pulse must fail closed on arbitrary local JSON.
+    if (len(reader.warnings) != warning_start
+        or any(not isinstance(row.get("run_id"), str) or not row["run_id"] for row in telemetry + usage + outcomes)
+        or any(not isinstance(row.get("node_id"), str) or not row["node_id"] for row in telemetry + usage)
+        or any(not isinstance(row.get("tokens", {}), dict) or not isinstance(row.get("extra", {}), dict) for row in usage)
+        or any(not isinstance(row.get("profile"), str) for row in outcomes)
+        or any("cost_usd" in row and type(row["cost_usd"]) not in (int, float) for row in usage)
+        or any("estimated_cost_usd" in row.get("extra", {}) and type(row["extra"]["estimated_cost_usd"]) not in (int, float) for row in usage)):
+        return {**result, "status": "partial", "reason": "Malformed evaluation records"}
+    canonical_usage = [{k: v for k, v in row.items() if not k.startswith("_pulse_")} for row in usage]
+    if len({json.dumps(row, sort_keys=True) for row in canonical_usage}) != len(usage):
+        return {**result, "status": "partial", "reason": "Duplicate evaluation usage records"}
+    try:
+        report = scorer.evaluate(telemetry, usage, outcomes)
+    except (TypeError, ValueError, OverflowError):
+        return {**result, "status": "partial", "reason": "Invalid evaluation accounting"}
+    result.update(runs=report["runs"]["total"], successful=report["runs"]["successful"])
+    if report["status"] != "ok" or not outcomes:
+        return {**result, "status": "partial", "reason": "Incomplete, duplicate, or uncorrelated evaluation records"}
+    n = result["runs"]
+    rate = result["successful"] / n
+    z = 1.96
+    center = (rate + z*z / (2*n)) / (1 + z*z/n)
+    margin = z * math.sqrt(rate*(1-rate)/n + z*z/(4*n*n)) / (1 + z*z/n)
+    result.update(status="measured", success_rate_pct=round(100*rate, 2),
+                  success_interval_pct=[round(100*max(0, center-margin), 2), round(100*min(1, center+margin), 2)],
+                  escaped_defects=sum(row["escaped_defects"] for row in outcomes),
+                  rework=sum(row["rework"] for row in outcomes),
+                  reason="Recorded outcome success, not a general accuracy score; no comparable cost baseline")
+    groups = {}
+    costs = {}
+    for row in usage:
+        explicit = row.get("cost_usd")
+        if type(explicit) not in (int, float) or not math.isfinite(explicit) or explicit < 0:
+            return result
+        costs[row["run_id"]] = costs.get(row["run_id"], 0) + explicit
+    for row in outcomes:
+        arm, _, profile = row["profile"].partition(":")
+        comparison = row.get("comparison_id")
+        case = row.get("case_id")
+        if (arm not in ("direct", "candidate") or not profile
+            or not isinstance(comparison, str) or not comparison
+            or not isinstance(case, str) or not case):
+            return result
+        groups.setdefault((comparison, case, profile), {}).setdefault(arm, []).append(row)
+    savings = []
+    baseline_total = candidate_total = 0
+    for arms in groups.values():
+        if set(arms) != {"direct", "candidate"}:
+            return result
+        # Compare equal repetitions only after every observed run meets the quality floor.
+        if len(arms["direct"]) != len(arms["candidate"]) or any(not scorer.successful(row) for rows in arms.values() for row in rows):
+            return {**result, "reason": "Savings withheld: unmatched repetitions or quality floor failed"}
+        direct = sum(costs[row["run_id"]] for row in arms["direct"])
+        candidate = sum(costs[row["run_id"]] for row in arms["candidate"])
+        if direct <= 0 or not math.isfinite(direct + candidate):
+            return result
+        savings.append(100 * (direct-candidate) / direct)
+        baseline_total += direct
+        candidate_total += candidate
+    if savings and math.isfinite(baseline_total + candidate_total):
+        result.update(savings_pct=round(100*(baseline_total-candidate_total)/baseline_total, 2),
+                      savings_range_pct=[round(min(savings), 2), round(max(savings), 2)], matched_cases=len(savings),
+                      reason="Observed cost change vs direct agent; case range is not a confidence interval or future guarantee; general accuracy is not measured")
+    return result
+
+
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
     label, archive_id = _identity(directory, workspace)
     identity = hashlib.sha256((str(directory.relative_to(workspace)) + "\0" + label).encode()).hexdigest()[:20]
@@ -367,7 +460,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "capture": {"stable": False, "input_fingerprint": None},
             "lifecycle": {"stage": None, "step": None},
             "evidence": {"checks": {"status": "unavailable"}, "review": {"status": "unavailable"}, "pr_ready": {"status": "unavailable", "reason": "state unavailable"}},
-            "usage": _usage([], ROOT), "next_action": {"reason_code": "state_unavailable", "label": "Inspect feature state"},
+            "evaluation": _evaluation(directory, reader), "usage": _usage([], ROOT), "next_action": {"reason_code": "state_unavailable", "label": "Inspect feature state"},
             "receipts": [], "events": [], "warnings": ["state_unavailable"],
         }
     stage = state.get("current_stage") if state.get("current_stage") in STAGES else None
@@ -425,6 +518,9 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         else:
             gate_status = "stale"
     usage = _usage(usage_rows, ROOT)
+    evaluation_warning_start = len(reader.warnings)
+    evaluation = _evaluation(directory, reader)
+    warnings.extend(reader.warnings[evaluation_warning_start:])
     pending = state.get("questions")
     if isinstance(pending, dict):
         pending = pending.get("pending")
@@ -462,6 +558,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             warnings.append("post_capture_fingerprint_unavailable")
     if not capture_stable:
         warnings.append("source_changed_during_capture")
+        evaluation.update(status="partial", success_rate_pct=None, success_interval_pct=None, savings_pct=None, savings_range_pct=None, escaped_defects=None, rework=None, reason="Evaluation capture changed; repeat the snapshot")
         check_status = review_status = gate_status = "unstable"
         next_action = {"reason_code": "capture_unstable", "label": "Repeat the snapshot after inputs stop changing"}
     return {
@@ -473,7 +570,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "review": {"status": review_status},
             "pr_ready": {"status": gate_status, "reason": None if gate_status != "unavailable" else "no sufficiently bound local gate receipt"},
         },
-        "usage": usage, "next_action": next_action,
+        "usage": usage, "evaluation": evaluation, "next_action": next_action,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }
@@ -496,6 +593,7 @@ def project_workspace(workspace: Path, feature: str | None = None, active_only: 
             item["capture"]["stable"] = False
             item["capture"]["freshness"] = "unstable"
             item["warnings"].append("source_changed_during_capture")
+            item["evaluation"].update(status="partial", success_rate_pct=None, success_interval_pct=None, savings_pct=None, savings_range_pct=None, escaped_defects=None, rework=None, reason="Evaluation capture changed; repeat the snapshot")
             for evidence in item["evidence"].values():
                 evidence["status"] = "unstable"
             item["next_action"] = {"reason_code": "capture_unstable", "label": "Repeat the snapshot after inputs stop changing"}
@@ -518,8 +616,12 @@ def band(snapshot: dict[str, Any], feature: str | None = None) -> str:
         detail = "feature not found" if feature else "no features"
         return f"ADLC5 Pulse · {snapshot.get('workspace', {}).get('label', 'workspace')} · {detail}"
     cost = item.get("usage", {}).get("known_cost_usd")
+    evaluation = item.get("evaluation", {})
+    savings = evaluation.get("savings_pct")
+    rate = evaluation.get("success_rate_pct")
+    metrics = (f"savings {savings:.1f}% observed" if savings is not None else "savings Not measured") + " · " + (f"outcome success {rate:.1f}% (n={evaluation.get('runs', 0)})" if rate is not None else "outcome success Not measured")
     money = f"${cost:.2f}" if isinstance(cost, (int, float)) else "cost unavailable"
-    return f"ADLC5 Pulse · {item.get('id')} · {item.get('lifecycle', {}).get('stage') or 'stage unknown'} · {item.get('evidence', {}).get('checks', {}).get('status')} · {money} · snapshot {snapshot.get('generated_at')} · {item.get('next_action', {}).get('label')}"
+    return f"ADLC5 Pulse · {item.get('id')} · {item.get('lifecycle', {}).get('stage') or 'stage unknown'} · {item.get('evidence', {}).get('checks', {}).get('status')} · {money} · {metrics} · snapshot {snapshot.get('generated_at')} · {item.get('next_action', {}).get('label')}"
 
 
 def handoff(snapshot: dict[str, Any], feature: str) -> str:
@@ -527,6 +629,8 @@ def handoff(snapshot: dict[str, Any], feature: str) -> str:
     if not item:
         raise ValueError("feature not found in snapshot")
     lines = [f"# ADLC5 Pulse handoff: {html.escape(item['id'])}", "", f"Captured: {snapshot['generated_at']}", f"Stage/step: {html.escape(str(item['lifecycle'].get('stage') or 'unknown'))} / {html.escape(str(item['lifecycle'].get('step') or 'unknown'))}", f"Capture stable: {str(item['capture'].get('stable')).lower()}", f"Input fingerprint: {item['capture'].get('input_fingerprint') or 'unavailable'}", f"Checks: {item['evidence']['checks']['status']}", f"Review: {item['evidence']['review']['status']}", f"Local PR-ready gate: {item['evidence']['pr_ready']['status']}", f"Usage coverage: {item['usage']['status']} ({item['usage']['accounted_records']}/{item['usage']['observed_records']} records)", f"Known USD subtotal: {item['usage']['known_cost_usd'] if item['usage']['known_cost_usd'] is not None else 'unavailable'}", f"Next: {html.escape(item['next_action']['label'])}", "", "Snapshot observations are checked at capture time. Suggested action only; no command was run."]
+    evaluation = item.get("evaluation", {})
+    lines[-2:-2] = [f"Outcome success: {evaluation.get('successful', 0)}/{evaluation.get('runs', 0)} recorded runs ({evaluation.get('status', 'not_measured')})", f"Observed cost savings: {evaluation.get('savings_pct')} percent" if evaluation.get("savings_pct") is not None else "Projected savings: Not measured", html.escape(evaluation.get("reason", "Accuracy is not measured"))]
     return "\n".join(lines) + "\n"
 
 

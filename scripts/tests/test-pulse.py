@@ -8,18 +8,19 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from lib.pulse import Reader, board_document, handoff, project_workspace  # noqa: E402
+from lib.pulse import Reader, _evaluation, band, board_document, handoff, project_workspace  # noqa: E402
 from lib.completion_evidence import fingerprint, gate_dependency_digest  # noqa: E402
 
 
 class PulseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.workspace = Path(self.tmp.name)
+        self.workspace = Path(self.tmp.name).resolve()
         (self.workspace / ".adlc5").mkdir()
         subprocess.run(["git", "init", "-q", str(self.workspace)], check=True)
         subprocess.run(["git", "-C", str(self.workspace), "config", "maintenance.auto", "false"], check=True)
@@ -33,13 +34,163 @@ class PulseTests(unittest.TestCase):
 
     def feature(self, name="sample-feature", state=None):
         base = self.workspace / ".adlc5" / name
-        (base / "evidence").mkdir(parents=True)
+        (base / "evidence").mkdir(parents=True, exist_ok=True)
         (base / "state.json").write_text(json.dumps(state or {
             "schema_version": "3.0", "feature": name,
             "current_stage": "implement", "current_step": "implement-2-verify",
             "stage_status": {"specify": "completed", "plan": "completed", "tasks": "completed", "implement": "in_progress"},
         }))
         return base
+
+    def evaluation_fixture(self):
+        base = self.feature()
+        directory = base / "evaluation"
+        directory.mkdir(exist_ok=True)
+        outcomes, usage, telemetry = [], [], []
+        for arm, cost in (("direct", 10), ("candidate", 6)):
+            outcomes.append(dict(run_id=arm, profile=arm + ":tiny", case_id="case-a", comparison_id="frozen-experiment",
+                anchors_passed=True, regression_passed=True, quality_gates_passed=True,
+                anchor_changed=False, rework=0, human_rejected=False, escaped_defects=0))
+            usage.append(dict(run_id=arm, node_id="delivery", cost_usd=cost, tokens={"total": 100}))
+            telemetry.append(dict(run_id=arm, node_id="delivery"))
+        for name, rows in (("telemetry", telemetry), ("usage", usage), ("outcomes", outcomes)):
+            (directory / (name + ".jsonl")).write_text("".join(json.dumps(row) + "\n" for row in rows))
+        return base
+
+    def edit_evaluation(self, base, name, edit):
+        path = base / "evaluation" / (name + ".jsonl")
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        edit(rows)
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    def test_missing_evaluation_is_not_measured_on_all_surfaces(self):
+        self.feature()
+        snapshot = project_workspace(self.workspace)
+        metrics = snapshot["features"][0]["evaluation"]
+        self.assertEqual(metrics["status"], "not_measured")
+        self.assertIsNone(metrics["savings_pct"])
+        self.assertIsNone(metrics["success_rate_pct"])
+        self.assertIn("savings Not measured", band(snapshot))
+        self.assertIn("Projected savings: Not measured", handoff(snapshot, "sample-feature"))
+        board = board_document(snapshot)
+        self.assertIn("Projected cost savings", board)
+        self.assertIn("Outcome success", board)
+        self.assertIn("Escaped defects", board)
+
+    def test_matched_evaluation_reports_quality_and_observed_savings(self):
+        base = self.evaluation_fixture()
+        snapshot = project_workspace(self.workspace)
+        metrics = snapshot["features"][0]["evaluation"]
+        self.assertEqual(metrics["status"], "measured")
+        self.assertEqual(metrics["savings_pct"], 40)
+        self.assertEqual(metrics["savings_range_pct"], [40, 40])
+        self.assertEqual(metrics["matched_cases"], 1)
+        self.assertEqual(metrics["success_rate_pct"], 100)
+        self.assertEqual(metrics["runs"], 2)
+        self.assertLess(metrics["success_interval_pct"][0], 100)
+        self.assertEqual(metrics["escaped_defects"], 0)
+        self.assertEqual(metrics["rework"], 0)
+        self.assertIn("savings 40.0% observed", band(snapshot))
+        self.assertNotIn("frozen-experiment", json.dumps(snapshot))
+        self.assertNotIn('"run_id"', json.dumps(snapshot))
+
+    def test_failed_quality_withholds_savings_and_keeps_observed_defects(self):
+        base = self.evaluation_fixture()
+        self.edit_evaluation(base, "outcomes", lambda rows: rows[1].update(escaped_defects=1, rework=2))
+        metrics = _evaluation(base, Reader(self.workspace))
+        self.assertIsNone(metrics["savings_pct"])
+        self.assertEqual(metrics["success_rate_pct"], 50)
+        self.assertEqual(metrics["escaped_defects"], 1)
+        self.assertEqual(metrics["rework"], 2)
+
+    def test_unknown_outcome_duplicate_and_missing_correlation_fail_closed(self):
+        for scenario in ("unknown", "duplicate", "uncorrelated", "malformed", "duplicate_usage"):
+            with self.subTest(scenario=scenario):
+                base = self.evaluation_fixture()
+                if scenario == "unknown":
+                    self.edit_evaluation(base, "outcomes", lambda rows: rows[1].update(escaped_defects=None))
+                elif scenario == "duplicate":
+                    self.edit_evaluation(base, "outcomes", lambda rows: rows.append(dict(rows[0])))
+                elif scenario == "uncorrelated":
+                    self.edit_evaluation(base, "telemetry", lambda rows: rows[1].update(node_id="other"))
+                elif scenario == "malformed":
+                    self.edit_evaluation(base, "usage", lambda rows: rows[1].update(tokens=[]))
+                else:
+                    self.edit_evaluation(base, "usage", lambda rows: rows.append(dict(rows[0])))
+                metrics = _evaluation(base, Reader(self.workspace))
+                self.assertEqual(metrics["status"], "partial")
+                self.assertIsNone(metrics["savings_pct"])
+                self.assertIsNone(metrics["success_rate_pct"])
+
+    def test_savings_require_matched_explicit_costs_and_repetitions(self):
+        base = self.evaluation_fixture()
+        self.edit_evaluation(base, "usage", lambda rows: rows[1].pop("cost_usd"))
+        metrics = _evaluation(base, Reader(self.workspace))
+        self.assertIsNone(metrics["savings_pct"])
+        self.assertEqual(metrics["success_rate_pct"], 100)
+        self.edit_evaluation(base, "usage", lambda rows: rows[1].update(cost_usd=12))
+        self.assertEqual(_evaluation(base, Reader(self.workspace))["savings_pct"], -20)
+        self.edit_evaluation(base, "outcomes", lambda rows: rows[1].update(comparison_id="different"))
+        self.assertIsNone(_evaluation(base, Reader(self.workspace))["savings_pct"])
+        self.edit_evaluation(base, "outcomes", lambda rows: rows[1].update(comparison_id="frozen-experiment", profile="candidate:standard"))
+        self.assertIsNone(_evaluation(base, Reader(self.workspace))["savings_pct"])
+
+    def test_savings_preserve_explicit_zero_and_reject_nonfinite_or_zero_baseline(self):
+        base = self.evaluation_fixture()
+        self.edit_evaluation(base, "usage", lambda rows: rows[1].update(cost_usd=0))
+        self.assertEqual(_evaluation(base, Reader(self.workspace))["savings_pct"], 100)
+        self.edit_evaluation(base, "usage", lambda rows: rows[0].update(cost_usd=0))
+        self.assertIsNone(_evaluation(base, Reader(self.workspace))["savings_pct"])
+        for invalid in (float("nan"), float("inf"), True, "1", -1):
+            with self.subTest(invalid=invalid):
+                self.edit_evaluation(base, "usage", lambda rows: rows[0].update(cost_usd=invalid))
+                self.assertEqual(_evaluation(base, Reader(self.workspace))["status"], "partial")
+
+    def test_unsafe_corrupt_and_truncated_evaluation_stays_unknown(self):
+        base = self.evaluation_fixture()
+        path = base / "evaluation/outcomes.jsonl"
+        original = path.read_text()
+        for content in (original.rstrip(), original + "{bad}\n", original + "[]\n"):
+            path.write_text(content)
+            self.assertEqual(_evaluation(base, Reader(self.workspace))["status"], "partial")
+        path.unlink()
+        path.symlink_to(self.workspace / "README.md")
+        self.assertEqual(_evaluation(base, Reader(self.workspace))["status"], "partial")
+
+    def test_changed_capture_withholds_evaluation_metrics(self):
+        self.evaluation_fixture()
+        with patch.object(Reader, "stable", return_value=False):
+            metrics = project_workspace(self.workspace)["features"][0]["evaluation"]
+        self.assertEqual(metrics["status"], "partial")
+        self.assertIsNone(metrics["savings_pct"])
+        self.assertIsNone(metrics["success_rate_pct"])
+        self.assertIsNone(metrics["escaped_defects"])
+
+    def test_multiple_cases_use_total_cost_and_expose_case_range(self):
+        base = self.evaluation_fixture()
+        for name in ("outcomes", "telemetry", "usage"):
+            def add_case(rows):
+                for original in list(rows):
+                    row = dict(original, run_id=original["run_id"] + "-b")
+                    if name == "outcomes":
+                        row["case_id"] = "case-b"
+                    if name == "usage":
+                        row["cost_usd"] = 30 if original["run_id"] == "direct" else 15
+                    rows.append(row)
+            self.edit_evaluation(base, name, add_case)
+        metrics = _evaluation(base, Reader(self.workspace))
+        self.assertEqual(metrics["matched_cases"], 2)
+        self.assertEqual(metrics["savings_pct"], 47.5)
+        self.assertEqual(metrics["savings_range_pct"], [40, 50])
+        self.assertEqual(metrics["runs"], 4)
+
+    def test_unmatched_repetitions_do_not_project_savings(self):
+        base = self.evaluation_fixture()
+        for name in ("outcomes", "telemetry", "usage"):
+            self.edit_evaluation(base, name, lambda rows: rows.append(dict(rows[0], run_id="direct-repeat")))
+        metrics = _evaluation(base, Reader(self.workspace))
+        self.assertEqual(metrics["success_rate_pct"], 100)
+        self.assertIsNone(metrics["savings_pct"])
 
     def test_empty_workspace_is_valid_and_does_not_write(self):
         before = sorted(str(p.relative_to(self.workspace)) for p in self.workspace.rglob("*"))
