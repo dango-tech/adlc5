@@ -229,6 +229,39 @@ class PulseTests(unittest.TestCase):
         archived_snapshot = project_workspace(self.workspace, feature="same-name-20261017")
         self.assertEqual(archived_snapshot["features"][0]["archive_id"], "same-name-20261017")
 
+    def test_passed_check_count_excludes_optional_results(self):
+        base = self.feature()
+        for results, passed, required in (
+            ([{"status": "pass"}, {"status": "pass", "required": False}], 1, 1),
+            ([{"status": "fail", "required": True}, {"status": "pass", "required": False}], 0, 1),
+            ([{"status": "pass", "required": False}], 0, 0),
+        ):
+            with self.subTest(results=results):
+                (base / "evidence" / "completion.jsonl").write_text(json.dumps({
+                    "kind": "checks", "fingerprint": "old", "results": results,
+                }) + "\n")
+                checks = project_workspace(self.workspace)["features"][0]["evidence"]["checks"]
+                self.assertEqual(checks["recorded_passed"], passed)
+                self.assertEqual(checks["required"], required)
+
+    def test_unavailable_state_preserves_capture_schema(self):
+        base = self.feature()
+        state_path = base / "state.json"
+        capture_schema = json.loads((ROOT / "core/pulse-snapshot.schema.json").read_text())["$defs"]["feature"]["properties"]["capture"]
+        for contents in ("{invalid", "[]"):
+            with self.subTest(contents=contents):
+                state_path.write_text(contents)
+                snapshot = project_workspace(self.workspace)
+                feature = snapshot["features"][0]
+                self.assertEqual(snapshot["status"], "partial")
+                self.assertEqual(feature["next_action"]["reason_code"], "state_unavailable")
+                capture = feature["capture"]
+                self.assertTrue(set(capture_schema["required"]).issubset(capture))
+                self.assertFalse(capture["stable"])
+                self.assertIsNone(capture["input_fingerprint"])
+                self.assertEqual(capture["freshness"], "unavailable")
+                self.assertEqual(capture["captured_at"], snapshot["generated_at"])
+
     def test_safe_fingerprint_matches_canonical_and_gate_inputs_invalidate(self):
         self.feature()
         state = json.loads((self.workspace / ".adlc5" / "sample-feature" / "state.json").read_text())

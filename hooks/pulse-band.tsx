@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 type Feature = {
   id: string
+  archive_id?: string | null
   lifecycle?: { stage?: string; step?: string }
   evidence?: {
     checks?: { status?: string; recorded_passed?: number; required?: number }
@@ -53,7 +54,7 @@ async function refresh($: EngineInterface) {
 
 function selected(): Feature | undefined {
   const rows = snapshot?.features ?? []
-  if (featureFilter) return rows.find(item => item.id === featureFilter)
+  if (featureFilter) return rows.find(item => item.id === featureFilter || item.archive_id === featureFilter)
   return rows.length === 1 ? rows[0] : undefined
 }
 
@@ -81,6 +82,7 @@ export const register: Register = on => {
     const below = await next(e).catch(() => undefined)
     const { Box, Text, Button } = $.ui.resolve(e)
     const feature = selected()
+    const featureId = feature?.archive_id ?? feature?.id
     const features = snapshot?.features ?? []
     const line = feature
       ? `${feature.id} · ${feature.lifecycle?.stage ?? 'stage unknown'}`
@@ -103,7 +105,7 @@ export const register: Register = on => {
     const openBoard = async () => {
       if (!cwd || !pluginRoot) return
       const args = ['python3', `${pluginRoot}/scripts/adlc5`, 'pulse', 'board', '--workspace', cwd, '--open']
-      if (feature) args.push('--feature', feature.id)
+      if (featureId) args.push('--feature', featureId)
       const result = await $.process.run(args).catch(() => undefined)
       $.ui.toast(result?.exitCode === 0 ? 'ADLC5 Pulse board opened' : 'ADLC5 Pulse board could not be opened')
     }
@@ -116,8 +118,8 @@ export const register: Register = on => {
           {feature && <Text color={statusColor(feature.evidence?.pr_ready?.status)}>gate {feature.evidence?.pr_ready?.status ?? 'unavailable'}</Text>}
           {typeof knownCost === 'number' && Number.isFinite(knownCost) && <Text>${knownCost.toFixed(2)} known</Text>}
           <Box flexGrow={1} />
-          <Button key="review" plain onPress={() => $.command.run({ command: 'adlc5:craftsmanship-code-review', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Review failed: ${String(error).slice(0, 160)}`))}>Review</Button>
-          <Button key="audit" plain onPress={() => $.command.run({ command: 'adlc5:qa', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Audit failed: ${String(error).slice(0, 160)}`))}>Audit</Button>
+          <Button key="review" plain onPress={() => $.command.run({ command: 'adlc5:craftsmanship-code-review', args: featureId ?? '' }).catch(error => $.ui.toast(`Pulse Review failed: ${String(error).slice(0, 160)}`))}>Review</Button>
+          <Button key="audit" plain onPress={() => $.command.run({ command: 'adlc5:qa', args: featureId ?? '' }).catch(error => $.ui.toast(`Pulse Audit failed: ${String(error).slice(0, 160)}`))}>Audit</Button>
           <Button key="board" plain onPress={openBoard}>Board</Button>
           <Button key="details" plain onPress={() => { showDetails = !showDetails; $.ui.invalidate('ui.render') }}>{showDetails ? 'Hide' : 'Details'}</Button>
         </Box>

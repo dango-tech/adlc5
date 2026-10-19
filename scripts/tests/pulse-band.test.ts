@@ -51,3 +51,39 @@ test('refresh completes before rendering; card actions work on desktop and termi
   expect(await ui.find({ type: 'Text', text: /Projected savings Not measured · outcome success Not measured/ })).toBeDefined()
   await ui.unmount()
 })
+
+
+test('archive selection and actions retain the archive ID when an active label also exists', async ($, on) => {
+  const archiveId = 'fixture-feature-20261017'
+  const calls: string[][] = []
+  const commands: { command: string; args?: string }[] = []
+  mock.env(on, { ADLC5_FEATURE: archiveId })
+  on('session.cwd', () => ({ value: '/fixture' }))
+  on('session.start', () => ({ cwd: '/fixture' }))
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['Other mod remains'] }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('command.run', ($, e) => { commands.push({ command: e.command, args: e.args }); return { text: 'started' } })
+  on('process.run', ($, e) => {
+    calls.push([...e.argv])
+    return { value: { exitCode: 0, stderr: '', stdout: JSON.stringify({ features: [
+      { id: 'fixture-feature', archive_id: null, lifecycle: { stage: 'specify' } },
+      { id: 'fixture-feature', archive_id: archiveId, lifecycle: { stage: 'implement', step: 'completed' } },
+    ] }) } }
+  })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/fixture' })
+  expect(calls[0]).toContain(archiveId)
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: 'fixture-feature · implement' })).toBeDefined()
+    await ui.press({ key: 'details' })
+    expect(await ui.find({ type: 'Text', text: /^completed · review/ })).toBeDefined()
+    await ui.press({ key: 'details' })
+    await ui.press({ key: 'review' })
+    await ui.press({ key: 'audit' })
+    await ui.press({ key: 'board' })
+    expect(calls[calls.length - 1]).toContain(archiveId)
+    expect(commands[commands.length - 2]).toEqual({ command: 'adlc5:craftsmanship-code-review', args: archiveId })
+    expect(commands[commands.length - 1]).toEqual({ command: 'adlc5:qa', args: archiveId })
+    await ui.unmount()
+  }
+})

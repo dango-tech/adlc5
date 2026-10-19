@@ -457,7 +457,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
     if state is None:
         return {
             "id": label, "identity": identity, "archive_id": archive_id,
-            "capture": {"stable": False, "input_fingerprint": None},
+            "capture": {"stable": False, "input_fingerprint": None, "freshness": "unavailable", "captured_at": generated},
             "lifecycle": {"stage": None, "step": None},
             "evidence": {"checks": {"status": "unavailable"}, "review": {"status": "unavailable"}, "pr_ready": {"status": "unavailable", "reason": "state unavailable"}},
             "evaluation": _evaluation(directory, reader), "usage": _usage([], ROOT), "next_action": {"reason_code": "state_unavailable", "label": "Inspect feature state"},
@@ -566,7 +566,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         "capture": {"stable": capture_stable, "input_fingerprint": digest, "freshness": freshness if capture_stable else "unstable", "captured_at": generated},
         "lifecycle": {"stage": stage, "step": step, "stage_status": {k: _safe_text(v, 30) for k, v in (state.get("stage_status") or {}).items() if k in STAGES}},
         "evidence": {
-            "checks": {"status": check_status, "recorded_passed": sum(1 for x in (latest_checks or {}).get("results", []) if isinstance(x, dict) and x.get("status") == "pass"), "required": sum(1 for x in (latest_checks or {}).get("results", []) if isinstance(x, dict) and x.get("required", True))},
+            "checks": {"status": check_status, "recorded_passed": sum(1 for x in (latest_checks or {}).get("results", []) if isinstance(x, dict) and x.get("required", True) and x.get("status") == "pass"), "required": sum(1 for x in (latest_checks or {}).get("results", []) if isinstance(x, dict) and x.get("required", True))},
             "review": {"status": review_status},
             "pr_ready": {"status": gate_status, "reason": None if gate_status != "unavailable" else "no sufficiently bound local gate receipt"},
         },
