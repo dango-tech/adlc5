@@ -177,8 +177,9 @@ Framework version: [core/VERSION](core/VERSION). Persisted state retains schema 
 
 ## Documentation website
 
-The [published user docs](https://dango-tech.github.io/adlc5/) in `website/docs/`
-cover overview, installation, quickstart, lifecycle, Intelligence, and reference.
+The [ADLC5 developer site](https://adlc5.dev/) in `website/docs/`
+covers installation, a first-feature walkthrough, lifecycle, troubleshooting,
+releases, Intelligence, and reference.
 The [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview)
 provides a project-level introduction. For a local preview:
 
@@ -189,6 +190,5 @@ python -m pip install -r requirements-docs.txt
 python -m mkdocs serve
 ```
 
-See [site maintenance and GitHub Pages setup](docs/documentation-site.md) for builds,
-validation, and publication. The workflow validates pull requests and can publish
-from the default branch after Pages is configured.
+See the [site maintenance and Vercel deployment guide](docs/documentation-site.md)
+for builds, validation, and manually triggered deployment.

@@ -1,6 +1,6 @@
 site_name: ADLC5
-site_description: "A repeatable AI coding delivery workflow: four stages connected by repository Intelligence and current evidence."
-site_url: !ENV [DOCS_SITE_URL, 'https://dango-tech.github.io/adlc5/']
+site_description: "Learn, install, and use ADLC5: a repeatable AI coding delivery workflow grounded in repository intelligence and current evidence."
+site_url: !ENV [DOCS_SITE_URL, 'https://adlc5.dev/']
 repo_url: https://github.com/dango-tech/adlc5
 docs_dir: website/docs
 site_dir: site
@@ -36,10 +36,13 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
 nav:
-  - Overview: index.md
+  - Home: index.md
   - Installation: installation.md
   - Quickstart: quickstart.md
+  - Walkthrough: walkthrough.md
   - Lifecycle: lifecycle.md
   - Running agents: running.md
   - Intelligence: intelligence.md
+  - Troubleshooting: support.md
+  - Releases: releases.md
   - Reference: reference.md
