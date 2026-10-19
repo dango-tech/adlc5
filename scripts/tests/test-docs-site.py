@@ -16,7 +16,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = "https://docs.example.test/adlc5/"
 PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
-         "lifecycle/index.html", "running/index.html", "intelligence/index.html", "reference/index.html")
+         "lifecycle/index.html", "running/index.html", "intelligence/index.html", "pulse/index.html", "reference/index.html")
 
 
 class Document(HTMLParser):
@@ -76,7 +76,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())
         locations = {entry["location"].split("#")[0] for entry in index["docs"]}
-        self.assertTrue({"", "installation/", "quickstart/", "lifecycle/", "running/", "intelligence/", "reference/"} <= locations)
+        self.assertTrue({"", "installation/", "quickstart/", "lifecycle/", "running/", "intelligence/", "pulse/", "reference/"} <= locations)
 
     def test_adlc5_cli_references_exist(self):
         surfaces = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"), *(ROOT / "website/docs").rglob("*.md")]
@@ -117,6 +117,9 @@ class DocsSiteTests(unittest.TestCase):
         for command in ("package-plugin.py", "claude --plugin-dir", "plugin-setup.sh"):
             self.assertIn(command, installation)
         self.assertNotIn("plugin-setup.py", installation)
+        pulse = " ".join(" ".join(self.documents["pulse/index.html"].text).split())
+        for term in ("on-demand", "offline", "complete_total_usd", "Cursor", "qualification"):
+            self.assertIn(term, pulse)
         for page in PAGES:
             self.assertNotIn("dango85", (self.site / page).read_text())
         self.assertTrue((self.site / "assets/brand/icon.svg").is_file())
