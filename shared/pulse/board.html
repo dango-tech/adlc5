@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-{{SCRIPT_HASH}}'; connect-src 'none'; img-src data:">
+  <title>ADLC5 Pulse · {{TITLE}}</title>
+  <style>{{CSS}}</style>
+</head>
+<body>
+  <header class="chrome">
+    <div class="brand"><img alt="" src="{{ICON}}"><strong>ADLC5</strong><span>Pulse</span></div>
+    <div class="workspace"><span class="eyebrow">Workspace</span><strong>{{TITLE}}</strong></div>
+    <span class="local-pill">Local snapshot</span>
+  </header>
+  <div class="band">
+    <label for="feature">Feature</label>
+    <select id="feature" aria-label="Select feature"></select>
+    <span class="band-divider" aria-hidden="true"></span>
+    <span class="muted" id="capture"></span>
+  </div>
+  <main>
+    <div id="features" aria-live="polite"></div>
+    <footer>Read-only snapshot · regenerate the board to refresh · repository evidence is shown as captured</footer>
+  </main>
+  <script id="snapshot" type="application/json">{{SNAPSHOT}}</script>
+  <script>{{SCRIPT}}</script>
+</body>
+</html>

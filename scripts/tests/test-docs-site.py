@@ -19,7 +19,7 @@ BASE_PATH = urlsplit(BASE_URL).path.rstrip("/") + "/"
 PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
          "walkthrough/index.html", "lifecycle/index.html", "running/index.html",
          "intelligence/index.html", "support/index.html", "releases/index.html",
-         "reference/index.html")
+         "pulse/index.html", "reference/index.html")
 
 
 class Document(HTMLParser):
@@ -81,7 +81,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())
         locations = {entry["location"].split("#")[0] for entry in index["docs"]}
-        self.assertTrue({"", "installation/", "quickstart/", "walkthrough/", "lifecycle/", "running/", "intelligence/", "support/", "releases/", "reference/"} <= locations)
+        self.assertTrue({"", "installation/", "quickstart/", "walkthrough/", "lifecycle/", "running/", "intelligence/", "support/", "releases/", "pulse/", "reference/"} <= locations)
 
     def test_adlc5_cli_references_exist(self):
         surfaces = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"), *(ROOT / "website/docs").rglob("*.md")]
@@ -122,6 +122,9 @@ class DocsSiteTests(unittest.TestCase):
         for command in ("package-plugin.py", "claude --plugin-dir", "plugin-setup.sh"):
             self.assertIn(command, installation)
         self.assertNotIn("plugin-setup.py", installation)
+        pulse = " ".join(" ".join(self.documents["pulse/index.html"].text).split())
+        for term in ("on-demand", "offline", "complete_total_usd", "Cursor", "qualification"):
+            self.assertIn(term, pulse)
         for page in PAGES:
             self.assertNotIn("dango85", (self.site / page).read_text())
         self.assertTrue((self.site / "assets/brand/icon.svg").is_file())

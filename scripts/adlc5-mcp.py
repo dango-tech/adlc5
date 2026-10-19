@@ -37,6 +37,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
@@ -55,6 +56,20 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
         "description": "Print ADLC5 semver (→ adlc5 version)",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "build": lambda _a: ["version"],
+    },
+    "adlc5_pulse": {
+        "description": "Read an on-demand ADLC5 Pulse snapshot without writing or running consumer commands",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workspace": {"type": "string"},
+                "feature": {"type": "string"},
+                "active_only": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+        "build": lambda a: ["pulse", "snapshot", *_opt("--workspace", a.get("workspace")), *_opt("--feature", a.get("feature")), *( ["--active-only"] if a.get("active_only") else [])],
     },
     "adlc5_gate": {
         "description": "Evaluate delivery/lifecycle gates (→ adlc5 gate)",
@@ -355,6 +370,7 @@ def list_tools() -> list[dict[str, Any]]:
             "name": name,
             "description": spec["description"],
             "inputSchema": spec["inputSchema"],
+            **({"annotations": spec["annotations"]} if "annotations" in spec else {}),
         }
         for name, spec in TOOL_SPECS.items()
     ]
@@ -506,12 +522,17 @@ def smoke() -> int:
     if names != set(TOOL_SPECS):
         print(f"FAIL: tool set mismatch {names ^ set(TOOL_SPECS)}", file=sys.stderr)
         return 1
+    pulse = next((tool for tool in list_tools() if tool["name"] == "adlc5_pulse"), None)
+    if not pulse or pulse.get("annotations", {}).get("readOnlyHint") is not True:
+        print("FAIL: Pulse MCP tool is not marked read-only", file=sys.stderr)
+        return 1
     init = handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": PROTOCOL_VERSION}})
     call = handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "adlc5_version", "arguments": {}}})
-    if not init or "result" not in init or not call or call["result"].get("isError"):
-        print(f"FAIL: protocol smoke: {init} {call}", file=sys.stderr)
+    pulse = handle_message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "adlc5_pulse", "arguments": {"workspace": str(ROOT)}}})
+    if not init or "result" not in init or not call or call["result"].get("isError") or not pulse or pulse["result"].get("isError"):
+        print(f"FAIL: protocol smoke: {init} {call} {pulse}", file=sys.stderr)
         return 1
-    print(json.dumps({"status": "ok", "tools": sorted(names), "version": f"adlc5 {read_version()}"}))
+    print(json.dumps({"status": "ok", "tools": sorted(names), "version": f"adlc5 {read_version()}", "pulse_read_only": True}))
     return 0
 
 
