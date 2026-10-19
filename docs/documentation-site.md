@@ -44,8 +44,9 @@ environments. Add these environment variables to each:
 
 Add `VERCEL_TOKEN` as an environment secret. Use a token scoped to the intended
 Vercel team/project. Configure production environment reviewers and branch
-restrictions where the repository plan supports them. The deployment workflow
-only runs from `main` and deploys to the `private-preview` environment.
+restrictions where the repository plan supports them. Merges and direct pushes
+to `main` refresh the private preview automatically; the workflow has no
+production deployment step. The manual dispatch option is limited to `main`.
 
 Enable Vercel Authentication for preview deployments and grant access only to
 the owner's Vercel account. Disable shareable links and automation bypasses.
@@ -53,16 +54,19 @@ Verify access in a signed-out browser; `noindex` is not access control. On the
 Hobby plan, standard protection does not protect production domains, so this
 workflow deliberately deploys previews only while the site must remain private.
 
-## Manually deploy
+## Refresh the private preview
 
-After Vercel and GitHub settings are ready:
+After Vercel and GitHub settings are ready, every push to `main` rebuilds and
+deploys the latest website to a new private Preview URL. A manual refresh is
+also available:
 
 1. Open **Actions → Deploy ADLC5 private preview → Run workflow** on `main`.
 2. Open the deployment URL from the workflow summary and check the exact commit.
 3. Verify owner access and denied anonymous access for private review.
 
-Pushes and pull requests run validation only. A GitHub Actions button is visible
-to repository users with sufficient Actions permission; Vercel Authentication
+Pull requests, including fork contributions, run validation only. Preview
+deployments use only merged `main` code. A GitHub Actions button is visible to
+repository users with sufficient Actions permission; Vercel Authentication
 controls who can read the deployed site. Do not share bypass URLs or secrets.
 
 ## Connect `adlc5.dev` at public launch
