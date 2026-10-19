@@ -55,3 +55,34 @@ jobs:
 
       - name: Distribution exclusions and publication inputs
         run: python3 scripts/tests/test-distribution.py
+
+  # Focused regressions for issue #20. The broader suites still assume symlinks
+  # and /bin/bash on Windows; see the follow-up PR before widening this job.
+  windows:
+    name: test (windows-latest)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash  # Git for Windows Bash, as contributors use it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Tooling on PATH
+        run: |
+          # Scripts call python3; native Windows Python installs only python.exe.
+          if ! command -v python3 >/dev/null; then
+            dir="$(dirname "$(command -v python)")"
+            cp "$dir/python.exe" "$dir/python3.exe"
+          fi
+          command -v jq >/dev/null || choco install jq --no-progress -y
+          for tool in bash python3 jq git; do printf '%s: %s\n' "$tool" "$(command -v "$tool")"; done
+          python3 -c 'import shutil; print("python sees bash:", shutil.which("bash"))'
+
+      - name: Windows regressions
+        run: |
+          python3 scripts/tests/test-windows-regressions.py -v
+          python3 scripts/tests/test-repository-context.py -v

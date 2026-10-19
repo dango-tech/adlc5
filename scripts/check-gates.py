@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -20,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from lib.adlc5_paths import delivery_state_path, load_delivery_state  # noqa: E402
@@ -48,7 +51,7 @@ def emit_telemetry(feature: str, event: str, status: str, phase: str, details: d
     env["ADLC5_WORKSPACE"] = str(Path(os.environ.get("ADLC5_WORKSPACE", ".")).resolve())
     subprocess.run(
         [
-            "bash",
+            BASH,
             "-c",
             f'source "{lib}" && telemetry_emit "{feature}" "{event}" "check-gates.py" "{status}" "{phase}" \'{details_json}\'',
         ],
@@ -739,7 +742,7 @@ def check_quality_gates(
         lint_script = SCRIPT_DIR / "run-lint.sh"
         if lint_script.is_file():
             proc = subprocess.run(
-                ["bash", str(lint_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(lint_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -778,7 +781,7 @@ def check_quality_gates(
         test_script = SCRIPT_DIR / "run-tests.sh"
         if test_script.is_file():
             proc = subprocess.run(
-                ["bash", str(test_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(test_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -817,7 +820,7 @@ def check_quality_gates(
         arch_script = SCRIPT_DIR / "check-architecture.sh"
         if arch_script.is_file():
             proc = subprocess.run(
-                ["bash", str(arch_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(arch_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )

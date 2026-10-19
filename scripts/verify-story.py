@@ -44,12 +44,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 sys.path.insert(0, str(ROOT))
 
 from lib.simple_yaml import load_frontmatter  # noqa: E402
@@ -235,7 +238,7 @@ def check_tests_declared_exist(workspace: Path, fm: dict) -> dict:
 def _run_json_script(script: Path, args: list[str]) -> tuple[int, dict | None, str]:
     if not script.is_file():
         return 2, None, f"missing: {script}"
-    proc = subprocess.run(["bash", str(script), *args], capture_output=True, text=True)
+    proc = subprocess.run([BASH, str(script), *args], capture_output=True, text=True)
     try:
         return proc.returncode, json.loads(proc.stdout), proc.stderr.strip()
     except json.JSONDecodeError:

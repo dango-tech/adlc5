@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "scripts" / "repository-context.py"
 FACADE = ROOT / "scripts" / "adlc5"
+# Windows cannot exec shebang scripts, and a bare "bash" there resolves to the
+# WSL launcher in System32 before PATH, so name the interpreters explicitly.
+BASH = shutil.which("bash") or "bash"
 
 
 class RepositoryContextTest(unittest.TestCase):
@@ -188,6 +192,7 @@ class RepositoryContextTest(unittest.TestCase):
     def test_kernel_and_existing_initializers_provide_repository_context(self) -> None:
         subprocess.run(
             [
+                BASH,
                 str(ROOT / "scripts" / "init-workspace.sh"),
                 "--project",
                 str(self.workspace),
@@ -201,14 +206,14 @@ class RepositoryContextTest(unittest.TestCase):
         self.assertTrue((self.workspace / ".agent-cache" / "repo-index.json").is_file())
 
         spec = subprocess.run(
-            [str(FACADE), "repo-spec", "validate", "--workspace", str(self.workspace)],
+            [sys.executable, str(FACADE), "repo-spec", "validate", "--workspace", str(self.workspace)],
             check=True,
             capture_output=True,
             text=True,
         )
         self.assertEqual(json.loads(spec.stdout)["status"], "ok")
         index = subprocess.run(
-            [str(FACADE), "repo-index", "check", "--workspace", str(self.workspace)],
+            [sys.executable, str(FACADE), "repo-index", "check", "--workspace", str(self.workspace)],
             check=True,
             capture_output=True,
             text=True,
@@ -219,6 +224,7 @@ class RepositoryContextTest(unittest.TestCase):
         creative.write_text(creative.read_text() + "\n# working change\n", encoding="utf-8")
         subprocess.run(
             [
+                BASH,
                 str(ROOT / "scripts" / "init-feature.sh"),
                 "--feature",
                 "repository-context-demo",
@@ -232,7 +238,7 @@ class RepositoryContextTest(unittest.TestCase):
             text=True,
         )
         refreshed = subprocess.run(
-            [str(FACADE), "repo-index", "check", "--workspace", str(self.workspace)],
+            [sys.executable, str(FACADE), "repo-index", "check", "--workspace", str(self.workspace)],
             check=True,
             capture_output=True,
             text=True,

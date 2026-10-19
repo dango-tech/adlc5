@@ -2967,6 +2967,19 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
+# Windows cannot check out paths with a reserved device name in any component
+# (aux, con, nul, com1, ...), even with an extension, so a clone fails there.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  RESERVED_PATHS=$(git ls-files -z | python3 -c '
+import re, sys
+reserved = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.IGNORECASE)
+paths = sys.stdin.read().split("\0")
+print("\n".join(p for p in paths if any(reserved.match(c) for c in p.split("/"))))
+')
+  [[ -z "$RESERVED_PATHS" ]] || fail "tracked paths use Windows reserved names: $RESERVED_PATHS"
+  pass "no tracked path uses a Windows reserved device name"
+fi
+
 for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
