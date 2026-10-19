@@ -143,6 +143,7 @@ class DocsSiteTests(unittest.TestCase):
             self.assertIn(f"- '{path}'", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("pull_request:", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
         self.assertIn("environment: private-preview", workflow)
 
 if __name__ == "__main__":
