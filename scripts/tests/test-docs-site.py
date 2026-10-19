@@ -133,6 +133,15 @@ class DocsSiteTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
+    def test_vercel_deployment_is_manual_and_main_only(self):
+        config = json.loads((ROOT / "vercel.json").read_text())
+        self.assertIs(config["git"]["deploymentEnabled"], False)
+        workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("environment: private-preview", workflow)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--site-dir", help="Check an existing MkDocs output instead of rebuilding")

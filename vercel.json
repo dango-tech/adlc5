@@ -3,5 +3,8 @@
   "installCommand": "python3 -m pip install -r requirements-docs.txt",
   "buildCommand": "python3 -m mkdocs build --strict",
   "outputDirectory": "site",
-  "framework": null
+  "framework": null,
+  "git": {
+    "deploymentEnabled": false
+  }
 }
