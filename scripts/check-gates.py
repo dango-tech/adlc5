@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 ROOT = SCRIPT_DIR.parent
 # A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
 BASH = shutil.which("bash") or "bash"
