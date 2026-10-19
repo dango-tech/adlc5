@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check native archive exclusions and current tracked publication inputs."""
 import io
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -17,6 +18,9 @@ PRIVATE = re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|'
 
 
 def main():
+    cursor_mcp = json.loads((ROOT / '.cursor-plugin/mcp.json').read_text())['mcpServers']['adlc5']
+    assert cursor_mcp['args'] == ['${CURSOR_PLUGIN_ROOT}/.cursor-plugin/run-mcp.sh']
+    assert cursor_mcp['cwd'] == '${CURSOR_PLUGIN_ROOT}'
     paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
     failures = []
     for name in filter(None, paths):
@@ -37,7 +41,10 @@ def main():
         names = set(archive.getnames())
     assert not any(n.startswith(FORBIDDEN + ('.github/',)) or n == 'AGENTS.md' for n in names), 'development files in archive'
     for required in ('scripts/adlc5', '.cursor-plugin/plugin.json', '.cursor/rules/current-information.mdc',
-                     '.claude/hooks/claude-usage.sh', '.codex/hooks/codex-usage.sh'):
+                     '.claude/hooks/claude-usage.sh', '.codex/hooks/codex-usage.sh',
+                     'scripts/pulse.py', 'scripts/lib/pulse.py', 'core/pulse-snapshot.schema.json',
+                     'skills/pulse/SKILL.md', 'shared/pulse/board.html', 'shared/pulse/board.css',
+                     'shared/pulse/board.js', 'assets/brand/icon.svg'):
         assert required in names, f'missing product asset: {required}'
     assert not failures, '\n'.join(failures)  # Paths only; never print potential secrets.
     print('PASS: tracked publication inputs and native archive exclusions')

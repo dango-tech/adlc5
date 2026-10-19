@@ -1,6 +1,6 @@
 # ADLC5 — Kernel reference
 
-**Version:** [`core/VERSION`](../core/VERSION) · **Paths:** repo root (`core/`, `skills/`, `scripts/`, …) — single 4.x tree
+**Version:** [`core/VERSION`](../core/VERSION) · **Paths:** repo root (`core/`, `skills/`, `scripts/`, …) — single 5.x tree
 
 ## Principles
 
@@ -122,6 +122,7 @@ sequenceDiagram
 | `adlc5 usage summary` | `scripts/memory/usage-ledger.py summary` (aggregate ledger by model/stage/token type + estimated `cost_usd` from `core/model-prices.yaml`) |
 | `adlc5 spec-lint` | `scripts/tasks/spec-lint.py` (lint code-spec YAML frontmatter — backs `tasks-2-code-spec-complete`) |
 | `adlc5 verify-story` | `scripts/verify-story.py` (deterministic per-story pre-check — feeds `implement-2-verify` additively when a story has frontmatter) |
+| `adlc5 pulse snapshot\|band\|board\|handoff` | `scripts/pulse.py` (on-demand local snapshot, offline board, cached band and handoff) |
 | `adlc5 version` | `core/VERSION` |
 
 Run: `./scripts/adlc5 --help`
@@ -145,7 +146,9 @@ Transport is standard MCP stdio: one JSON-RPC message per line, protocol-only st
 
 The CLI runs delegated scripts from the caller's cwd, so `--workspace .` always means the consumer repository.
 
-Tools (all shell `./scripts/adlc5`): `adlc5_version`, `adlc5_gate`, `adlc5_pack`, `adlc5_clarity`, `adlc5_phase`, `adlc5_pilot`, `adlc5_state_get`, `adlc5_state_set`, `adlc5_transition`, `adlc5_evidence`, `adlc5_repo_spec`, `adlc5_repo_index`, `adlc5_resolve_model`.
+Tools (all shell `./scripts/adlc5`): `adlc5_version`, read-only `adlc5_pulse`, `adlc5_gate`, `adlc5_pack`, `adlc5_clarity`, `adlc5_phase`, `adlc5_pilot`, `adlc5_state_get`, `adlc5_state_set`, `adlc5_transition`, `adlc5_evidence`, `adlc5_repo_spec`, `adlc5_repo_index`, `adlc5_resolve_model`.
+
+See [ADLC5 Pulse](pulse.md) for snapshot freshness, local cache, accounting, and board boundaries.
 
 ## Agent Plugin packaging
 

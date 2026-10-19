@@ -2,9 +2,11 @@
 from __future__ import annotations
 import hashlib
 import json
+import os
+import stat
+import time
 import subprocess
 import sys
-import time
 from pathlib import Path
 from datetime import datetime, timezone
 from lib.state_v2 import load_feature_state, set_feature_state, is_human_approver
@@ -19,18 +21,113 @@ def folder(workspace, feature):
     return workspace / '.adlc5' / feature / 'evidence'
 
 
-def fingerprint(workspace: Path, feature: str) -> str:
-    """Hash HEAD/index/working inputs; exclude generated state/logs."""
-    # ponytail: full repository scan; scope fingerprints only if measured latency matters.
+def gate_dependency_digest(workspace: Path, feature: str) -> str:
+    """Digest gate-relevant mutable inputs excluded from the canonical repository fingerprint."""
+    base = workspace / '.adlc5' / feature
+    paths = [base / 'state.json', base / 'policies.yaml', base / 'evidence' / 'checks.json',
+             base / 'evidence' / 'completion.jsonl', base / 'memory' / 'INDEX.md']
+    paths.extend((base / 'tasks' / 'code-spec').glob('*.md'))
+    paths.extend((base / 'memory' / 'summaries').glob('*.md'))
+    qa = workspace / '.qa' / feature
+    if qa.exists():
+        paths.extend(p for p in qa.rglob('*') if p.is_file() or p.is_symlink())
+    unique = sorted(set(paths), key=lambda p: p.relative_to(workspace).as_posix())
+    if len(unique) > 10_000:
+        raise ValueError('gate dependency file-count limit exceeded')
+    digest = hashlib.sha256(b'adlc5-gate-dependencies-v1\0')
+    total = 0
+    started = time.monotonic()
+    for path in unique:
+        if time.monotonic() - started > 2:
+            raise ValueError('gate dependency time limit exceeded')
+        relative = path.relative_to(workspace)
+        current = workspace
+        missing = False
+        info = None
+        for part in relative.parts:
+            current = current / part
+            try:
+                info = current.lstat()
+            except FileNotFoundError:
+                missing = True
+                break
+            if stat.S_ISLNK(info.st_mode):
+                raise ValueError('gate dependency symlink refused')
+        name = relative.as_posix().encode()
+        digest.update(name + b'\0')
+        if missing:
+            digest.update(b'<missing>')
+            continue
+        if info is None or not stat.S_ISREG(info.st_mode):
+            raise ValueError('gate dependency is not a regular file')
+        if info.st_size > 8 * 1024 * 1024:
+            raise ValueError('gate dependency exceeds 8 MiB limit')
+        total += info.st_size
+        if total > 128 * 1024 * 1024:
+            raise ValueError('gate dependency aggregate limit exceeded')
+        fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        try:
+            before = os.fstat(fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_size != info.st_size:
+                raise ValueError('gate dependency changed during read')
+            with os.fdopen(fd, 'rb', closefd=False) as stream:
+                data = stream.read(8 * 1024 * 1024 + 1)
+            after = os.fstat(fd)
+        finally:
+            os.close(fd)
+        if len(data) > 8 * 1024 * 1024 or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+            raise ValueError('gate dependency changed during read')
+        digest.update(data)
+    return digest.hexdigest()
+
+
+def gate_evaluator_id(root: Path) -> str:
+    digest = hashlib.sha256(b'adlc5-gate-evaluator-v1\0')
+    for path in (root / 'core' / 'gates.yaml', root / 'core' / 'personas.yaml',
+                 root / 'scripts' / 'check-gates.py', root / 'scripts' / 'lib' / 'personas_load.py',
+                 root / 'scripts' / 'lib' / 'policies_load.py', root / 'scripts' / 'lib' / 'completion_evidence.py',
+                 root / 'scripts' / 'lib' / 'state_v2.py'):
+        digest.update(path.relative_to(root).as_posix().encode() + b'\0')
+        digest.update(path.read_bytes())
+    return 'adlc5-gate-v1:' + digest.hexdigest()
+
+
+def fingerprint(workspace: Path, feature: str, *, safe_reader=None, state_override=None) -> str:
+    """Hash canonical inputs; safe_reader enables prevalidated bounded reads for Pulse."""
+    if safe_reader is not None:
+        workspace = workspace.resolve(strict=True)
     h = hashlib.sha256()
-    head = subprocess.run(['git', '-C', str(workspace), 'rev-parse', 'HEAD'], capture_output=True, check=True).stdout
+    if safe_reader is None:
+        head = subprocess.run(['git', '-C', str(workspace), 'rev-parse', 'HEAD'], capture_output=True, check=True).stdout
+        index = subprocess.run(['git', '-C', str(workspace), 'ls-files', '-s', '-z'], capture_output=True, check=True).stdout
+        listing = subprocess.run(['git', '-C', str(workspace), 'ls-files', '-co', '--exclude-standard', '-z'], capture_output=True, check=True).stdout
+    else:
+        def bounded_git(args, maximum):
+            proc = subprocess.Popen(['git', '-C', str(workspace), *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                data = proc.stdout.read(maximum + 1)
+                if len(data) > maximum:
+                    proc.kill()
+                    raise ValueError('fingerprint git output limit exceeded')
+                proc.wait(timeout=2)
+            except Exception:
+                proc.kill()
+                proc.wait()
+                raise
+            finally:
+                proc.stdout.close()
+            if proc.returncode:
+                raise subprocess.CalledProcessError(proc.returncode, args)
+            return data
+        head = bounded_git(['rev-parse', 'HEAD'], 4096)
+        index = bounded_git(['ls-files', '-s', '-z'], 16 * 1024 * 1024)
+        listing = bounded_git(['ls-files', '-co', '--exclude-standard', '-z'], 16 * 1024 * 1024)
     h.update(head)
-    h.update(subprocess.run(['git', '-C', str(workspace), 'ls-files', '-s', '-z'], capture_output=True, check=True).stdout)
-    state = load_feature_state(workspace, feature) or {}
+    h.update(index)
+    state = state_override if state_override is not None else load_feature_state(workspace, feature) or {}
     contract = {"tasks": [{k: v for k, v in story.items() if k != "status"} for story in (state.get("tasks") or {}).get("stories", [])], "scope": state.get("scope"), "git": state.get("git"), "acceptance_anchor": state.get("acceptance_anchor")}
     h.update(json.dumps(contract, sort_keys=True).encode())
-    proc = subprocess.run(['git', '-C', str(workspace), 'ls-files', '-co', '--exclude-standard', '-z'], capture_output=True, check=True)
-    names = set(proc.stdout.decode().split('\0')) - {''}
+    names = set(listing.decode().split('\0')) - {''}
     for story in (state.get('tasks') or {}).get('stories', []):
         names.update(story.get('files') or [])
     names.add('config.yaml')
@@ -42,14 +139,23 @@ def fingerprint(workspace: Path, feature: str) -> str:
         names.update(str(p.relative_to(workspace)) for p in qa.rglob('*') if p.is_file())
     base = workspace / '.adlc5' / feature
     if base.exists():
-        names.update(str(p.relative_to(workspace)) for p in base.rglob('*') if p.is_file())
+        names.update(str(p.relative_to(workspace)) for p in base.rglob('*') if p.is_file() or p.is_symlink())
     from lib.simple_yaml import load_frontmatter
-    for spec in (base / 'tasks/code-spec').glob('*.md'):
-        fm, _ = load_frontmatter(spec.read_text())
+    specs = list((base / 'tasks/code-spec').glob('*.md'))
+    if safe_reader is not None:
+        safe_reader.prepare(specs)
+    for spec in specs:
+        if safe_reader is None:
+            spec_text = spec.read_text()
+        else:
+            spec_bytes = safe_reader.read(spec)
+            spec_text = spec_bytes.decode('utf-8') if spec_bytes is not None else ''
+        fm, _ = load_frontmatter(spec_text)
         if fm:
             names.update(fm.get('files_to_create') or [])
             names.update(fm.get('files_to_modify') or [])
             names.update(t.get('file') for t in fm.get('tests', []) if isinstance(t, dict) and t.get('file'))
+    eligible = []
     for name in sorted(names):
         if Path(name).is_absolute() or '..' in Path(name).parts:
             raise ValueError('declared fingerprint path escapes workspace')
@@ -60,9 +166,20 @@ def fingerprint(workspace: Path, feature: str) -> str:
             continue
         if name.startswith('.agent-cache/') or name.startswith(f'.adlc5/{feature}/pilot/') or name.startswith('.adlc5/') and (name.endswith('/state.json') or '/memory/' in name or '/telemetry/' in name or '/evidence/' in name and not name.endswith('/evidence/checks.json')):
             continue
+        eligible.append(name)
+    if safe_reader is not None:
+        safe_reader.prepare([workspace / name for name in eligible])
+    for name in eligible:
         path = workspace / name
         h.update(name.encode())
-        if path.is_symlink():
+        if safe_reader is not None:
+            data = safe_reader.read(path)
+            if data is None:
+                h.update(b'<deleted>')
+            else:
+                h.update(data)
+                h.update(str(path.lstat().st_mode & 0o777).encode())
+        elif path.is_symlink():
             h.update(str(path.readlink()).encode())
             if path.is_file():
                 h.update(path.read_bytes())
