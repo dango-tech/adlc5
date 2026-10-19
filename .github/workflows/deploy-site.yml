@@ -10,6 +10,7 @@ on:
       - 'requirements-docs.txt'
       - 'vercel.json'
       - 'website/docs/**'
+      - 'website/overrides/**'
   workflow_dispatch:
 
 permissions:

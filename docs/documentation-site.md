@@ -48,6 +48,11 @@ restrictions where the repository plan supports them. Merges and direct pushes
 to `main` refresh the private preview automatically; the workflow has no
 production deployment step. The manual dispatch option is limited to `main`.
 
+Enable Web Analytics from the project's **Analytics** page before the first
+deployment with analytics enabled. The generated MkDocs pages load Vercel's
+`/_vercel/insights/script.js` endpoint only when built for `adlc5.dev`; legacy
+subpath builds omit the script.
+
 Enable Vercel Authentication for preview deployments and grant access only to
 the owner's Vercel account. Disable shareable links and automation bypasses.
 Verify access in a signed-out browser; `noindex` is not access control. On the

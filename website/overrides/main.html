@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block analytics %}
+  {{ super() }}
+  {% if config.site_url.startswith("https://adlc5.dev/") %}
+    <script>
+      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+  {% endif %}
+{% endblock %}

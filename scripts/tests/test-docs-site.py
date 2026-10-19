@@ -67,6 +67,8 @@ class DocsSiteTests(unittest.TestCase):
                 target = urlsplit(urljoin(BASE_URL + source, link))
                 if target.netloc != urlsplit(BASE_URL).netloc:
                     continue
+                if target.path == "/_vercel/insights/script.js":
+                    continue  # Served by Vercel's analytics route, not the static build.
                 with self.subTest(source=source, link=link):
                     self.assertTrue(target.path.startswith(BASE_PATH), "Escapes configured site path")
                     relative = unquote(target.path.removeprefix(BASE_PATH))
@@ -124,6 +126,14 @@ class DocsSiteTests(unittest.TestCase):
             self.assertNotIn("dango85", (self.site / page).read_text())
         self.assertTrue((self.site / "assets/brand/icon.svg").is_file())
 
+    def test_vercel_analytics_is_limited_to_root_domain_builds(self):
+        enabled = urlsplit(BASE_URL).hostname == "adlc5.dev" and urlsplit(BASE_URL).path == "/"
+        for page in PAGES:
+            with self.subTest(page=page):
+                scripts = [link for link in self.documents[page].links
+                           if link == "/_vercel/insights/script.js"]
+                self.assertEqual(len(scripts), int(enabled))
+
     def test_workflow_actions_are_sha_pinned(self):
         workflow = (ROOT / ".github/workflows/docs.yml").read_text()
         deploy_workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
@@ -139,7 +149,7 @@ class DocsSiteTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         self.assertRegex(workflow, r"(?m)^  push:\n    branches: \[main\]$")
         for path in ("assets/brand/**", "mkdocs.yml", "requirements-docs.txt",
-                     "vercel.json", "website/docs/**"):
+                     "vercel.json", "website/docs/**", "website/overrides/**"):
             self.assertIn(f"- '{path}'", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("pull_request:", workflow)

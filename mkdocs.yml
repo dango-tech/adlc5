@@ -9,6 +9,7 @@ exclude_docs: |
   assets/brand/banner.txt
 theme:
   name: material
+  custom_dir: website/overrides
   font: false
   logo: assets/brand/icon.svg
   favicon: assets/brand/icon.svg
