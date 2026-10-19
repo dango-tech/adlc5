@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,8 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 VERSION_FILE = ROOT / "core" / "VERSION"
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 
 sys.path.insert(0, str(SCRIPTS))
 from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
@@ -205,7 +208,7 @@ def cmd_pack(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_clarity(args: list[str]) -> int:
@@ -239,7 +242,7 @@ def cmd_phase(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_pilot(args: list[str]) -> int:
@@ -247,7 +250,7 @@ def cmd_pilot(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_run(args: list[str]) -> int:
@@ -260,7 +263,7 @@ def cmd_resolve_model(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_config(args: list[str]) -> int:
@@ -499,7 +502,7 @@ def cmd_cleanup_features(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_repository_context(area: str, args: list[str]) -> int:
@@ -657,7 +660,7 @@ def cmd_patterns(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *rest])
+    return run([BASH, str(script), *rest])
 
 
 def cmd_pulse(args: list[str]) -> int:
