@@ -177,7 +177,7 @@ Framework version: [core/VERSION](core/VERSION). Persisted state retains schema 
 
 ## Documentation website
 
-The [ADLC5 developer site](https://adlc5.dev/) in `website/docs/`
+The [ADLC5 developer site](https://dango-tech.github.io/adlc5/) in `website/docs/`
 covers installation, a first-feature walkthrough, lifecycle, troubleshooting,
 releases, Intelligence, and reference.
 The [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview)
