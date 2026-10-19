@@ -115,6 +115,7 @@ export const register: Register = on => {
           {feature && <Text color={statusColor(feature.evidence?.checks?.status)}>checks {feature.evidence?.checks?.status ?? 'unavailable'}</Text>}
           {feature && <Text color={statusColor(feature.evidence?.pr_ready?.status)}>gate {feature.evidence?.pr_ready?.status ?? 'unavailable'}</Text>}
           {typeof knownCost === 'number' && Number.isFinite(knownCost) && <Text>${knownCost.toFixed(2)} known</Text>}
+          <Box flexGrow={1} />
           <Button key="review" plain onPress={() => $.command.run({ command: 'adlc5:craftsmanship-code-review', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Review failed: ${String(error).slice(0, 160)}`))}>Review</Button>
           <Button key="audit" plain onPress={() => $.command.run({ command: 'adlc5:qa', args: feature?.id ?? '' }).catch(error => $.ui.toast(`Pulse Audit failed: ${String(error).slice(0, 160)}`))}>Audit</Button>
           <Button key="board" plain onPress={openBoard}>Board</Button>
