@@ -148,6 +148,7 @@ class DocsSiteTests(unittest.TestCase):
 
     def test_vercel_preview_deploys_main_changes_and_manual_dispatch_only(self):
         config = json.loads((ROOT / "vercel.json").read_text())
+        self.assertEqual(config["installCommand"], "uv pip install --system -r requirements-docs.txt")
         self.assertIs(config["git"]["deploymentEnabled"], False)
         workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         self.assertRegex(workflow, r"(?m)^  push:\n    branches: \[main\]$")

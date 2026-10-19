@@ -32,8 +32,9 @@ or generated files.
 
 Create one Vercel project connected to `dango-tech/adlc5`, with repository root
 as its root directory. Keep the framework preset as **Other**. `vercel.json`
-sets the pinned dependency install command, strict MkDocs build, and `site`
-output directory. `vercel.json` disables Git-triggered deployments, while
+uses Vercel's `uv`-managed Python environment to install the pinned docs
+dependencies, run a strict MkDocs build, and publish the `site` output
+directory. `vercel.json` disables Git-triggered deployments, while
 leaving Vercel CLI deployments from the manual GitHub Actions workflow enabled.
 
 In GitHub repository settings, create `private-preview` and `production`
