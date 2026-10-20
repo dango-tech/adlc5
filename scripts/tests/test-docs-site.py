@@ -140,8 +140,9 @@ class DocsSiteTests(unittest.TestCase):
     def test_workflow_actions_are_sha_pinned(self):
         workflow = (ROOT / ".github/workflows/docs.yml").read_text()
         deploy_workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
-        actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow + deploy_workflow, re.MULTILINE)
-        self.assertEqual(len(actions), 4)
+        release_workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
+        actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow + deploy_workflow + release_workflow, re.MULTILINE)
+        self.assertEqual(len(actions), 5)
         for action in actions:
             with self.subTest(action=action):
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
@@ -149,7 +150,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_vercel_preview_deploys_main_changes_and_manual_dispatch_only(self):
         config = json.loads((ROOT / "vercel.json").read_text())
         self.assertEqual(config["installCommand"], "uv pip install --system -r requirements-docs.txt")
-        self.assertIs(config["git"]["deploymentEnabled"], False)
+        self.assertEqual(config["git"]["deploymentEnabled"], {"main": False})
         workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         self.assertRegex(workflow, r"(?m)^  push:\n    branches: \[main\]$")
         for path in ("assets/brand/**", "mkdocs.yml", "requirements-docs.txt",
@@ -159,6 +160,15 @@ class DocsSiteTests(unittest.TestCase):
         self.assertNotIn("pull_request:", workflow)
         self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
         self.assertIn("environment: private-preview", workflow)
+
+    def test_production_release_is_manual_and_gated(self):
+        workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main' && inputs.preview_verified", workflow)
+        self.assertIn("environment: production", workflow)
+        self.assertIn("preview_verified:", workflow)
+        self.assertIn("vercel deploy --prod --yes", workflow)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

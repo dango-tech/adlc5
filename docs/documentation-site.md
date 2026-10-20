@@ -34,8 +34,9 @@ Create one Vercel project connected to `dango-tech/adlc5`, with repository root
 as its root directory. Keep the framework preset as **Other**. `vercel.json`
 uses Vercel's `uv`-managed Python environment to install the pinned docs
 dependencies, run a strict MkDocs build, and publish the `site` output
-directory. `vercel.json` disables Git-triggered deployments, while
-leaving Vercel CLI deployments from the manual GitHub Actions workflow enabled.
+directory. Vercel automatically creates Preview deployments for PR branches;
+the config disables Git-triggered deployments only for `main`, so a merge
+cannot publish production automatically.
 
 In GitHub repository settings, create `private-preview` and `production`
 environments. Add these environment variables to each:
@@ -46,8 +47,10 @@ environments. Add these environment variables to each:
 Add `VERCEL_TOKEN` as an environment secret. Use a token scoped to the intended
 Vercel team/project. Configure production environment reviewers and branch
 restrictions where the repository plan supports them. Merges and direct pushes
-to `main` refresh the private preview automatically; the workflow has no
-production deployment step. The manual dispatch option is limited to `main`.
+to `main` refresh the private preview automatically. After that preview is
+verified in Vercel, run **Actions → Release ADLC5 site to production** on
+`main`, confirm the preview check, and approve the `production` environment gate
+before deployment.
 
 Enable Web Analytics from the project's **Analytics** page before the first
 deployment with analytics enabled. The generated MkDocs pages load Vercel's
@@ -57,8 +60,8 @@ subpath builds omit the script.
 Enable Vercel Authentication for preview deployments and grant access only to
 the owner's Vercel account. Disable shareable links and automation bypasses.
 Verify access in a signed-out browser; `noindex` is not access control. On the
-Hobby plan, standard protection does not protect production domains, so this
-workflow deliberately deploys previews only while the site must remain private.
+Hobby plan, standard protection does not protect production deployments. Keep
+the production release workflow unused until the site is meant to be public.
 
 ## Refresh the private preview
 
@@ -70,10 +73,12 @@ also available:
 2. Open the deployment URL from the workflow summary and check the exact commit.
 3. Verify owner access and denied anonymous access for private review.
 
-Pull requests, including fork contributions, run validation only. Preview
-deployments use only merged `main` code. A GitHub Actions button is visible to
-repository users with sufficient Actions permission; Vercel Authentication
-controls who can read the deployed site. Do not share bypass URLs or secrets.
+Pull requests receive Vercel Preview deployments and run validation. Vercel
+requires a maintainer to authorize previews from forks. The stable private
+review deployment uses only merged `main` code. A GitHub Actions button is
+visible to repository users with sufficient Actions permission; Vercel
+Authentication controls who can read the deployment. Do not share bypass URLs
+or secrets.
 
 ## Connect `adlc5.dev` at public launch
 

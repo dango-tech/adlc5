@@ -5,6 +5,8 @@
   "outputDirectory": "site",
   "framework": null,
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": {
+      "main": false
+    }
   }
 }
