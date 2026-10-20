@@ -56,7 +56,7 @@ if [[ "$GH_AUTH" != "true" ]]; then
   exit 1
 fi
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 cd "$WORKSPACE"
 [[ -n "$BRANCH" ]] || BRANCH=$(echo "$DETECT" | jq -r '.branch')
 

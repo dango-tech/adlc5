@@ -33,7 +33,7 @@ command -v jq >/dev/null || { echo "jq required" >&2; exit 2; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../lib/adlc5-paths.sh
 source "${SCRIPT_DIR}/lib/adlc5-paths.sh"
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 EVENTS="${FEATURE_DIR}/telemetry/events.jsonl"
 CLEARANCE="${WORKSPACE}/.qa/${FEATURE}/deployment-clearance.md"

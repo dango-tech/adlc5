@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from lib.completion_evidence import run_checks
+from lib.completion_evidence import SHELL, run_checks
 from lib.policies_load import load_policies, load_policies_file
 
 spec = importlib.util.spec_from_file_location('gates', ROOT / 'scripts/check-gates.py')
@@ -143,7 +143,7 @@ class Reliability(unittest.TestCase):
             (self.feature / 'evidence/checks.json').write_text(json.dumps(checks))
             with patch('lib.completion_evidence.subprocess.run', wraps=real_run) as runner:
                 result = run_checks(self.workspace, 'demo')
-                self.assertEqual(sum(c.args[0] == command for c in runner.call_args_list), expected)
+                self.assertEqual(sum(c.args[0] == [SHELL, '-c', command] for c in runner.call_args_list), expected)
             self.assertGreaterEqual(result['duration_ms'], 0)
             if expected == 1:
                 self.assertEqual(result['results'][1]['reused_from'], 'acceptance')
@@ -159,7 +159,7 @@ class Reliability(unittest.TestCase):
         with patch('lib.completion_evidence.subprocess.run', wraps=real_run) as runner:
             run_checks(self.workspace, 'demo')
             run_checks(self.workspace, 'demo')
-            self.assertEqual(sum(c.args[0] == 'true' for c in runner.call_args_list), 4)
+            self.assertEqual(sum(c.args[0] == [SHELL, '-c', 'true'] for c in runner.call_args_list), 4)
 
     def test_different_directories_are_not_reused(self):
         (self.workspace / 'nested').mkdir()
@@ -169,7 +169,7 @@ class Reliability(unittest.TestCase):
         real_run = subprocess.run
         with patch('lib.completion_evidence.subprocess.run', wraps=real_run) as runner:
             result = run_checks(self.workspace, 'demo')
-            self.assertEqual(sum(c.args[0] == 'true' for c in runner.call_args_list), 2)
+            self.assertEqual(sum(c.args[0] == [SHELL, '-c', 'true'] for c in runner.call_args_list), 2)
         self.assertNotIn('reused_from', result['results'][1])
 
     def test_timed_out_commands_are_not_reused(self):
@@ -178,12 +178,12 @@ class Reliability(unittest.TestCase):
             {'id': 'integration', 'command': 'true'}]))
         real_run = subprocess.run
         def timeout(command, *args, **kwargs):
-            if command == 'true':
+            if command == [SHELL, '-c', 'true']:
                 raise subprocess.TimeoutExpired(command, kwargs['timeout'])
             return real_run(command, *args, **kwargs)
         with patch('lib.completion_evidence.subprocess.run', side_effect=timeout) as runner:
             result = run_checks(self.workspace, 'demo')
-            self.assertEqual(sum(c.args[0] == 'true' for c in runner.call_args_list), 2)
+            self.assertEqual(sum(c.args[0] == [SHELL, '-c', 'true'] for c in runner.call_args_list), 2)
         self.assertTrue(all(r['status'] == 'fail' for r in result['results']))
         self.assertNotIn('reused_from', result['results'][1])
 

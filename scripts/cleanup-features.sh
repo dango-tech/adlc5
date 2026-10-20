@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ADLC5_DIR="${WORKSPACE}/.adlc5"
 ARCHIVE_DIR="${ADLC5_DIR}/_archive"
 STAMP="$(date +%Y%m%d)"

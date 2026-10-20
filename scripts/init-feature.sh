@@ -42,7 +42,7 @@ done
   exit 1
 }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/adlc5-dirs.sh
 source "${ROOT}/scripts/lib/adlc5-dirs.sh"

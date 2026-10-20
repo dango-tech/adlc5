@@ -1,5 +1,6 @@
 """Regression checks for pilot metadata initialization and wall-clock start."""
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -16,7 +17,7 @@ def check(existing: bool) -> None:
         if existing:
             meta.write_text('{"run_id":"prior","iteration_count":0}')
         proc = subprocess.run(
-            ["bash", str(ROOT / "scripts/pilot-autopilot.sh"), "--feature", "demo", "--workspace", str(workspace)],
+            [shutil.which("bash") or "bash", str(ROOT / "scripts/pilot-autopilot.sh"), "--feature", "demo", "--workspace", str(workspace)],
             capture_output=True, text=True, check=False,
         )
         assert proc.returncode == 2 and "state.json missing" in proc.stdout

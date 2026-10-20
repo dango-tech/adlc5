@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import time
 import subprocess
@@ -11,6 +12,10 @@ from pathlib import Path
 from datetime import datetime, timezone
 from lib.state_v2 import load_feature_state, set_feature_state, is_human_approver
 from lib.policies_load import load_policies, find_policies_path, profile_name, next_step_for_profile, profile_risk_errors, step_enabled
+
+# Check commands are POSIX shell. /bin/sh -c is exactly what shell=True runs on
+# POSIX; on Windows shell=True would mean cmd.exe, so use Git Bash there.
+SHELL = '/bin/sh' if os.name != 'nt' else shutil.which('bash') or 'bash'
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -133,13 +138,13 @@ def fingerprint(workspace: Path, feature: str, *, safe_reader=None, state_overri
     names.add('config.yaml')
     policy_path = find_policies_path(workspace, feature)
     if policy_path is not None:
-        names.add(str(policy_path.relative_to(workspace)))
+        names.add(policy_path.relative_to(workspace).as_posix())
     qa = workspace / '.qa' / feature
     if qa.exists():
-        names.update(str(p.relative_to(workspace)) for p in qa.rglob('*') if p.is_file())
+        names.update(p.relative_to(workspace).as_posix() for p in qa.rglob('*') if p.is_file())
     base = workspace / '.adlc5' / feature
     if base.exists():
-        names.update(str(p.relative_to(workspace)) for p in base.rglob('*') if p.is_file() or p.is_symlink())
+        names.update(p.relative_to(workspace).as_posix() for p in base.rglob('*') if p.is_file() or p.is_symlink())
     from lib.simple_yaml import load_frontmatter
     specs = list((base / 'tasks/code-spec').glob('*.md'))
     if safe_reader is not None:
@@ -249,7 +254,7 @@ def run_checks(workspace, feature):
         check_started = time.monotonic()
         with output.open('w') as stream:
             try:
-                proc = subprocess.run(command, shell=True, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+                proc = subprocess.run([SHELL, '-c', command], cwd=cwd, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
             except subprocess.TimeoutExpired:
                 results.append({'id': item['id'], 'required': item.get('required', True), 'command': command, 'cwd': str(cwd), 'status': 'fail', 'reason': f'timeout after {timeout} seconds', 'output': str(output.relative_to(workspace)), 'duration_ms': round((time.monotonic() - check_started) * 1000)})
                 continue
