@@ -82,6 +82,28 @@ class TelemetryShareTests(unittest.TestCase):
             stream.write(json.dumps({"event": "script.end", "status": "pass"}) + "\n")
         self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 1)
 
+    def test_replaced_or_truncated_files_do_not_reuse_old_offsets(self):
+        _, cursor = share.prepare_aggregate(self.workspace)
+        share._write_cursor(self.workspace, cursor)
+        for count in (1, 3, 5):
+            with self.subTest(new_lines=count):
+                self.events.write_text((json.dumps({"event": "checkpoint", "status": "pass"}) + "\n") * count)
+                self.assertEqual(share.aggregate(self.workspace)["events"]["checkpoint"], count)
+
+    def test_legacy_line_only_cursor_is_reset_safely(self):
+        share._write_cursor(self.workspace, {"secret-feature/telemetry/events.jsonl": 3})
+        self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 1)
+
+    def test_non_ascii_feedback_is_sent_as_utf8_under_body_limit(self):
+        payload = share.feedback_payload(5, "idea", "😀" * 600)
+        with patch.object(share.urllib.request, "urlopen") as opening:
+            opening.return_value.__enter__.return_value.status = 202
+            share.post_payload("https://example.invalid", "/v1/feedback", payload)
+        body = opening.call_args.args[0].data
+        self.assertLessEqual(len(body), 4096)
+        self.assertIn("😀".encode("utf-8"), body)
+        self.assertEqual(json.loads(body), payload)
+
     def test_send_previews_the_queued_payload_not_newer_events(self):
         share.set_enabled(self.workspace, True)
         payload, cursor = share.prepare_aggregate(self.workspace)

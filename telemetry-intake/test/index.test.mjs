@@ -75,3 +75,10 @@ test("database failure returns generic error without reflecting payload", async 
   assert.equal(response.status, 503);
   assert.doesNotMatch(await response.text(), /private/);
 });
+
+test("feedback counts Unicode code points and accepts UTF-8 emoji requests", async () => {
+  const payload = { schema_version: 1, kind: "feedback", rating: 5, category: "idea", text: "😀".repeat(600) };
+  assert.equal(validateFeedback({ ...payload, text: "😀".repeat(1000) }), true);
+  assert.equal(validateFeedback({ ...payload, text: "😀".repeat(1001) }), false);
+  assert.equal((await handleRequest(request("/v1/feedback", payload), envFor())).status, 202);
+});

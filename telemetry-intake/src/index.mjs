@@ -20,7 +20,7 @@ export function validateAggregate(value) {
 
 export function validateFeedback(value) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key => !["schema_version", "kind", "rating", "category", "text"].includes(key)) || !["schema_version", "kind", "rating", "category"].every(key => Object.hasOwn(value, key))) return false;
-  return value.schema_version === 1 && value.kind === "feedback" && Number.isInteger(value.rating) && value.rating >= 1 && value.rating <= 5 && FEEDBACK_CATEGORIES.includes(value.category) && (value.text === undefined || typeof value.text === "string" && value.text.length <= 1000);
+  return value.schema_version === 1 && value.kind === "feedback" && Number.isInteger(value.rating) && value.rating >= 1 && value.rating <= 5 && FEEDBACK_CATEGORIES.includes(value.category) && (value.text === undefined || typeof value.text === "string" && [...value.text].length <= 1000);
 }
 
 async function readBody(request) {

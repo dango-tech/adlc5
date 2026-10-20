@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -60,7 +61,7 @@ def set_enabled(workspace: Path, enabled: bool) -> None:
     tmp.replace(path)
 
 
-def prepare_aggregate(workspace: Path) -> tuple[dict[str, Any], dict[str, int]]:
+def prepare_aggregate(workspace: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     events = Counter({key: 0 for key in EVENT_BUCKETS})
     statuses = Counter({key: 0 for key in STATUS_BUCKETS})
     root = workspace / ".adlc5"
@@ -70,16 +71,20 @@ def prepare_aggregate(workspace: Path) -> tuple[dict[str, Any], dict[str, int]]:
             previous = {}
     except (OSError, ValueError):
         previous = {}
-    cursor: dict[str, int] = {}
+    cursor: dict[str, Any] = {}
     for path in sorted(root.glob("*/telemetry/events.jsonl")):
         if path.stat().st_size > MAX_EVENT_FILE:
             raise ValueError(f"local event file exceeds {MAX_EVENT_FILE} bytes: {path}")
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         key = path.relative_to(root).as_posix()
-        offset = previous.get(key, 0)
-        if not isinstance(offset, int) or offset < 0 or offset > len(lines):
+        saved = previous.get(key, {})
+        if not isinstance(saved, dict):
+            saved = {}  # Legacy line-only cursors cannot prove the file is unchanged.
+        offset = saved.get("lines", 0)
+        if (type(offset) is not int or offset < 0 or offset > len(lines)
+                or saved.get("prefix_sha256") != hashlib.sha256("\n".join(lines[:offset]).encode()).hexdigest()):
             offset = 0
-        cursor[key] = len(lines)
+        cursor[key] = {"lines": len(lines), "prefix_sha256": hashlib.sha256("\n".join(lines).encode()).hexdigest()}
         for line in lines[offset:]:
             try:
                 record = json.loads(line)
@@ -125,7 +130,7 @@ def _write_queue(workspace: Path, records: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
-def _write_cursor(workspace: Path, cursor: dict[str, int]) -> None:
+def _write_cursor(workspace: Path, cursor: dict[str, Any]) -> None:
     path = cursor_path(workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -133,7 +138,7 @@ def _write_cursor(workspace: Path, cursor: dict[str, int]) -> None:
     tmp.replace(path)
 
 
-def enqueue(workspace: Path, payload: dict[str, Any], cursor: dict[str, int]) -> None:
+def enqueue(workspace: Path, payload: dict[str, Any], cursor: dict[str, Any]) -> None:
     records = _queue_records(workspace)
     if len(records) >= MAX_QUEUE:
         raise ValueError(f"telemetry outbox is full ({MAX_QUEUE}); send or opt out to clear it")
@@ -142,7 +147,7 @@ def enqueue(workspace: Path, payload: dict[str, Any], cursor: dict[str, int]) ->
 
 
 def post_payload(endpoint: str, route: str, payload: dict[str, Any], submission_id: str | None = None) -> None:
-    body = json.dumps(payload, separators=(",", ":")).encode()
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(body) > 4096:
         raise ValueError("payload exceeds 4096 bytes")
     headers = {"Content-Type": "application/json"}
