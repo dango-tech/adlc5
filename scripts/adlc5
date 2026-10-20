@@ -72,6 +72,7 @@ COMMANDS = {
     "cleanup-features": "Dry-run/archive/delete aged .adlc5/{feature}/ (default: dry-run archive → _archive/)",
     "feature": "Feature helpers (summarize → OKF FEATURE.md)",
     "usage": "Record/summarize/fleet-roll-up model + token usage (→ memory/usage-ledger.py)",
+    "telemetry": "Preview, opt in/out, or explicitly share minimized telemetry and feedback",
     "patterns": "OKF catalog lookup — ids/paths only (→ patterns/lookup.sh)",
     "pulse": "Read-only on-demand feature snapshots, board, band, and handoff",
     "spec-lint": "Lint code-spec YAML frontmatter (→ tasks/spec-lint.py)",
@@ -112,6 +113,7 @@ Commands:
   cleanup-features  {COMMANDS['cleanup-features']}
   feature summarize {COMMANDS['feature']}
   usage record|summary {COMMANDS['usage']}
+  telemetry preview|opt-in|opt-out|send|feedback {COMMANDS['telemetry']}
   patterns lookup  {COMMANDS['patterns']}
   pulse snapshot|band|board|handoff {COMMANDS['pulse']}
   spec-lint      {COMMANDS['spec-lint']}
@@ -138,6 +140,9 @@ Examples:
     --input-tokens 1000 --output-tokens 200 --cache-read-tokens 900
   ./scripts/adlc5 usage summary --feature NAME --workspace . --format markdown
   ./scripts/adlc5 usage fleet --workspace . --format markdown
+  ./scripts/adlc5 telemetry preview --workspace .
+  ./scripts/adlc5 telemetry opt-in --workspace .
+  ADLC5_TELEMETRY_ENDPOINT=https://telemetry.example.com ./scripts/adlc5 telemetry send --workspace .
   ./scripts/adlc5 patterns lookup --tags latency,extensibility --limit 3
   ./scripts/adlc5 pulse snapshot --workspace .
   ./scripts/adlc5 pulse band --feature my-feature --workspace .
@@ -668,6 +673,11 @@ def cmd_pulse(args: list[str]) -> int:
     return run([sys.executable, str(script), *args])
 
 
+def cmd_telemetry(args: list[str]) -> int:
+    script = SCRIPTS / "telemetry-share.py"
+    return run([sys.executable, str(script), *args])
+
+
 def cmd_completion(args, *, evidence=False):
     from lib.completion_evidence import transition, run_checks, fingerprint, append
     parser = argparse.ArgumentParser()
@@ -851,6 +861,7 @@ def main(argv: list[str]) -> int:
         "cleanup-features": cmd_cleanup_features,
         "feature": cmd_feature,
         "usage": cmd_usage,
+        "telemetry": cmd_telemetry,
         "patterns": cmd_patterns,
         "pulse": cmd_pulse,
         "spec-lint": cmd_spec_lint,

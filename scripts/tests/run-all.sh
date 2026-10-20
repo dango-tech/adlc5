@@ -2985,7 +2985,7 @@ print("\n".join(p for p in paths if any(reserved.match(c) for c in p.split("/"))
   pass "no tracked path uses a Windows reserved device name"
 fi
 
-for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py; do
+for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-telemetry-share.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done
