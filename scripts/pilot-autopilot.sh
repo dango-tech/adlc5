@@ -30,7 +30,7 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../../scripts/lib/telemetry.sh
 source "${ROOT}/scripts/lib/telemetry.sh"
 export ADLC5_WORKSPACE="$WORKSPACE"
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 
 if ! python3 - "$ROOT" "$WORKSPACE" "$FEATURE" <<'PY'
 import json, sys

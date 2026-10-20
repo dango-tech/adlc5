@@ -18,7 +18,8 @@ def main() -> None:
         workspace = Path(temp) / "repo"
         workspace.mkdir()
         (workspace / ".adlc5").mkdir()
-        with patch.dict(os.environ, {"HOME": str(home)}):
+        # Path.home() reads USERPROFILE on Windows.
+        with patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
             master = home / ".adlc5/config.yaml"
             master.parent.mkdir(parents=True)
             master.write_text('{"default_host":"codex","persona_mode":{"verifier_different_model":true},"platform_profiles":{"codex":{"execution":{"model":"chosen-model","effort":"low"}}}}')

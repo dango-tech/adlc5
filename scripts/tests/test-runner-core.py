@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+BASH = shutil.which("bash") or "bash"
 SPEC = importlib.util.spec_from_file_location("runner_run", ROOT / "scripts/runner/run.py")
 runner = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
@@ -88,7 +90,7 @@ def main() -> None:
         (repo / "README.md").write_text("x\n")
         git(repo, "add", "."), git(repo, "commit", "-qm", "init")
         git(repo, "worktree", "add", "-q", "-b", "host/session", str(host_tree))
-        subprocess.run([str(ROOT / "scripts/init-feature.sh"), "--feature", "wt-feature", "--workspace", str(host_tree),
+        subprocess.run([BASH, str(ROOT / "scripts/init-feature.sh"), "--feature", "wt-feature", "--workspace", str(host_tree),
                         "--mode", "brownfield", "--interaction", "autonomous"], check=True, capture_output=True)
         git(host_tree, "add", "-A"), git(host_tree, "commit", "-qm", "scaffold", "--allow-empty")
         before = git(repo, "worktree", "list").count("\n")
@@ -122,7 +124,7 @@ def main() -> None:
         git(main_repo, "init", "-q", "-b", "main")
         (main_repo / "README.md").write_text("x\n")
         git(main_repo, "add", "."), git(main_repo, "commit", "-qm", "init")
-        subprocess.run([str(ROOT / "scripts/init-feature.sh"), "--feature", "moved", "--workspace", str(main_repo),
+        subprocess.run([BASH, str(ROOT / "scripts/init-feature.sh"), "--feature", "moved", "--workspace", str(main_repo),
                         "--mode", "brownfield", "--interaction", "autonomous"], check=True, capture_output=True)
         main_repo = main_repo.resolve()
         target = runner.isolate_in_worktree(main_repo, "moved", main_repo / ".adlc5/moved", "feat/moved")

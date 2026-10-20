@@ -117,5 +117,53 @@ class GitBashTest(unittest.TestCase):
             self.assertEqual(via_facade.stdout, direct.stdout)
 
 
+class SharedWorktreeSymlinkTest(unittest.TestCase):
+    """init-workspace.sh run directly, with MSYS unset, must create real links."""
+
+    def setUp(self) -> None:
+        # Nothing inherited may enable native symlinks for the scripts under test.
+        self.env = {k: v for k, v in os.environ.items() if k != "MSYS"}
+
+    def git(self, *args: str) -> None:
+        subprocess.run(["git", "-c", "user.email=t@example.invalid", "-c", "user.name=t", *args],
+                       check=True, capture_output=True, env=self.env)
+
+    def init(self, project: Path) -> subprocess.CompletedProcess:
+        result = run([BASH, str(SCRIPTS / "init-workspace.sh"), "--project", str(project), "--no-skills"],
+                     env=self.env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result
+
+    def test_linked_worktrees_share_one_store_through_real_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo, first, second = Path(temp) / "repo", Path(temp) / "first", Path(temp) / "second"
+            repo.mkdir()
+            self.git("-C", str(repo), "init", "-q", "-b", "main")
+            (repo / "README.md").write_text("x\n", encoding="utf-8")
+            self.git("-C", str(repo), "add", "README.md")
+            self.git("-C", str(repo), "commit", "-qm", "init")
+            self.git("-C", str(repo), "worktree", "add", "-q", str(first), "-b", "first")
+            self.git("-C", str(repo), "worktree", "add", "-q", str(second), "-b", "second")
+            for project in (repo, first, second):
+                self.init(project)
+            for project in (first, second):
+                for name in ("config.yaml", "governance"):
+                    with self.subTest(worktree=project.name, artifact=name):
+                        self.assertTrue((project / ".adlc5" / name).is_symlink(), "copied instead of linked")
+            marker = "# shared-store edit\n"
+            with (first / ".adlc5/governance/definition-of-done.md").open("a", encoding="utf-8") as handle:
+                handle.write(marker)
+            self.assertIn(marker, (second / ".adlc5/governance/definition-of-done.md").read_text(encoding="utf-8"))
+            self.assertIn("OK (shared across worktrees): .adlc5/config.yaml", self.init(second).stdout)
+
+    def test_refused_link_fails_with_an_explanation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing" / "link"  # ln -s cannot create a link in a missing directory
+            script = f'source "{(SCRIPTS / "lib/symlinks.sh").as_posix()}"; adlc5_symlink "{Path(temp).as_posix()}" "{missing.as_posix()}"'
+            result = run([BASH, "-c", script], env=self.env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("could not create symbolic link", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

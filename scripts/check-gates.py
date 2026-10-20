@@ -24,6 +24,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
 BASH = shutil.which("bash") or "bash"
 ROOT = SCRIPT_DIR.parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 sys.path.insert(0, str(SCRIPT_DIR))
 from lib.adlc5_paths import delivery_state_path, load_delivery_state  # noqa: E402
 from lib.simple_yaml import load_frontmatter  # noqa: E402
@@ -91,8 +93,8 @@ def run_custom_gate(name: str, command: str, workspace: Path, cwd: str | None) -
     run_dir = workspace / cwd if cwd else workspace
     try:
         proc = subprocess.run(
-            command,
-            shell=True,
+            # /bin/sh -c is what shell=True runs on POSIX; Windows would get cmd.exe.
+            ["/bin/sh" if os.name != "nt" else BASH, "-c", command],
             cwd=str(run_dir),
             capture_output=True,
             text=True,
@@ -201,7 +203,7 @@ def check_assure_verification(delivery: dict, workspace: Path, feature: str) -> 
         sync = SCRIPT_DIR / "sync-verification-report.sh"
         if sync.is_file():
             proc = subprocess.run(
-                [str(sync), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(sync), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )

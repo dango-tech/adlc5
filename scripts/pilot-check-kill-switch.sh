@@ -25,7 +25,7 @@ done
 [[ -n "$FEATURE" ]] || { usage >&2; exit 2; }
 command -v jq >/dev/null || { echo "ERROR: jq required" >&2; exit 2; }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 LIFECYCLE_STATE="${FEATURE_DIR}/state.json"
 POLICIES="${FEATURE_DIR}/policies.yaml"

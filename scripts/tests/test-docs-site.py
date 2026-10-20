@@ -19,7 +19,7 @@ BASE_PATH = urlsplit(BASE_URL).path.rstrip("/") + "/"
 PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
          "walkthrough/index.html", "lifecycle/index.html", "running/index.html",
          "intelligence/index.html", "support/index.html", "releases/index.html",
-         "pulse/index.html", "reference/index.html")
+         "pulse/index.html", "telemetry/index.html", "reference/index.html")
 
 
 class Document(HTMLParser):
@@ -81,7 +81,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())
         locations = {entry["location"].split("#")[0] for entry in index["docs"]}
-        self.assertTrue({"", "installation/", "quickstart/", "walkthrough/", "lifecycle/", "running/", "intelligence/", "support/", "releases/", "pulse/", "reference/"} <= locations)
+        self.assertTrue({"", "installation/", "quickstart/", "walkthrough/", "lifecycle/", "running/", "intelligence/", "support/", "releases/", "pulse/", "telemetry/", "reference/"} <= locations)
 
     def test_adlc5_cli_references_exist(self):
         surfaces = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"), *(ROOT / "website/docs").rglob("*.md")]

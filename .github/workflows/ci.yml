@@ -50,6 +50,9 @@ jobs:
       - name: Contract tests (system Bash)
         run: /bin/bash ./scripts/tests/run-all.sh
 
+      - name: Telemetry intake contract tests
+        run: node --test telemetry-intake/test/index.test.mjs
+
       - name: Disposable install and verification
         run: python3 scripts/tests/test-portable-install.py
 
@@ -86,3 +89,5 @@ jobs:
         run: |
           python3 scripts/tests/test-windows-regressions.py -v
           python3 scripts/tests/test-repository-context.py -v
+          python3 scripts/tests/test-cursor-usage.py -v  # owner-only credential ACL
+          python3 scripts/tests/test-telemetry-share.py -v

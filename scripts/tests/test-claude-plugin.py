@@ -21,13 +21,16 @@ import zipfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[2]
-BASH = "/bin/bash" if Path("/bin/bash").exists() else "bash"
+BASH = "/bin/bash" if Path("/bin/bash").exists() else shutil.which("bash") or "bash"
 
 
 def run(cmd, cwd=None, env=None, stdin=None, check=False):
     base = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ADLC5"))}
     base.update(env or {})
-    return subprocess.run(cmd, cwd=cwd, env=base, input=stdin, capture_output=True, text=True, timeout=120, check=check)
+    if os.name == "nt" and Path(cmd[0]).is_file() and Path(cmd[0]).read_bytes().startswith(b"#!/usr/bin/env bash"):
+        cmd = [BASH, *cmd]  # Windows cannot exec a shebang script directly
+    return subprocess.run(cmd, cwd=cwd, env=base, input=stdin, capture_output=True, text=True,
+                          encoding="utf-8", timeout=120, check=check)
 
 
 def tree_digest(root: Path) -> str:

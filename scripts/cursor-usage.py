@@ -18,6 +18,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import agent_usage_common as common  # noqa: E402
+from lib.windows_acl import owner_only_problem  # noqa: E402
 
 PLATFORM = "cursor"
 CLOUD_PLATFORM = "cursor-cloud"
@@ -54,8 +55,15 @@ def read_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
             f"Cursor usage config not found: {path}. "
             "Run ./scripts/install-cursor-usage.sh first."
         )
-    mode = stat.S_IMODE(path.stat().st_mode)
-    if mode & 0o077:
+    if os.name == "nt":
+        # Windows has no POSIX mode bits (st_mode is always 0o666); check the ACL.
+        problem = owner_only_problem(path)
+        if problem:
+            raise ValueError(
+                f"Cursor usage config must be readable only by its owner, but {problem}: {path}. "
+                "Run ./scripts/install-cursor-usage.sh to restrict it."
+            )
+    elif stat.S_IMODE(path.stat().st_mode) & 0o077:
         raise ValueError(f"Cursor usage config must have mode 0600: {path}")
 
     values: dict[str, str] = {}
