@@ -56,4 +56,4 @@ prefix invoke names. Use the skill map for the full catalog.
 ## Maintain this site
 
 The [site maintenance guide](https://github.com/dango-tech/adlc5/blob/main/docs/documentation-site.md)
-contains local preview, validation, and GitHub Pages setup instructions.
+contains local preview, validation, and Vercel deployment instructions.
