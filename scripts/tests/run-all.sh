@@ -2,14 +2,15 @@
 # Run ADLC5 script exit-code contract tests.
 set -euo pipefail
 export ADLC5_SUPPRESS_LEGACY_WARNINGS=1
-# Git for Windows: make ln -s create real symlinks instead of silent copies.
-case "$(uname -s)" in MINGW*|MSYS*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ;; esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
+# Fixture symlinks. MSYS is set for this command only, so the scripts under
+# test must enable native Windows symlinks themselves (lib/symlinks.sh).
+fixture_symlink() { MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ln -s "$@"; }
 
 # Gate fixtures deliberately exercise otherwise unreachable/invalid states.
 # Write local JSON directly; normal API protection is tested below.
@@ -733,7 +734,7 @@ cat >"${WIKI_LINK_WS}/wiki/drafts/promote-${WIKI_LINK_FEATURE}/approved.json" <<
 {"feature":"wiki-link-gate","approved_by":"user","candidates":[{"id":"escape","action":"promote_entity","target":"wiki/entities/escape.md"}]}
 EOF
 rm -rf "${WIKI_LINK_WS}/wiki/entities"
-ln -s "$WIKI_OUTSIDE" "${WIKI_LINK_WS}/wiki/entities"
+fixture_symlink "$WIKI_OUTSIDE" "${WIKI_LINK_WS}/wiki/entities"
 set +e
 ./scripts/wiki/promote-apply.sh --feature "$WIKI_LINK_FEATURE" --workspace "$WIKI_LINK_WS" >/dev/null 2>&1
 WIKI_ROOT_LINK_EC=$?
@@ -955,9 +956,9 @@ pass "pr-ready custom_gates"
 # cleanup-stale-skills
 CLEAN_TMP="${TMP}/cleanup-skills"
 mkdir -p "$CLEAN_TMP"
-ln -s "/tmp/nonexistent/skills/adlc5-spec" "${CLEAN_TMP}/adlc5-spec"
-ln -s "/tmp/nonexistent/skills/adlc5" "${CLEAN_TMP}/adlc5"
-ln -s "${ROOT}/skills/discover" "${CLEAN_TMP}/discover"
+fixture_symlink "/tmp/nonexistent/skills/adlc5-spec" "${CLEAN_TMP}/adlc5-spec"
+fixture_symlink "/tmp/nonexistent/skills/adlc5" "${CLEAN_TMP}/adlc5"
+fixture_symlink "${ROOT}/skills/discover" "${CLEAN_TMP}/discover"
 mkdir -p "${CLEAN_TMP}/other-vendor"
 echo "not adlc5" >"${CLEAN_TMP}/other-vendor/SKILL.md"
 ./scripts/cleanup-stale-skills.sh --skills-target "$CLEAN_TMP" --prune-stale-skills >/dev/null
@@ -970,8 +971,8 @@ pass "cleanup-stale-skills prune"
 # cleanup-stale-skills — rules prune (ADLC5 symlinks only; keep user files)
 RULES_TMP="${TMP}/cleanup-rules"
 mkdir -p "$RULES_TMP"
-ln -s "${ROOT}/.cursor/rules/agent-discipline.mdc" "${RULES_TMP}/agent-discipline.mdc"
-ln -s "${ROOT}/.cursor/rules/missing-retired.mdc" "${RULES_TMP}/adlc5-forge.mdc"
+fixture_symlink "${ROOT}/.cursor/rules/agent-discipline.mdc" "${RULES_TMP}/agent-discipline.mdc"
+fixture_symlink "${ROOT}/.cursor/rules/missing-retired.mdc" "${RULES_TMP}/adlc5-forge.mdc"
 echo "user rule body" >"${RULES_TMP}/my-custom-rule.mdc"
 ./scripts/cleanup-stale-skills.sh --rules-target "$RULES_TMP" --prune-stale-rules >/dev/null
 [[ -L "${RULES_TMP}/adlc5-forge.mdc" ]] && fail "cleanup should remove stale ADLC5 rule symlink"

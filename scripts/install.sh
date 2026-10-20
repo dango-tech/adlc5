@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Install adlc5 skills and rules to user-global paths (M8 + M14 + M14g backup-replace).
 set -euo pipefail
-# Git for Windows: make ln -s create real symlinks instead of silent copies.
-case "$(uname -s)" in MINGW*|MSYS*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ;; esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/adlc5-dirs.sh
 source "${ROOT}/scripts/lib/adlc5-dirs.sh"
+# shellcheck source=lib/symlinks.sh
+source "${ROOT}/scripts/lib/symlinks.sh"
 SKILLS_ROOT="$(adlc5_skills_dir "$ROOT")"
 cd "$ROOT"
 
@@ -240,7 +240,7 @@ link_path() {
   fi
 
   mkdir -p "$(dirname "$dest")"
-  ln -s "$src" "$dest"
+  adlc5_symlink "$src" "$dest"
   echo "  Linked: ${label} -> ${dest}"
 }
 

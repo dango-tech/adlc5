@@ -10,6 +10,8 @@ source "${ROOT}/scripts/lib/adlc5-dirs.sh"
 source "${ROOT}/scripts/lib/pr-template.sh"
 # shellcheck source=lib/worktree-context.sh
 source "${ROOT}/scripts/lib/worktree-context.sh"
+# shellcheck source=lib/symlinks.sh
+source "${ROOT}/scripts/lib/symlinks.sh"
 TEMPLATES_ROOT="$(adlc5_templates_dir "$ROOT")"
 SKILLS_ROOT="$(adlc5_skills_dir "$ROOT")"
 
@@ -214,7 +216,7 @@ link_shared_artifact() {
   fi
   mkdir -p "$(dirname "$local_path")"
   rm -rf "$local_path"
-  ln -s "$store" "$local_path"
+  adlc5_symlink "$store" "$local_path"
   echo "  Shared: .adlc5/${name} -> ${store}"
 }
 
@@ -238,7 +240,7 @@ link_skill() {
   fi
   mkdir -p "$(dirname "$dest")"
   rm -rf "$dest" 2>/dev/null || true
-  ln -s "$src" "$dest"
+  adlc5_symlink "$src" "$dest"
   echo "  Linked: ${name}"
 }
 
@@ -377,7 +379,7 @@ if [[ "$CONFIG_LINK" -eq 1 && "$DRY_RUN" -ne 1 ]]; then
   elif [[ -e "$CONFIG_YAML" && ! -L "$CONFIG_YAML" ]]; then
     echo "Preserving legacy worktree config: ${CONFIG_YAML}" >&2
   else
-    ln -sfn "$CONFIG_STORE" "$CONFIG_YAML"
+    adlc5_symlink -fn "$CONFIG_STORE" "$CONFIG_YAML"
   fi
 fi
 
