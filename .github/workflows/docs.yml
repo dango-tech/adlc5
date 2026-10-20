@@ -24,5 +24,7 @@ jobs:
         env:
           DOCS_SITE_URL: https://adlc5.dev/
         run: |
+          npm ci
           python -m mkdocs build --strict
+          cp node_modules/@vercel/speed-insights/dist/index.mjs site/assets/speed-insights.mjs
           python scripts/tests/test-docs-site.py --site-dir site

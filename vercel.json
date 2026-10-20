@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "uv venv .venv-docs && uv pip install --python .venv-docs/bin/python -r requirements-docs.txt",
-  "buildCommand": ".venv-docs/bin/python -m mkdocs build --strict",
+  "installCommand": "npm ci && uv venv .venv-docs && uv pip install --python .venv-docs/bin/python -r requirements-docs.txt",
+  "buildCommand": ".venv-docs/bin/python -m mkdocs build --strict && cp node_modules/@vercel/speed-insights/dist/index.mjs site/assets/speed-insights.mjs",
   "outputDirectory": "site",
   "framework": null,
   "git": {

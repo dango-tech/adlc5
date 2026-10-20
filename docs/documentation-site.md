@@ -13,13 +13,16 @@ From the repository root (Python 3.10+):
 python3 -m venv .venv-docs
 . .venv-docs/bin/activate
 python -m pip install -r requirements-docs.txt
-python -m mkdocs serve
+DOCS_SITE_URL=https://docs.example.test/adlc5/ python -m mkdocs serve
 ```
 
 Before submitting changes, run:
 
 ```bash
+export DOCS_SITE_URL=https://adlc5.dev/
+npm ci
 python -m mkdocs build --strict
+cp node_modules/@vercel/speed-insights/dist/index.mjs site/assets/speed-insights.mjs
 python scripts/tests/test-docs-site.py
 git diff --check
 ```
@@ -32,12 +35,12 @@ or generated files.
 
 Create one Vercel project connected to `dango-tech/adlc5`, with repository root
 as its root directory. Keep the framework preset as **Other**. `vercel.json`
-uses `uv` to create and install the pinned docs dependencies in the ignored
-`.venv-docs` environment, run a strict MkDocs build with that same interpreter,
-and publish the `site` output
-directory. Vercel automatically creates Preview deployments for PR branches;
-the config disables Git-triggered deployments only for `main`, so a merge
-cannot publish production automatically.
+installs `@vercel/speed-insights` with `npm ci` and uses `uv` to install the
+pinned docs dependencies in the ignored `.venv-docs` environment. Its strict
+MkDocs build uses that same interpreter, then copies the Speed Insights client
+module into `site/` before publishing. Vercel automatically creates Preview
+deployments for PR branches; the config disables Git-triggered deployments only
+for `main`, so a merge cannot publish production automatically.
 
 In GitHub repository settings, create `private-preview` and `production`
 environments. Add these environment variables to each:
@@ -56,7 +59,10 @@ before deployment.
 Enable Web Analytics from the project's **Analytics** page before the first
 deployment with analytics enabled. The generated MkDocs pages load Vercel's
 `/_vercel/insights/script.js` endpoint only when built for `adlc5.dev`; legacy
-subpath builds omit the script.
+subpath builds omit the script. Speed Insights uses the installed
+`@vercel/speed-insights` package and its `/_vercel/speed-insights/script.js`
+endpoint, also only on the canonical domain. Enable Speed Insights in the
+project dashboard before deploying.
 
 Enable Vercel Authentication for preview deployments and grant access only to
 the owner's Vercel account. Disable shareable links and automation bypasses.

@@ -67,8 +67,8 @@ class DocsSiteTests(unittest.TestCase):
                 target = urlsplit(urljoin(BASE_URL + source, link))
                 if target.netloc != urlsplit(BASE_URL).netloc:
                     continue
-                if target.path == "/_vercel/insights/script.js":
-                    continue  # Served by Vercel's analytics route, not the static build.
+                if target.path in ("/_vercel/insights/script.js", "/_vercel/speed-insights/script.js"):
+                    continue  # Served by Vercel's analytics routes, not the static build.
                 with self.subTest(source=source, link=link):
                     self.assertTrue(target.path.startswith(BASE_PATH), "Escapes configured site path")
                     relative = unquote(target.path.removeprefix(BASE_PATH))
@@ -131,11 +131,14 @@ class DocsSiteTests(unittest.TestCase):
 
     def test_vercel_analytics_is_limited_to_root_domain_builds(self):
         enabled = urlsplit(BASE_URL).hostname == "adlc5.dev" and urlsplit(BASE_URL).path == "/"
+        self.assertEqual((self.site / "assets/speed-insights.mjs").is_file(), enabled)
         for page in PAGES:
             with self.subTest(page=page):
                 scripts = [link for link in self.documents[page].links
                            if link == "/_vercel/insights/script.js"]
                 self.assertEqual(len(scripts), int(enabled))
+                html = (self.site / page).read_text(encoding="utf-8")
+                self.assertEqual("injectSpeedInsights()" in html, enabled)
 
     def test_workflow_actions_are_sha_pinned(self):
         workflow = (ROOT / ".github/workflows/docs.yml").read_text()
@@ -149,12 +152,12 @@ class DocsSiteTests(unittest.TestCase):
 
     def test_vercel_preview_deploys_main_changes_and_manual_dispatch_only(self):
         config = json.loads((ROOT / "vercel.json").read_text())
-        self.assertEqual(config["installCommand"], "uv venv .venv-docs && uv pip install --python .venv-docs/bin/python -r requirements-docs.txt")
-        self.assertEqual(config["buildCommand"], ".venv-docs/bin/python -m mkdocs build --strict")
+        self.assertEqual(config["installCommand"], "npm ci && uv venv .venv-docs && uv pip install --python .venv-docs/bin/python -r requirements-docs.txt")
+        self.assertEqual(config["buildCommand"], ".venv-docs/bin/python -m mkdocs build --strict && cp node_modules/@vercel/speed-insights/dist/index.mjs site/assets/speed-insights.mjs")
         self.assertEqual(config["git"]["deploymentEnabled"], {"main": False})
         workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         self.assertRegex(workflow, r"(?m)^  push:\n    branches: \[main\]$")
-        for path in ("assets/brand/**", "mkdocs.yml", "requirements-docs.txt",
+        for path in ("assets/brand/**", "mkdocs.yml", "package.json", "package-lock.json", "requirements-docs.txt",
                      "vercel.json", "website/docs/**", "website/overrides/**"):
             self.assertIn(f"- '{path}'", workflow)
         self.assertIn("workflow_dispatch:", workflow)
