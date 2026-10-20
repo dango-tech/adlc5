@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/install-cursor-usage.sh [--enable|--disable]
 
-Creates ~/.adlc5/cursor-usage.env with mode 0600.
+Creates ~/.adlc5/cursor-usage.env with mode 0600 (an owner-only ACL on Windows).
 On macOS, --enable installs an hourly LaunchAgent that reconciles registered
 ADLC5 workspaces with Cursor's official usage API. Fill in the config first.
 
@@ -61,6 +61,10 @@ else
   echo "Config exists: ${CONFIG}"
 fi
 chmod 600 "$CONFIG"
+case "$(uname -s)" in
+  # chmod cannot express owner-only access on Windows; set the ACL instead.
+  MINGW*|MSYS*) python3 "${ROOT}/scripts/lib/windows_acl.py" restrict "$CONFIG" ;;
+esac
 
 if [[ "$ACTION" == "configure" ]]; then
   echo "Edit ${CONFIG}, then run: $0 --enable"

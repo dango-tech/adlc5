@@ -27,6 +27,10 @@ imply administrative access. Do not place credentials in project files or prompt
 chmod 600 ~/.adlc5/cursor-usage.env
 ```
 
+On Windows `chmod` cannot restrict access, so the installer instead gives the file
+an access list that only its owner (plus SYSTEM and Administrators) can use, and
+`cursor-usage.py` refuses a config that grants access to anyone else.
+
 For Cloud Agent reconciliation, fill in:
 
 ```dotenv
