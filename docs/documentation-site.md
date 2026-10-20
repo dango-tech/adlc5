@@ -32,8 +32,8 @@ or generated files.
 
 Create one Vercel project connected to `dango-tech/adlc5`, with repository root
 as its root directory. Keep the framework preset as **Other**. `vercel.json`
-uses Vercel's `uv`-managed Python environment to install the pinned docs
-dependencies, run a strict MkDocs build, and publish the `site` output
+uses `uv` to install the pinned docs dependencies into Vercel's active Python
+interpreter, run a strict MkDocs build, and publish the `site` output
 directory. Vercel automatically creates Preview deployments for PR branches;
 the config disables Git-triggered deployments only for `main`, so a merge
 cannot publish production automatically.
