@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import contextlib
+import io
 import importlib.util
 import json
 import tempfile
@@ -78,6 +80,33 @@ class TelemetryShareTests(unittest.TestCase):
         self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 0)
         with self.events.open("a") as stream:
             stream.write(json.dumps({"event": "script.end", "status": "pass"}) + "\n")
+        self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 1)
+
+    def test_send_previews_the_queued_payload_not_newer_events(self):
+        share.set_enabled(self.workspace, True)
+        payload, cursor = share.prepare_aggregate(self.workspace)
+        share.enqueue(self.workspace, payload, cursor)
+        with self.events.open("a") as stream:
+            stream.write(json.dumps({"event": "script.end", "status": "pass"}) + "\n")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), patch("builtins.input", return_value="yes"), patch.object(share, "post_payload") as post:
+            self.assertEqual(share.main(["send", "--workspace", str(self.workspace), "--endpoint", "https://example.invalid"]), 0)
+        preview, _ = json.JSONDecoder().raw_decode(output.getvalue())
+        self.assertEqual(preview, payload)
+        self.assertEqual(post.call_args.args[2], preview)
+        self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 1)
+
+    def test_send_freezes_preview_before_confirmation(self):
+        share.set_enabled(self.workspace, True)
+        def confirm(_prompt):
+            with self.events.open("a") as stream:
+                stream.write(json.dumps({"event": "script.end", "status": "pass"}) + "\n")
+            return "yes"
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), patch("builtins.input", side_effect=confirm), patch.object(share, "post_payload") as post:
+            self.assertEqual(share.main(["send", "--workspace", str(self.workspace), "--endpoint", "https://example.invalid"]), 0)
+        preview, _ = json.JSONDecoder().raw_decode(output.getvalue())
+        self.assertEqual(post.call_args.args[2], preview)
         self.assertEqual(share.aggregate(self.workspace)["events"]["script_end"], 1)
 
     def test_successful_send_advances_local_cursor_without_recounting_old_events(self):

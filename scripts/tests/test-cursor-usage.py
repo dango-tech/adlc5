@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,6 +15,21 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = ROOT / "scripts" / "cursor-usage.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from lib import windows_acl  # noqa: E402
+
+
+def protect(path: Path) -> None:
+    path.chmod(0o600)
+    if os.name == "nt":
+        windows_acl.restrict_to_owner(path)
+
+
+def expose_to_everyone(path: Path) -> None:
+    if os.name == "nt":
+        subprocess.run(["icacls", str(path), "/grant", "*S-1-1-0:(R)"], check=True, capture_output=True)
+    else:
+        path.chmod(0o644)
 
 
 def load_module():
@@ -38,7 +55,7 @@ class CursorUsageTests(unittest.TestCase):
                 "UNRELATED=$(touch should-not-run)\n",
                 encoding="utf-8",
             )
-            config.chmod(0o600)
+            protect(config)
 
             values = self.module.read_config(config)
 
@@ -50,10 +67,26 @@ class CursorUsageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "cursor-usage.env"
             config.write_text("CURSOR_ADMIN_API_KEY=cursor_test\n", encoding="utf-8")
-            config.chmod(0o644)
+            protect(config)
+            expose_to_everyone(config)
 
-            with self.assertRaisesRegex(ValueError, "0600"):
+            expected = "readable only by its owner, but it grants access to Everyone" if os.name == "nt" else "0600"
+            with self.assertRaisesRegex(ValueError, expected):
                 self.module.read_config(config)
+
+    def test_installer_creates_an_owner_only_config(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bash = "/bin/bash" if Path("/bin/bash").exists() else shutil.which("bash") or "bash"
+            if os.name == "nt":  # an inherited Everyone entry the installer must remove
+                subprocess.run(["icacls", temp, "/grant", "*S-1-1-0:(OI)(CI)(R)"], check=True, capture_output=True)
+            subprocess.run([bash, str(ROOT / "scripts/install-cursor-usage.sh")], env=dict(os.environ, HOME=temp),
+                           check=True, capture_output=True)
+            config = Path(temp) / ".adlc5" / "cursor-usage.env"
+            if os.name == "nt":
+                self.assertIsNone(windows_acl.owner_only_problem(config))
+            else:
+                self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            self.module.read_config(config)
 
     def test_event_fingerprint_is_stable_and_sensitive_to_usage(self):
         event = {

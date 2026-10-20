@@ -59,7 +59,7 @@ if v is not None and str(v) not in ('null', 'None', ''):
     print(v)
 " 2>/dev/null || true
 }
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 DELIVERY_STATE="${FEATURE_DIR}/delivery/state.json"

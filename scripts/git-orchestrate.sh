@@ -44,7 +44,7 @@ done
 [[ -n "$FEATURE" && -n "$ACTION" ]] || usage
 command -v jq >/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE="${WORKSPACE}/.adlc5/${FEATURE}/state.json"
 BRANCH_NAME="${BRANCH_NAME:-feat/${FEATURE}}"

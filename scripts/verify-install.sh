@@ -155,8 +155,9 @@ for rel in (".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-
         val = data.get(key)
         if not val:
             continue
-        assert not str(val).startswith("/") and ".." not in Path(str(val)).parts, f"{rel} unsafe path {key}={val}"
-        assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
+        for path in val if isinstance(val, list) else (val,):
+            assert not str(path).startswith("/") and ".." not in Path(str(path)).parts, f"{rel} unsafe path {key}={path}"
+            assert (root / str(path)).exists(), f"{rel} missing path {key}={path}"
     meta = data.get("adlc5") or {}
     if rel in (".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
         assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"

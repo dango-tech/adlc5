@@ -120,6 +120,26 @@ SOUL is the supporting reasoning discipline across all four stages.
 [Repository context and limits](core/guides/repository-context.md) explains the
 mechanics. Better code, fewer errors, or lower token costs require comparative measurements.
 
+## ADLC5 Pulse
+
+Use Pulse for an on-demand view of a feature's stage, recorded checks/review, local
+gate observation, known usage subtotal, and suggested next action. It reuses the
+existing ADLC5 state and evidence; it does not run your checks or continuously
+monitor the repository.
+
+```bash
+./scripts/adlc5 pulse snapshot --workspace .
+./scripts/adlc5 pulse board --workspace .
+./scripts/adlc5 pulse handoff --workspace . --feature my-feature
+```
+
+The offline board and cached band are generated when requested. Claude Code also
+shows an interactive Pulse band above the prompt; Codex and Cursor use the shared
+skill, read-only MCP snapshot, and CLI. Evidence means current at capture only;
+missing usage stays unknown. A local gate pass does not mean remote CI, human
+approval, deployment, or production health. See the [Pulse guide](docs/pulse.md)
+for host support and qualification boundaries.
+
 ## What completion establishes
 
 `adlc5 transition TARGET` validates the next step and its required gates.

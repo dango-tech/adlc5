@@ -42,5 +42,6 @@ nav:
   - Lifecycle: lifecycle.md
   - Running agents: running.md
   - Intelligence: intelligence.md
+  - Pulse: pulse.md
   - Telemetry and feedback: telemetry.md
   - Reference: reference.md

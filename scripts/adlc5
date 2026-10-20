@@ -22,6 +22,7 @@ Usage:
   ./scripts/adlc5 cleanup-features --workspace DIR ...
   ./scripts/adlc5 feature summarize --feature-dir PATH [--workspace DIR] [--dry-run]
   ./scripts/adlc5 patterns lookup --tags TAG[,TAG...] [--group GROUP] ...
+  ./scripts/adlc5 pulse snapshot|band|board|handoff [--workspace DIR] ...
 
 Stdout: pass-through from underlying tools (JSON where those tools emit JSON).
 Exit: pass-through from underlying tools; usage/validation errors → 2.
@@ -31,13 +32,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 VERSION_FILE = ROOT / "core" / "VERSION"
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 
 sys.path.insert(0, str(SCRIPTS))
 from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
@@ -69,6 +74,7 @@ COMMANDS = {
     "usage": "Record/summarize/fleet-roll-up model + token usage (→ memory/usage-ledger.py)",
     "telemetry": "Preview, opt in/out, or explicitly share minimized telemetry and feedback",
     "patterns": "OKF catalog lookup — ids/paths only (→ patterns/lookup.sh)",
+    "pulse": "Read-only on-demand feature snapshots, board, band, and handoff",
     "spec-lint": "Lint code-spec YAML frontmatter (→ tasks/spec-lint.py)",
     "verify-story": "Deterministic per-story pre-check before @assure-verifier (→ verify-story.py)",
     "version": "Print ADLC5 semver from core/VERSION",
@@ -109,6 +115,7 @@ Commands:
   usage record|summary {COMMANDS['usage']}
   telemetry preview|opt-in|opt-out|send|feedback {COMMANDS['telemetry']}
   patterns lookup  {COMMANDS['patterns']}
+  pulse snapshot|band|board|handoff {COMMANDS['pulse']}
   spec-lint      {COMMANDS['spec-lint']}
   verify-story   {COMMANDS['verify-story']}
   version        {COMMANDS['version']}
@@ -137,6 +144,9 @@ Examples:
   ./scripts/adlc5 telemetry opt-in --workspace .
   ADLC5_TELEMETRY_ENDPOINT=https://telemetry.example.com ./scripts/adlc5 telemetry send --workspace .
   ./scripts/adlc5 patterns lookup --tags latency,extensibility --limit 3
+  ./scripts/adlc5 pulse snapshot --workspace .
+  ./scripts/adlc5 pulse band --feature my-feature --workspace .
+  ./scripts/adlc5 pulse board --workspace . --open
   ./scripts/adlc5 spec-lint --feature NAME --workspace .
   ./scripts/adlc5 verify-story --feature NAME --story-id US-1 --workspace .
   ./scripts/adlc5 version
@@ -203,7 +213,7 @@ def cmd_pack(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_clarity(args: list[str]) -> int:
@@ -237,7 +247,7 @@ def cmd_phase(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_pilot(args: list[str]) -> int:
@@ -245,7 +255,7 @@ def cmd_pilot(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_run(args: list[str]) -> int:
@@ -258,7 +268,7 @@ def cmd_resolve_model(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_config(args: list[str]) -> int:
@@ -497,7 +507,7 @@ def cmd_cleanup_features(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *args])
+    return run([BASH, str(script), *args])
 
 
 def cmd_repository_context(area: str, args: list[str]) -> int:
@@ -655,7 +665,12 @@ def cmd_patterns(args: list[str]) -> int:
     err = require_exec(script)
     if err is not None:
         return err
-    return run(["bash", str(script), *rest])
+    return run([BASH, str(script), *rest])
+
+
+def cmd_pulse(args: list[str]) -> int:
+    script = SCRIPTS / "pulse.py"
+    return run([sys.executable, str(script), *args])
 
 
 def cmd_telemetry(args: list[str]) -> int:
@@ -848,6 +863,7 @@ def main(argv: list[str]) -> int:
         "usage": cmd_usage,
         "telemetry": cmd_telemetry,
         "patterns": cmd_patterns,
+        "pulse": cmd_pulse,
         "spec-lint": cmd_spec_lint,
         "verify-story": cmd_verify_story,
         "version": cmd_version,
@@ -856,4 +872,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    if os.name == "nt":
+        # Piped Windows streams default to the ANSI code page, which cannot encode → or —.
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

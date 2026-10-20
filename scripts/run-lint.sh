@@ -22,7 +22,7 @@ source "${SCRIPT_DIR}/lib/telemetry.sh"
 # shellcheck source=lib/adlc5-paths.sh
 source "${SCRIPT_DIR}/lib/adlc5-paths.sh"
 export ADLC5_WORKSPACE="$WORKSPACE"
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 cd "$WORKSPACE"
 
 PHASE="$(adlc5_current_step "$WORKSPACE" "$FEATURE")"

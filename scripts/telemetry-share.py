@@ -220,10 +220,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "send":
             if not args.endpoint.startswith("https://"):
                 raise ValueError("set ADLC5_TELEMETRY_ENDPOINT to your HTTPS intake URL")
-            print(json.dumps(aggregate(workspace), indent=2))
+            if not is_enabled(workspace):
+                return send_aggregate(workspace, args.endpoint)
+            records = _queue_records(workspace)
+            if records:
+                payload, cursor = records[0]["payload"], records[0]["cursor"]
+            else:
+                payload, cursor = prepare_aggregate(workspace)
+            print(json.dumps(payload, indent=2))
             if input("Send this minimized aggregate now? Type yes: ").strip().lower() != "yes":
                 print("Not sent.")
                 return 0
+            if not records:
+                enqueue(workspace, payload, cursor)
             return send_aggregate(workspace, args.endpoint)
         if args.action == "feedback":
             if not args.endpoint.startswith("https://"):

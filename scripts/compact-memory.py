@@ -106,7 +106,7 @@ Read this file first. Load only artifacts listed below for active work. Do not p
         
     # Add artifacts to table
     for path, phase, summary in artifacts:
-        index_content += f"| {path} | {phase} | {summary} |\n"
+        index_content += f"| {Path(path).as_posix()} | {phase} | {summary} |\n"
         
     index_content += """
 ## Summaries
@@ -155,7 +155,7 @@ Read this file first. Load only artifacts listed below for active work. Do not p
     # Update state.json memory timestamps
     if state:
         state["memory"] = state.get("memory", {})
-        state["memory"]["index_path"] = index_path
+        state["memory"]["index_path"] = Path(index_path).as_posix()
         state["memory"]["last_compacted"] = current_stage
         with open(state_path, 'w', encoding='utf-8') as f:
             json.dump(state, f, indent=2)

@@ -28,7 +28,7 @@ done
 
 [[ -n "$FEATURE" ]] || { usage >&2; exit 2; }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 EVENTS="${WORKSPACE}/.adlc5/${FEATURE}/telemetry/events.jsonl"
 
 if [[ ! -f "$EVENTS" ]]; then
