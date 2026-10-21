@@ -44,6 +44,20 @@ The public directory shared by ChatGPT and Codex is a separate submission route 
 
 The current ADLC5 Codex package configures a local stdio MCP server (`python3 ./scripts/adlc5-mcp.py`). OpenAI's public submission guidance requires a remotely reachable HTTPS MCP endpoint for public submissions; the local stdio package is therefore for local/repo marketplace distribution. To pursue a public listing, deploy an HTTPS MCP service and create a public-submission package/configuration that points to it, then submit that package and endpoint through the portal. Keep the local package available for developers who want the self-contained local runtime.
 
+### Hermes
+
+ADLC5 ships as a Portable Agent Plugin v1 package (`plugin.json`, `skills/`,
+`mcp.json`). Install and enable it directly from the repository:
+
+```bash
+hermes plugins install dango-tech/adlc5 --no-enable
+hermes plugins enable adlc5
+```
+
+Skills are namespaced and discovered via `skills_list`/`skill_view`; MCP servers
+from `mcp.json` load on the next session. Classic skills install via
+`./scripts/install.sh --platform ...` remains available.
+
 ### Claude Code
 
 Register the generated local marketplace and install from it:
