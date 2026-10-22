@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v jq >/dev/null || { echo '{"error":"jq required"}' >&2; exit 3; }
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 cd "$WORKSPACE"
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

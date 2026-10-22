@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adlc5.dev/schemas/pulse-snapshot-1.0.json",
+  "title": "ADLC5 Pulse snapshot",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "capture", "workspace", "features", "warnings"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "generation_id": {"type": "string"},
+    "status": {"enum": ["ok", "partial", "empty"]},
+    "capture": {
+      "type": "object",
+      "required": ["stable", "scope"],
+      "properties": {"stable": {"type": "boolean"}, "scope": {"enum": ["workspace", "feature"]}}
+    },
+    "workspace": {"type": "object", "required": ["label"], "properties": {"label": {"type": "string"}}},
+    "features": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/feature"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "observation": {"type": "object", "required": ["status"], "properties": {"status": {"type": "string"}, "reason": {"type": ["string", "null"]}}},
+    "feature": {
+      "type": "object",
+      "required": ["id", "identity", "archive_id", "capture", "lifecycle", "evidence", "usage", "evaluation", "next_action", "receipts", "events", "warnings"],
+      "properties": {
+        "id": {"type": "string"}, "identity": {"type": "string"}, "archive_id": {"type": ["string", "null"]},
+        "capture": {"type": "object", "required": ["stable", "input_fingerprint", "freshness", "captured_at"], "properties": {"stable": {"type": "boolean"}, "input_fingerprint": {"type": ["string", "null"]}, "freshness": {"type": "string"}, "captured_at": {"type": "string"}}},
+        "lifecycle": {"type": "object", "properties": {"stage": {"type": ["string", "null"]}, "step": {"type": ["string", "null"]}, "stage_status": {"type": "object"}}},
+        "evidence": {"type": "object", "required": ["checks", "review", "pr_ready"], "properties": {"checks": {"$ref": "#/$defs/observation"}, "review": {"$ref": "#/$defs/observation"}, "pr_ready": {"$ref": "#/$defs/observation"}}},
+        "usage": {"type": "object", "required": ["status", "currency", "known_cost_usd", "complete_total_usd", "observed_records", "accounted_records", "token_records", "tokens", "unpriced_models"], "properties": {"status": {"enum": ["complete", "partial", "unavailable"]}, "currency": {"const": "USD"}, "known_cost_usd": {"type": ["number", "null"], "minimum": 0}, "complete_total_usd": {"type": ["number", "null"], "minimum": 0}, "observed_records": {"type": "integer", "minimum": 0}, "accounted_records": {"type": "integer", "minimum": 0}, "token_records": {"type": "integer", "minimum": 0}, "tokens": {"type": "object", "properties": {"input": {"type": "integer", "minimum": 0}, "output": {"type": "integer", "minimum": 0}, "thinking": {"type": "integer", "minimum": 0}, "cache_creation": {"type": "integer", "minimum": 0}, "cache_read": {"type": "integer", "minimum": 0}, "cache_5m": {"type": "integer", "minimum": 0}, "cache_1h": {"type": "integer", "minimum": 0}}}, "unpriced_models": {"type": "array", "items": {"type": "string"}}}},
+        "evaluation": {"type": "object", "required": ["status", "runs", "successful", "success_rate_pct", "savings_pct", "reason", "source", "success_interval_pct", "escaped_defects", "rework", "savings_range_pct", "matched_cases"], "properties": {"status": {"enum": ["not_measured", "partial", "measured"]}, "runs": {"type": "integer", "minimum": 0}, "successful": {"type": "integer", "minimum": 0}, "success_rate_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "savings_pct": {"type": ["number", "null"]}, "reason": {"type": "string"}, "source": {"type": "string"}, "success_interval_pct": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}}, "savings_range_pct": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}}, "escaped_defects": {"type": ["integer", "null"], "minimum": 0}, "rework": {"type": ["integer", "null"], "minimum": 0}, "matched_cases": {"type": "integer", "minimum": 0}}},
+        "next_action": {"type": "object", "required": ["reason_code", "label"], "properties": {"reason_code": {"type": "string"}, "label": {"type": "string"}}},
+        "receipts": {"type": "array", "items": {"type": "object"}}, "events": {"type": "array", "items": {"type": "object"}}, "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

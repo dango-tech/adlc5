@@ -26,10 +26,11 @@ Registry: [core/skill-registry.yaml](../../core/skill-registry.yaml) · Personas
 
 ## Auxiliary skills
 
-Not separate lifecycle stages — wired via `skill-registry.yaml`. Index: [skills/aux/README.md](../../skills/aux/README.md).
+Not separate lifecycle stages — wired via `skill-registry.yaml`. Index: [skills/auxiliary/README.md](../../skills/auxiliary/README.md).
 
 | Invoke | Skill | Typical stage |
 |--------|-------|---------------|
+| `@adlc5-pulse` | [pulse](../../skills/pulse/SKILL.md) | On-demand progress and evidence overview |
 | `@discover` | [discover](../../skills/discover/SKILL.md) | Specify |
 | `@prt` | [prt](../../skills/prt/SKILL.md) | Specify |
 | `@clean-architecture-review` | [clean-architecture-review](../../skills/clean-architecture-review/SKILL.md) | Plan |

@@ -33,3 +33,4 @@ PUBLIC-LAUNCH-PLAN.md
 # Documentation website build and local environment
 site/
 .venv-docs/
+.vercel/

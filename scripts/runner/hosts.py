@@ -179,7 +179,7 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
 def resolve_model(root: Path, workspace: Path, feature: str, tier: str, host: str) -> dict[str, Any]:
     import subprocess
 
-    proc = subprocess.run([str(root / "scripts/resolve-model.sh"), "--platform", host, "--tier", tier,
+    proc = subprocess.run([shutil.which("bash") or "bash", str(root / "scripts/resolve-model.sh"), "--platform", host, "--tier", tier,
                            "--workspace", str(workspace), "--feature", feature], cwd=workspace,
                           text=True, capture_output=True, check=False)
     if proc.returncode:

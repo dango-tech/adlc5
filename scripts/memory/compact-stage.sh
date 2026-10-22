@@ -27,7 +27,7 @@ done
 
 [[ -n "$FEATURE" && -n "$STAGE" ]] || usage
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FEATURE_DIR="${WORKSPACE}/.adlc5/${FEATURE}"
 STATE="${FEATURE_DIR}/state.json"

@@ -21,13 +21,16 @@ import zipfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[2]
-BASH = "/bin/bash" if Path("/bin/bash").exists() else "bash"
+BASH = "/bin/bash" if Path("/bin/bash").exists() else shutil.which("bash") or "bash"
 
 
 def run(cmd, cwd=None, env=None, stdin=None, check=False):
     base = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ADLC5"))}
     base.update(env or {})
-    return subprocess.run(cmd, cwd=cwd, env=base, input=stdin, capture_output=True, text=True, timeout=120, check=check)
+    if os.name == "nt" and Path(cmd[0]).is_file() and Path(cmd[0]).read_bytes().startswith(b"#!/usr/bin/env bash"):
+        cmd = [BASH, *cmd]  # Windows cannot exec a shebang script directly
+    return subprocess.run(cmd, cwd=cwd, env=base, input=stdin, capture_output=True, text=True,
+                          encoding="utf-8", timeout=120, check=check)
 
 
 def tree_digest(root: Path) -> str:
@@ -104,7 +107,8 @@ class PluginTest(unittest.TestCase):
 
     def test_archive_contents_and_modes(self):
         names = {p.relative_to(self.pkg).as_posix() for p in self.pkg.rglob("*") if p.is_file()}
-        for required in ("bin/adlc5", "bin/adlc5-run", "hooks/claude.json", ".mcp.json", "scripts/adlc5-mcp.py",
+        for required in ("bin/adlc5", "bin/adlc5-run", "hooks/claude.json", "hooks/pulse-band.json",
+                         "hooks/pulse-band.tsx", ".mcp.json", "scripts/adlc5-mcp.py",
                          "skills/implement/SKILL.md", "skills/adlc5-setup/SKILL.md", "core/gates.yaml", ".adlc5-package.json"):
             self.assertIn(required, names)
         for banned in ("CLAUDE.md", "AGENTS.md", "config.yaml", ".gitignore"):
@@ -114,6 +118,24 @@ class PluginTest(unittest.TestCase):
         for exe in ("bin/adlc5", "bin/adlc5-run", "scripts/adlc5", "scripts/init-workspace.sh", ".claude/hooks/engagement-gate.sh"):
             self.assertTrue(os.access(self.pkg / exe, os.X_OK), exe)
         self.assertFalse([p for p in self.pkg.rglob("*") if p.is_symlink()])
+
+    def test_hosted_desktop_package_omits_path_executables(self):
+        target = self.tmp / "desktop-upload"
+        info = json.loads(run([sys.executable, str(SRC / "scripts/package-plugin.py"), "--host", "claude", "--claude-hosted", "--out", str(target)], check=True).stdout)
+        package = Path(info["packages"]["claude"]["directory"])
+        with zipfile.ZipFile(info["zip"]) as archive:
+            self.assertFalse(any(name.startswith("bin/") for name in archive.namelist()))
+        module = (package / "hooks/pulse-band.tsx").read_text()
+        self.assertNotIn("/bin/adlc5", module)
+        self.assertIn("$.plugin.root", module)
+        self.assertNotIn("void refresh", module)
+        self.assertIn("'python3', `${pluginRoot}/scripts/adlc5`", module)
+        version = run([sys.executable, str(package / "scripts/adlc5"), "version"], check=True)
+        self.assertEqual(version.stdout.strip(), f"adlc5 {info['version']}")
+        startup = run([sys.executable, str(package / "scripts/plugin-session-start.py")], stdin="{}", check=True)
+        context = json.loads(startup.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("python3", context)
+        self.assertNotIn("(on PATH)", context)
 
     def test_archive_is_deterministic_and_zip_matches(self):
         second = self.tmp / "dist2"
@@ -139,6 +161,22 @@ class PluginTest(unittest.TestCase):
         raw = (self.pkg / "hooks/claude.json").read_text()
         self.assertNotIn("CLAUDE_PROJECT_DIR", raw)  # runtime comes from the package, not the workspace
         self.assertFalse((self.pkg / "hooks/hooks.json").exists())  # nothing auto-discovered besides claude.json
+
+    def test_claude_plugin_registers_native_pulse_band(self):
+        manifest = json.loads((self.pkg / ".claude-plugin/plugin.json").read_text())
+        self.assertIn("./hooks/pulse-band.json", manifest["hooks"])
+        pulse_hooks = json.loads((self.pkg / "hooks/pulse-band.json").read_text())
+        self.assertEqual(pulse_hooks["modules"], ["./pulse-band.tsx"])
+        module = (self.pkg / "hooks/pulse-band.tsx").read_text()
+        for contract in ("AbovePrompt", "turn.complete", "pulse", "Review", "Audit", "Board", "Details"):
+            self.assertIn(contract, module)
+        spec = importlib.util.spec_from_file_location("packager_pulse", SRC / "scripts/package-plugin.py")
+        packager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packager)
+        files = packager.collect(SRC, "codex")
+        version = (SRC / "core/VERSION").read_text().strip()
+        self.assertNotIn("hooks/pulse-band.tsx", packager.for_host(files, "codex", version))
+        self.assertNotIn("hooks/pulse-band.tsx", packager.for_host(files, "cursor", version))
 
     # --- kernel / bin ------------------------------------------------------
 
@@ -257,7 +295,10 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(replies), 6)  # the notification gets no reply
         self.assertEqual(by_id[1]["result"]["protocolVersion"], "2025-06-18")
         self.assertEqual(by_id[1]["result"]["serverInfo"]["version"], self.info["version"])
-        self.assertEqual(len(by_id[2]["result"]["tools"]), 15)
+        tools = by_id[2]["result"]["tools"]
+        self.assertEqual(len(tools), 16)
+        pulse = next(tool for tool in tools if tool["name"] == "adlc5_pulse")
+        self.assertTrue(pulse["annotations"]["readOnlyHint"])
         call = json.loads(by_id[3]["result"]["content"][0]["text"])
         self.assertEqual(call["stdout"].strip(), f"adlc5 {self.info['version']}")
         cli = run([str(self.pkg / "bin/adlc5"), "state", "get", "--feature", "demo", "--workspace", str(repo)])
@@ -501,6 +542,11 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(self.hook("claude-usage.sh", {"CLAUDE_PROJECT_DIR": str(bare)}, {"session_id": "s", "prompt": "x"}, ("stop",)).returncode, 0)
 
     # --- Claude CLI validator (when installed) -----------------------------
+
+    @unittest.skipUnless(shutil.which("claude"), "claude CLI not installed")
+    def test_pulse_mod_events_and_actions(self):
+        r = run(["claude", "plugin", "test", str(SRC)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     @unittest.skipUnless(shutil.which("claude"), "claude CLI not installed")
     def test_claude_validator_accepts_the_package(self):

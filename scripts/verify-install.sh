@@ -122,7 +122,7 @@ for f in core/VERSION core/sdd-model.md core/state-schema.json core/gates.yaml c
   scripts/repository-context.py scripts/tests/test-repository-context.py \
   scripts/memory/compact-stage.sh scripts/memory/generate-pack.sh scripts/memory/persona-pack-filter.sh scripts/memory/budget-check.py \
   scripts/tasks/render-board.sh scripts/tasks/validate-graph.py scripts/tasks/check-anchors.py \
-  scripts/evaluate-runs.py scripts/runner/dispatch.sh \
+  scripts/evaluate-runs.py scripts/telemetry-share.py scripts/runner/dispatch.sh \
   scripts/lib/state_v2.py scripts/lib/personas_load.py scripts/lib/model_routing.py \
   scripts/update-adlc5.sh \
   docs/ADLC5.md docs/ADLC5-kernel.md docs/telemetry.md docs/evaluation.md FRAMEWORK.md \
@@ -155,8 +155,9 @@ for rel in (".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-
         val = data.get(key)
         if not val:
             continue
-        assert not str(val).startswith("/") and ".." not in Path(str(val)).parts, f"{rel} unsafe path {key}={val}"
-        assert (root / str(val)).exists(), f"{rel} missing path {key}={val}"
+        for path in val if isinstance(val, list) else (val,):
+            assert not str(path).startswith("/") and ".." not in Path(str(path)).parts, f"{rel} unsafe path {key}={path}"
+            assert (root / str(path)).exists(), f"{rel} missing path {key}={path}"
     meta = data.get("adlc5") or {}
     if rel in (".cursor-plugin/plugin.json", "platform/codex-plugin/plugin.json"):
         assert isinstance(meta, dict) and meta.get("kernel") and meta.get("mcp"), f"{rel} missing adlc5.kernel/mcp"
@@ -183,7 +184,7 @@ PY
 for s in scripts/init-feature.sh scripts/pilot-autopilot.sh scripts/resolve-model.sh scripts/git-orchestrate.sh \
   scripts/memory/compact-stage.sh scripts/memory/generate-pack.sh scripts/memory/persona-pack-filter.sh \
   scripts/tasks/render-board.sh scripts/tasks/validate-graph.py scripts/tasks/check-anchors.py \
-  scripts/evaluate-runs.py scripts/runner/dispatch.sh \
+  scripts/evaluate-runs.py scripts/telemetry-share.py scripts/runner/dispatch.sh \
   scripts/update-adlc5.sh scripts/adlc5 scripts/adlc5-mcp.py \
   .cursor-plugin/run-adlc5.sh .cursor-plugin/run-mcp.sh; do
   if [[ -x "${ROOT}/${s}" ]]; then echo "  OK (exec): ${s}"

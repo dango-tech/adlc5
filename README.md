@@ -120,6 +120,26 @@ SOUL is the supporting reasoning discipline across all four stages.
 [Repository context and limits](core/guides/repository-context.md) explains the
 mechanics. Better code, fewer errors, or lower token costs require comparative measurements.
 
+## ADLC5 Pulse
+
+Use Pulse for an on-demand view of a feature's stage, recorded checks/review, local
+gate observation, known usage subtotal, and suggested next action. It reuses the
+existing ADLC5 state and evidence; it does not run your checks or continuously
+monitor the repository.
+
+```bash
+./scripts/adlc5 pulse snapshot --workspace .
+./scripts/adlc5 pulse board --workspace .
+./scripts/adlc5 pulse handoff --workspace . --feature my-feature
+```
+
+The offline board and cached band are generated when requested. Claude Code also
+shows an interactive Pulse band above the prompt; Codex and Cursor use the shared
+skill, read-only MCP snapshot, and CLI. Evidence means current at capture only;
+missing usage stays unknown. A local gate pass does not mean remote CI, human
+approval, deployment, or production health. See the [Pulse guide](docs/pulse.md)
+for host support and qualification boundaries.
+
 ## What completion establishes
 
 `adlc5 transition TARGET` validates the next step and its required gates.
@@ -147,6 +167,8 @@ independent frozen acceptance tests and a collector that reports missing observa
 honestly. See [consumer instructions](dogfood/consumer/README.md) and the
 [evaluation contract](docs/evaluation.md). Automated fixture tests are not live
 comparative quality results; the pilot and outside-contributor trial remain pending.
+ADLC5 also supports a separate, disabled-by-default minimized telemetry exporter;
+see [telemetry and privacy boundaries](docs/telemetry.md).
 
 ## Host support
 
@@ -177,8 +199,9 @@ Framework version: [core/VERSION](core/VERSION). Persisted state retains schema 
 
 ## Documentation website
 
-The [published user docs](https://dango-tech.github.io/adlc5/) in `website/docs/`
-cover overview, installation, quickstart, lifecycle, Intelligence, and reference.
+The [ADLC5 developer site](https://dango-tech.github.io/adlc5/) in `website/docs/`
+covers installation, a first-feature walkthrough, lifecycle, troubleshooting,
+releases, Intelligence, and reference.
 The [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview)
 provides a project-level introduction. For a local preview:
 
@@ -189,6 +212,5 @@ python -m pip install -r requirements-docs.txt
 python -m mkdocs serve
 ```
 
-See [site maintenance and GitHub Pages setup](docs/documentation-site.md) for builds,
-validation, and publication. The workflow validates pull requests and can publish
-from the default branch after Pages is configured.
+See the [site maintenance and Vercel deployment guide](docs/documentation-site.md)
+for builds, validation, and automatic private previews from `main`.

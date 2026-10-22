@@ -33,7 +33,7 @@ done
 command -v jq >/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 export ADLC5_WORKSPACE="$WORKSPACE"
 
 STATE="${WORKSPACE}/.adlc5/${FEATURE}/state.json"
