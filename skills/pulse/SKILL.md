@@ -14,6 +14,7 @@ Run from the consumer repository, or pass `--workspace` explicitly:
 ./scripts/adlc5 pulse snapshot --workspace .
 ./scripts/adlc5 pulse band --feature FEATURE --workspace .
 ./scripts/adlc5 pulse board --workspace .
+./scripts/adlc5 pulse board --all-projects --open
 ./scripts/adlc5 pulse handoff --feature FEATURE --workspace .
 ```
 

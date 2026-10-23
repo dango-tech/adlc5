@@ -6,6 +6,34 @@ Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run co
 
 ## Commands
 
+### All projects and historical sessions
+
+```bash
+./scripts/adlc5 pulse board --all-projects --open
+./scripts/adlc5 pulse board --all-projects --root /path/to/other/projects --open
+```
+
+The global board lives at `~/.config/adlc5/pulse/board.html`. It reuses the same
+Pulse cards and adds searchable inventories of feature snapshots, native host
+sessions with explicit ADLC5 request/tool evidence, and runner attempts. Standard
+roots are `~/SourceCode/Github`, `~/.codex/worktrees`, and `~/Documents/Codex`;
+additional `--root` directories are remembered in the private local root registry.
+Nested worktrees and archived features are included. Codex active/archived,
+Claude Code and Cursor JSONL transcript inventories are scanned locally. Other
+hosts appear through retained runner results. No raw prompts or command output
+are included, and nothing is uploaded. Generated global files have private modes.
+
+This is a snapshot of discovered sources, not proof of complete history: deleted
+or inaccessible records, provider-only history and unsupported transcript formats
+cannot be recovered automatically. Coverage warnings remain visible. Native
+session token subtotals cover entire conversations, not just ADLC5 work; they may
+overlap fork prefixes and are not added to feature ledgers. Cost and independent
+outcomes stay unmeasured without attributable evidence. Feature snapshots,
+sessions and attempts overlap and must not be added as a single run count.
+Regenerate with the same command and reload the file to include new runs.
+
+### One workspace
+
 Run from a consumer workspace, or provide `--workspace`:
 
 ```bash

@@ -17,7 +17,7 @@ let selectedEvent = null;
 
 document.getElementById("capture").textContent = `Captured ${data.generated_at} · on demand; continuous monitoring is off`;
 for (const feature of data.features) {
-  const option = make("option", "", `${feature.archive_id ? "Archived · " : ""}${feature.id}`);
+  const option = make("option", "", `${feature.project ? feature.project + " · " : ""}${feature.archive_id ? "Archived · " : ""}${feature.id}${feature.workspace_key ? " · " + feature.workspace_key : ""}`);
   option.value = feature.identity;
   selector.append(option);
 }
@@ -156,4 +156,63 @@ function render() {
 }
 
 selector.addEventListener("change", () => { selectedStage = null; selectedEvent = null; render(); });
+
+if (data.fleet) {
+  const fleet = document.getElementById("fleet");
+  fleet.hidden = false;
+  fleet.append(make("h1", "", "Your ADLC5 activity"), make("p", "muted", data.fleet.scope));
+  const metrics = make("div", "p-metrics");
+  for (const [name, count] of [["Workspaces", data.fleet.workspaces], ["Feature snapshots", data.features.length],
+    ["Host sessions", data.fleet.sessions.length], ["Runner attempts", data.fleet.attempts.length]]) {
+    const metric = make("div", "p-metric");
+    metric.append(make("label", "", name), make("strong", "p-value", count));
+    metrics.append(metric);
+  }
+  fleet.append(metrics);
+  const search = make("input");
+  search.type = "search";
+  search.placeholder = "Search projects, features, sessions or hosts";
+  search.setAttribute("aria-label", "Search all activity");
+  fleet.append(search);
+  const view = make("div");
+  fleet.append(view);
+  function inventory() {
+    view.replaceChildren();
+    const query = search.value.toLowerCase();
+    const tables = [
+      ["Feature snapshots", ["Project", "Feature", "Stage", "PR-ready evidence", "Recorded cost subtotal"],
+        data.features.map(f => [f.project, `${f.archive_id || f.id} · ${f.workspace_key}`, f.lifecycle.step || "Not recorded", f.evidence.pr_ready.status,
+          f.usage.known_cost_usd === null ? "Not measured" : `${money(f.usage.known_cost_usd)} · incomplete coverage`])],
+      ["Host sessions with explicit ADLC5 evidence", ["Project", "Host", "Session", "Last evidence", "Evidence", "Whole-session token subtotal", "Independent outcome"],
+        data.fleet.sessions.map(s => [s.project, s.host, s.id, s.last || "Not recorded", s.evidence,
+          s.tokens === null ? "Not measured" : `${s.tokens.toLocaleString()} · ${s.token_source}`, s.outcome])],
+      ["Runner attempts", ["Project", "Feature", "Attempt", "Host", "Worker status", "Model"],
+        data.fleet.attempts.map(a => [a.project, a.feature, a.id, a.host, a.status || "Not recorded", a.model])],
+    ];
+    for (const [title, headings, rows] of tables) {
+      const section = make("details", "p-inventory");
+      const filtered = rows.filter(row => row.join(" ").toLowerCase().includes(query));
+      section.open = true;
+      section.append(make("summary", "", `${title} · ${filtered.length}`));
+      const scroll = make("div", "p-table-scroll");
+      const table = make("table");
+      const head = make("tr");
+      for (const heading of headings) head.append(make("th", "", heading));
+      table.append(head);
+      for (const row of filtered) {
+        const tr = make("tr");
+        for (const cell of row) tr.append(make("td", "", cell));
+        table.append(tr);
+      }
+      scroll.append(table);
+      section.append(scroll);
+      if (!filtered.length) section.append(make("p", "muted", "No matching recorded activity."));
+      view.append(section);
+    }
+  }
+  search.addEventListener("input", inventory);
+  inventory();
+  if (data.warnings?.length) fleet.append(make("p", "muted", `Coverage warnings: ${data.warnings.join(" · ")}`));
+  fleet.append(make("h2", "", "Selected feature details"));
+}
 render();

@@ -233,6 +233,8 @@ def _feature_dirs(workspace: Path, active_only: bool, reader: Reader) -> list[Pa
                     continue
                 try:
                     info = archived.lstat()
+                    if stat.S_ISREG(info.st_mode):
+                        continue
                     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
                         reader.warnings.append("unsafe_archive_directory:" + archived.name)
                         continue
@@ -241,13 +243,15 @@ def _feature_dirs(workspace: Path, active_only: bool, reader: Reader) -> list[Pa
                 if not FEATURE_NAME.fullmatch(archived.name):
                     reader.warnings.append("invalid_archive_id")
                     continue
-                if (archived / "state.json").exists():
+                if any((archived / name).exists() for name in ('state.json', 'FEATURE.md', 'memory/usage-ledger.jsonl', 'delivery/state.json')):
                     found.append(archived)
             continue
         if child.name.startswith("."):
             continue
         try:
             info = child.lstat()
+            if stat.S_ISREG(info.st_mode):
+                continue
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
                 reader.warnings.append("unsafe_feature_directory:" + child.name)
                 continue
@@ -256,7 +260,7 @@ def _feature_dirs(workspace: Path, active_only: bool, reader: Reader) -> list[Pa
         if not FEATURE_NAME.fullmatch(child.name):
             reader.warnings.append("invalid_feature_name")
             continue
-        if (child / "state.json").exists():
+        if any((child / name).exists() for name in ('state.json', 'FEATURE.md', 'memory/usage-ledger.jsonl', 'delivery/state.json')):
             found.append(child)
     if len(found) > MAX_FEATURES:
         reader.warnings.append("feature_limit_exceeded")
@@ -460,7 +464,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "capture": {"stable": False, "input_fingerprint": None, "freshness": "unavailable", "captured_at": generated},
             "lifecycle": {"stage": None, "step": None},
             "evidence": {"checks": {"status": "unavailable"}, "review": {"status": "unavailable"}, "pr_ready": {"status": "unavailable", "reason": "state unavailable"}},
-            "evaluation": _evaluation(directory, reader), "usage": _usage([], ROOT), "next_action": {"reason_code": "state_unavailable", "label": "Inspect feature state"},
+            "evaluation": _evaluation(directory, reader), "usage": _usage(_jsonl(reader, directory / 'memory/usage-ledger.jsonl')[0], ROOT), "next_action": {"reason_code": "state_unavailable", "label": "Inspect feature state"},
             "receipts": [], "events": [], "warnings": ["state_unavailable"],
         }
     stage = state.get("current_stage") if state.get("current_stage") in STAGES else None

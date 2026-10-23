@@ -130,8 +130,13 @@ monitor the repository.
 ```bash
 ./scripts/adlc5 pulse snapshot --workspace .
 ./scripts/adlc5 pulse board --workspace .
+./scripts/adlc5 pulse board --all-projects --open
 ./scripts/adlc5 pulse handoff --workspace . --feature my-feature
 ```
+
+The all-projects board lives at `~/.config/adlc5/pulse/board.html` and includes discovered
+active/archived features, explicit native-host ADLC5 session references, and runner attempts.
+Add other repository locations with `--root PATH`; run the command again to refresh.
 
 The offline board and cached band are generated when requested. Claude Code also
 shows an interactive Pulse band above the prompt; Codex and Cursor use the shared
