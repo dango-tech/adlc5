@@ -13,13 +13,15 @@ SPEC.loader.exec_module(hosts)
 def main() -> None:
     workspace = Path("/tmp/workspace")
     argv = hosts.command(host="codex", mode="confined", workspace=workspace, prompt="do work", model=None, effort="low")
-    assert "-m" not in argv and "workspace-write" in argv
+    assert "-m" not in argv and "--approve-for-me" in argv and "--sandbox" not in argv
     events = hosts.parse_events("codex", '\n'.join([
         '{"type":"thread.started","thread_id":"session-1"}',
         '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"status\\":\\"completed\\"}"}}',
         '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":8,"cache_write_input_tokens":1,"output_tokens":2,"reasoning_output_tokens":1}}',
     ]))
     assert events["session_id"] == "session-1"
+    failure = hosts.parse_events('codex', '{"type":"turn.failed","error":{"message":"invalid provider schema"}}')
+    assert failure['is_error'] and failure['error']['message'] == 'invalid provider schema'
     assert events["text"] == '{"status":"completed"}'
     # Cached input is a subset of Codex's input_tokens; only the uncached part is recorded as input.
     assert events["usage"] == {"input": 2, "cache_read": 8, "cache_creation": 1, "output": 2, "thinking": 1}

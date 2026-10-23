@@ -166,12 +166,20 @@ def review_failures(record, policies):
 
 def completion_checks(workspace, feature, policies=None, *, approval=True, review=True):
     try:
+        from lib.requirements_readiness import check
+        readiness = check(workspace, feature)
         required = config(workspace, feature)
         current = fingerprint(workspace, feature)
         fresh = [r for r in records(workspace, feature) if r.get('fingerprint') == current]
         latest = next((r for r in reversed(fresh) if r.get('kind') == 'checks'), {})
         results = {r['id']: r for r in latest.get('results', [])}
         failures = [c['id'] for c in required if c.get('required', True) and (results.get(c['id'], {}).get('status') != 'pass' or not latest.get('stable'))]
+        if readiness['status'] != 'pass':
+            failures.append(readiness['message'])
+        from lib.requirements_readiness import delivery_check
+        delivery = delivery_check(workspace, feature, 'complete' if review else 'tasks')
+        if delivery['status'] != 'pass':
+            failures.append(delivery['message'])
         policies = policies or load_policies(workspace, feature)
         if review and profile_name(policies) == 'high_risk' and not any(c['id'] == 'security' and c.get('required', True) for c in required):
             failures.append('required security command')
@@ -180,6 +188,11 @@ def completion_checks(workspace, feature, policies=None, *, approval=True, revie
         if review:
             review_record = next((r for r in reversed(fresh) if r.get('kind') == 'review'), {})
             failures.extend(review_failures(review_record, policies))
+            if profile_name(policies) != 'tiny' and delivery['status'] == 'pass':
+                from lib.requirements_readiness import load_record, NAME
+                conformance = load_record(workspace / '.adlc5' / feature / NAME)['delivery']['conformance']
+                if conformance['reviewer_session_id'] != review_record.get('verifier_session_id'):
+                    failures.append('intent conformance must be recorded by the independent diff reviewer')
         if approval and ((policies.get('autopilot') or {}).get('require_human_pr_approval') or policies.get('require_human_pr_approval')):
             latest_approval = next((r for r in reversed(fresh) if r.get('kind') == 'approval' and r.get('type') == 'pr_approval'), {})
             if latest_approval.get('decision') != 'approve' or not is_human_approver(latest_approval.get('approved_by')):
@@ -200,6 +213,17 @@ def transition(workspace, feature, target):
     expected = 'completed' if current == 'implement-5-pr' else next_step_for_profile(policies, current)
     if target != expected or current == target:
         raise ValueError(f'expected next step {expected}, got {target}')
+    from lib.requirements_readiness import check
+    protected = state['current_stage'] != 'specify' or not target.startswith('specify-')
+    if protected:
+        readiness = check(workspace, feature)
+        if readiness['status'] != 'pass':
+            raise ValueError(readiness['message'])
+        if target == 'implement-1-build':
+            from lib.requirements_readiness import delivery_check
+            delivery = delivery_check(workspace, feature, 'tasks')
+            if delivery['status'] != 'pass':
+                raise ValueError(delivery['message'])
     if state['current_stage'] == 'specify' and target.split('-')[0] != 'specify' or target == 'implement-1-build' or target == 'completed':
         errors = profile_risk_errors(workspace, feature, policies)
         if errors:
@@ -221,6 +245,8 @@ def transition(workspace, feature, target):
             return {'status': 'error', 'error': 'gate_failed', 'gate': result}
     if fingerprint(workspace, feature) != before:
         raise ValueError('inputs changed during transition')
+    if protected and check(workspace, feature)['status'] != 'pass':
+        raise ValueError('requirements evidence changed during transition')
     statuses = dict(state['stage_status'])
     if next_stage != stage or target == 'completed':
         statuses[stage] = 'completed'

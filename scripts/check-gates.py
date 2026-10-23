@@ -873,7 +873,8 @@ def check_v2_specify_complete(workspace: Path, feature: str, state: dict) -> lis
             "message": "spec-handoff.md present" if handoff.is_file() else "missing spec-handoff.md",
         }
     )
-    checks.extend(check_clarity(state))
+    from lib.requirements_readiness import check
+    checks.append(check(workspace, feature))
     return checks
 
 
@@ -1138,24 +1139,6 @@ def normalize_gate_id(gate_id: str) -> str:
     return v2_aliases.get(gate_id, gate_id)
 
 
-def check_clarity(lifecycle: dict | None) -> list[dict]:
-    if not lifecycle:
-        return [{"id": "lifecycle_state", "status": "warn", "message": "lifecycle state.json missing"}]
-    clarity = lifecycle.get("clarity") or {}
-    score = clarity.get("overall") or clarity.get("score")
-    threshold = clarity.get("threshold") or 70
-    if score is None:
-        return [{"id": "clarity_score", "status": "warn", "message": "clarity score not set"}]
-    status = "pass" if int(score) >= int(threshold) else "warn"
-    return [
-        {
-            "id": "clarity_threshold",
-            "status": status,
-            "message": f"clarity {score} vs threshold {threshold}",
-        }
-    ]
-
-
 GATE_HANDLERS = {
     "build-1-implementation": check_build_implementation,
     "assure-2-integration": check_assure_integration,
@@ -1265,7 +1248,6 @@ def main() -> int:
         checks.extend(GATE_HANDLERS[gate_id](delivery))  # type: ignore[operator]
     elif gate_id.startswith("plan") or gate_id.startswith("specify"):
         checks.extend(check_plan_gate(delivery, gate_id, workspace, args.feature))
-        checks.extend(check_clarity(lifecycle))
     else:
         handler = GATE_HANDLERS.get(gate_id)
         if handler:
@@ -1281,6 +1263,14 @@ def main() -> int:
             checks.extend(check_custom_gates(workspace, args.feature, policies, strict=False))
 
     if lifecycle and is_v2_state(lifecycle):
+        if gate_id != 'specify-complete':
+            from lib.requirements_readiness import check
+            checks.append(check(workspace, args.feature))
+        from lib.requirements_readiness import delivery_check
+        if gate_id == 'plan-complete':
+            checks.append(delivery_check(workspace, args.feature, 'plan'))
+        if gate_id in ('tasks-complete', 'tasks-2-code-spec-complete'):
+            checks.append(delivery_check(workspace, args.feature, 'tasks'))
         checks.extend(check_persona_context_gate(workspace, args.feature, lifecycle, policies))
 
     if args.gate in ("pr-ready", "deploy-ready") or gate_id == "assure-1-verification":

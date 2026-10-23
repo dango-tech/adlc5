@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -20,11 +21,12 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from runner import hosts  # noqa: E402
+from runner.questions import pending as pending_question, check_current as check_question, current_answers, StaleQuestion  # noqa: E402
 from lib.completion_evidence import fingerprint, records as evidence_records  # noqa: E402
 from lib.config_layers import config_paths  # noqa: E402
 from lib.model_routing import load_yaml_file, merge_model_config  # noqa: E402
 from lib.policies_load import CANONICAL_STEPS, load_policies, next_step_for_profile, profile_name, step_enabled  # noqa: E402
-from lib.state_v2 import load_feature_state  # noqa: E402
+from lib.state_v2 import load_feature_state, atomic_write_json  # noqa: E402
 
 
 def now() -> str:
@@ -55,6 +57,35 @@ def read_json(path: Path, default: Any = None) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return default
+
+
+def resume_question(workspace: Path, feature: str) -> dict | None:
+    feature_dir = workspace / '.adlc5' / feature
+    path = feature_dir / 'pilot/pending-question.json'
+    if not path.exists():
+        return None
+    pending = read_json(path)
+    if not isinstance(pending, dict) or not isinstance(pending.get('id'), str) or not pending['id']:
+        raise RuntimeError('invalid pending question; preserve and inspect it before resuming')
+    if Path(pending['id']).name != pending['id'] or pending['id'] in ('.', '..'):
+        raise RuntimeError('unsafe pending question id')
+    try:
+        check_question(workspace, feature, pending)
+    except StaleQuestion:
+        if pending.get('category') != 'product':
+            raise
+        atomic_write_json(feature_dir / 'pilot/superseded-questions' / (pending['id'] + '.json'), pending)
+        path.unlink()
+        deviation(feature_dir, 'superseded_product_question', question_id=pending['id'])
+        return None
+    if not pending.get('answer') or pending.get('denied_actions') and str(pending['answer']).lower() not in ('allow', 'yes', 'approve'):
+        return pending
+    from runner.answer import record_reply
+    if record_reply(workspace, path, pending['answer'], pending['id'], quiet=True):
+        raise RuntimeError('pending answer could not be recovered; inspect the answer journal')
+    atomic_write_json(feature_dir / 'pilot/answered-questions' / (pending['id'] + '.json'), pending)
+    path.unlink()
+    return None
 
 
 def interaction_mode(config: dict[str, Any], policies: dict[str, Any]) -> str:
@@ -256,8 +287,7 @@ def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: st
             return text, story
     paths = sorted((ROOT / "skills" / skill / "phases").glob("*.md")) or [ROOT / "skills" / skill / "SKILL.md"]
     chunks = [f"## {path.name}\n\n{path.read_text(encoding='utf-8')}" for path in paths if path.is_file()]
-    answers = workspace / ".adlc5" / feature / "pilot/answers.jsonl"
-    answer_lines = answers.read_text(encoding="utf-8") if answers.is_file() else ""
+    answer_lines = '\n'.join(json.dumps(entry) for entry in current_answers(workspace, feature))
     return "\n\n".join(chunks) + "\n\nNavigator gate feedback:\n" + json.dumps(gates, indent=2) + \
         ("\n\nHuman answers:\n" + answer_lines if answer_lines else ""), story
 
@@ -300,6 +330,30 @@ def command_allowlist(workspace: Path, feature: str) -> list[str]:
     return allowed
 
 
+def parse_worker_result(raw: Any, host: str) -> dict:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            # Cursor's JSON transport concatenates commentary and the final fenced result.
+            blocks = list(re.finditer(r'```json\s*\n(.*?)\n```', raw, re.DOTALL)) if host == 'cursor' else []
+            if len(blocks) != 1 or raw[blocks[0].end():].strip():
+                raise ValueError('host did not return one final JSON result')
+            raw = json.loads(blocks[0][1])
+    return decode_worker_result(raw)
+
+
+def decode_worker_result(value: Any) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError('worker result must be an object')
+    if 'payload_json' not in value:
+        return value  # Older attended/result-file workers remain readable.
+    payload = json.loads(value['payload_json'])
+    if not isinstance(payload, dict) or set(payload) & {'attempt_id', 'status', 'summary', 'payload_json'}:
+        raise ValueError('worker payload must be an object without envelope overrides')
+    return {**{k: v for k, v in value.items() if k != 'payload_json'}, **payload}
+
+
 def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: str,
                model: dict[str, Any], timeout: int, host: str, mode: str,
                interaction_mode: str) -> tuple[int, dict[str, Any], str]:
@@ -307,19 +361,43 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
     result_dir.mkdir(parents=True, exist_ok=True)
     attempt_id = attempt["attempt_id"]
     schema, last, result = (result_dir / f"{attempt_id}.{suffix}" for suffix in ("schema.json", "last-message.json", "json"))
-    schema.write_text(json.dumps({"type": "object", "required": ["attempt_id", "status", "summary"],
+    schema.write_text(json.dumps({"type": "object", "required": ["attempt_id", "status", "summary", "payload_json"],
         "properties": {"attempt_id": {"const": attempt_id}, "status": {"enum": ["completed", "needs_human", "failed"]},
-                       "summary": {"type": "string"}, "question": {"type": "string"},
-                       "story_id": {"type": "string"}, "state_patch": {"type": "object"},
-                       "review": {"type": "object"}}, "additionalProperties": True}, indent=2))
+                       "summary": {"type": "string"}, "payload_json": {"type": "string"}},
+        "additionalProperties": False}, indent=2))
     # Fixed rules first and the per-attempt id last, so separate workers share a cacheable prefix.
     result_prompt = ("You are an ADLC5 worker. Do only the current step. Do not run transitions, change lifecycle state, "
               "commit, push, create worktrees, or perform the next step, even where the brief below says to. "
               "Write only in the workspace. Return one JSON object with attempt_id, status "
               "(completed, needs_human or failed), summary, and any story_id, state_patch or review the step requires. "
-              "For a human decision return needs_human and a question.\n\n"
-              f"Feature: {feature}\nStep: {attempt['step']}\n\n{brief}\n\nattempt_id: {attempt_id}")
+              "Investigate consequential unknowns using repository inspection, official research, or a bounded experiment first. "
+              "Ask the user for product tradeoffs and authorization they own. For a human product decision return needs_human "
+              "and a question object with decision_id, category='product', text, rationale, recommendation, alternatives[], "
+              "requirement_ids[] and intent_sha256 from readiness prepare. Ask one dependent decision at a time; "
+              "reuse prior answers and explicit preferences. Never treat a product answer as command permission.\n\n"
+              "Before completing Specify handoff, use adlc5 readiness prepare and record an actual "
+              "requirements review (docs/requirements-readiness.md). Never infer readiness from a clarity score. "
+              "After intent or policy changes, reassess before marking the step completed. "
+              "High-risk intent needs an independent reviewer session; request human help if unavailable.\n\n"
+              "Before leaving Plan (or Specify for tiny), extend the review with readiness delivery: "
+              "assess operational applicability and validation methods, and preserve mandatory constraints for coders. "
+              "Before Build map requirements and decisions to stories and matching acceptance IDs. "
+              "During verification satisfy applicable obligations with current evidence and record delivery.conformance "
+              "for missing, partial, contradictory, unrequested behavior and constraints. Use the actual diff reviewer's "
+              "session ID. Return findings for bounded rework; never certify an unavailable check. "
+              "Legacy_unbound answers are historical context, not current authorization; reassess consequential choices.\n\n"
+              f"Feature: {feature}\nStep: {attempt['step']}\n\n{brief}\n\nattempt_id: {attempt_id}\n\n"
+              "Transport format: return exactly attempt_id, status, summary, payload_json. "
+              "payload_json is a JSON-encoded object containing the step-specific fields described above "
+              "(question, story_id, state_patch, review); use '{}' when none apply. "
+              "Do not put those fields at the outer level or repeat the envelope fields inside payload_json.")
     prompt = result_prompt
+    try:
+        from runner.questions import intent
+        prompt += '\n\nKernel-computed current intent_sha256: ' + intent(workspace, feature) + \
+            '. Use this digest for a product question; no shell command is needed to recompute it.'
+    except (ValueError, TypeError, KeyError, OSError):
+        pass  # Early discovery may not have its mandatory intent sources yet.
     if mode == "attended" or host == "hermes":
         prompt += (f"\n\nWhen finished, write the final JSON object to {last}. Include attempt_id {attempt_id}, "
                    "status, summary, and any required story_id, state_patch, or review fields. Do not exit until that file is written. "
@@ -399,7 +477,7 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
     if mode != "attended" and host != "hermes":
         try:
             raw_result = events.get("text") or "{}"
-            result_data = raw_result if isinstance(raw_result, dict) else json.loads(raw_result)
+            result_data = parse_worker_result(raw_result, host)
             if result_data.get("attempt_id") != attempt_id:
                 raise ValueError("structured result did not match the active attempt; host must return the schema object")
             last.write_text(json.dumps(result_data), encoding="utf-8")
@@ -408,7 +486,7 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
     if not last.is_file():
         return (124 if timed_out else 130 if stopped else proc.returncode or 1), {"error": "missing result file", **spent}, log_text
     try:
-        worker = json.loads(last.read_text(encoding="utf-8"))
+        worker = decode_worker_result(json.loads(last.read_text(encoding="utf-8")))
         if not isinstance(worker, dict) or worker.get("attempt_id") != attempt_id or worker.get("status") not in ("completed", "needs_human", "failed"):
             raise ValueError("result identity or status mismatch")
     except (ValueError, json.JSONDecodeError) as exc:
@@ -663,7 +741,7 @@ def run(args: argparse.Namespace) -> int:
             finish_summary(workspace, args.feature, "completed", branch, args.summary or "brief")
             return 0
         call(workspace, "pilot", "--feature", args.feature)
-        pending = read_json(feature_dir / "pilot/pending-question.json")
+        pending = resume_question(workspace, args.feature)
         if pending and not pending.get("answer"):
             print(json.dumps({"status": "needs_human", **pending}, indent=2))
             return 10
@@ -770,9 +848,8 @@ def run(args: argparse.Namespace) -> int:
                     raise RuntimeError(result.get("error") or f"worker exited {rc}")
                 record_checkpoint(journal_path, entry, "result_validated", session_id=result.get("session_id"), model_id=result.get("model_id"))
                 if result.get("status") == "needs_human":
-                    question = {"id": entry["attempt_id"], "question": result.get("question", "Human input required"), "step": step,
-                                "denied_actions": result.get("denied_actions", []), "host": host}
-                    (feature_dir / "pilot/pending-question.json").write_text(json.dumps(question, indent=2) + "\n")
+                    question = pending_question(workspace, args.feature, result, entry['attempt_id'], step, host)
+                    atomic_write_json(feature_dir / "pilot/pending-question.json", question)
                     if question["denied_actions"]:
                         deviation(feature_dir, "denied_action", step=step, denied_actions=question["denied_actions"])
                     record_usage(workspace, args.feature, entry, result, model)

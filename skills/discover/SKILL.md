@@ -9,6 +9,12 @@ author: ADLC5 Contributors
 
 ## Intent
 
+First apply the investigation protocol in [structured questions](../../core/guides/askquestion-convention.md#investigate-before-asking).
+Inspect available evidence and reuse prior answers before interviewing the user.
+Use the selected [profile](../../core/guides/profile-routing.md): a council is
+additional work requiring a concrete exploration question, not the default for
+every vague feature. Record consequential dispositions in readiness decisions.
+
 This skill guides the exploration phase that happens *before* structured requirements. Starting from a rough idea or problem space, it runs a structured framing interview, then dispatches an LLM Council — three independent AI agents each running a different LLM — to explore the solution space from genuinely different perspectives. The orchestrator synthesizes the council's responses into a discovery brief that feeds directly into `@prt`.
 
 **User invokes:** `@discover for [topic/problem]`

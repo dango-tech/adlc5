@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "kind": "deterministic-kernel-regressions",
+  "baseline_revision": "3308e850a0f40a53ebc048ad31b37a0a670372c0",
+  "live_agent_delivery": false,
+  "test_module": "scripts/tests/test-requirements-readiness.py",
+  "cases": [
+    {
+      "case_id": "placeholder-padding",
+      "test": "test_clarity_padding_does_not_authorize_progression",
+      "expected": "A legacy score of 100 never authorizes a placeholder specification."
+    },
+    {
+      "case_id": "unresolved-and-conflicting-decisions",
+      "test": "test_open_and_contradictory_decisions_block",
+      "expected": "An unresolved user decision or undisposed review finding blocks recording readiness."
+    },
+    {
+      "case_id": "stale-intent-and-policy",
+      "test": "test_stale_sources_scope_and_policy_block",
+      "expected": "Source, scope and policy changes invalidate the previous intent review."
+    },
+    {
+      "case_id": "metadata-bypass",
+      "test": "test_cli_mcp_and_metadata_cannot_bypass_readiness",
+      "expected": "Metadata claiming ready has no authority; CLI and MCP use the same contract."
+    },
+    {
+      "case_id": "downstream-progression",
+      "test": "test_downstream_transition_and_gate_recheck_readiness",
+      "expected": "Within-stage transitions and downstream gates cannot bypass missing intent review."
+    },
+    {
+      "case_id": "review-independence",
+      "test": "test_high_risk_requires_independent_review",
+      "expected": "High-risk requirements cannot be self-reviewed in the author session."
+    }
+  ],
+  "deferred_live_cases": [
+    "duplicate-product-questions-after-resume",
+    "question-quality-with-weak-requirements",
+    "operational-readiness-and-change-convergence"
+  ]
+}

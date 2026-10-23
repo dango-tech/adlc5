@@ -1,89 +1,37 @@
-# ADLC5 — Clarity scoring
+# ADLC5 — Clarity lint and requirements readiness
 
-Quantify requirement/design readiness before stage and step advances. Works with [interaction-modes.md](interaction-modes.md) and the canonical [SDD model](../sdd-model.md).
-
-## State schema
-
-Add to `.adlc5/{feature}/state.json`:
-
-```json
-"clarity": {
-  "threshold": 80,
-  "score": 65,
-  "history": [
-    {
-      "ts": "2026-05-20T12:00:00Z",
-      "type": "clarity_check",
-      "step": "specify-2-requirements",
-      "score": 65,
-      "open_items": 2,
-      "assumptions": 1
-    }
-  ]
-}
-```
-
-Initialize on first `@adlc5` invocation with `threshold: 80`, `score: null`, and empty `history`.
-
-## Scoring rubric (0–100 per step)
-
-| Dimension | Weight | Signals |
-|-----------|--------|---------|
-| **Completeness** | 30% | Required sections filled; AC present; scale NFRs captured or explicitly N/A |
-| **Specificity** | 30% | Measurable AC; named entities; no vague terms ("fast", "user-friendly") without targets |
-| **Confirmed vs assumed** | 25% | User-confirmed decisions vs `[ASSUMPTION]` flags in artifacts |
-| **Testability** | 15% | QA could write tests without guessing behavior |
-
-Record `open_items` = count of unresolved ambiguities; `assumptions` = count of `[ASSUMPTION]` tags.
-
-## When to score
-
-To perform repeatable quantitative scoring of a document or spec, call the automated clarity scoring script:
+Clarity is a heuristic document-lint report. `clarity.score`, threshold and history
+remain readable for compatibility; the numeric value never authorizes progression.
+The scorer checks surface signals and can award 100 to placeholder text.
 
 ```bash
-./scripts/clarity-score.py /path/to/spec.md --step-id "{step-id}"
+./scripts/adlc5 clarity path/to/spec.md --step-id specify-2-requirements
 ```
 
-This script scans for `[ASSUMPTION]` tags, checks completeness criteria, detects unquantified vague terms (like "fast", "scalable"), analyzes testability markers, and outputs a structured JSON report ready to be merged into `state.json`.
+Output retains the legacy score/breakdown and declares `heuristic: true` and
+`gate_authority: false`. Use missing sections, vague language and assumption tags
+as investigation hints, not a quantified measure of understanding.
 
-| Pipeline | Score before advance |
-|----------|---------------------|
-| Specify (`specify-*`) | Always (HITL mode) |
-| Plan (`plan-*`) | Always (HITL mode) |
-| Tasks / Implement | Re-score when unresolved assumptions affect the active step |
+## Current progression contract
 
-## HITL clarification loop (Specify + Plan)
+Before leaving Specify, write the existing intent artifacts and `risk.json`, select
+the risk-appropriate policy, then use `adlc5 readiness prepare --feature NAME`.
+Review behavior, contradictions, negative cases and assumptions against current
+sources. Fill actual requirement references, acceptance scenarios, decisions and
+session identities, then submit `adlc5 readiness record --feature NAME --file PATH`.
+See [requirements readiness](../../docs/requirements-readiness.md) for the full contract.
 
-When interaction mode is `hitl` (default) and `clarity.score < clarity.threshold`:
+The kernel requires a current record at protected transitions and gates. Empty
+sections, placeholders, unresolved decisions, stale sources or missing review
+cannot be waived by a high score. High-risk intent requires an independent reviewer
+session. Agent assumptions remain distinct from user decisions and cannot resolve
+a blocking decision. Inspect available evidence before asking the user; do not
+infer completeness from either the length of a prompt or the absence of tags.
 
-1. Score artifact → write `clarity.score` and append a `clarity.history` entry for the step
-2. List top 3 ambiguities (rank by implementation risk)
-3. **AskQuestion** — max 2 questions per call; repeat until resolved or waived
-4. Update artifact; remove resolved `[ASSUMPTION]` tags
-5. Re-score
-6. Stage/step-advance **AskQuestion** only after score ≥ threshold OR user selects **Proceed with documented assumptions**
+## Resume and change
 
-### Discover pre-check (Specify stage)
-
-Before skipping `@discover`:
-
-| Input clarity (informal) | Action |
-|--------------------------|--------|
-| Score < 60 | **Require** `@discover` or clarification round before `@prt` |
-| 60–79 | Offer `@discover`; run clarification if user declines discover |
-| ≥ 80 + user confirms | Skip discover; proceed to `@prt` |
-
-Do not infer "requirements already clear" from a short prompt alone.
-
-## Waive
-
-Use AskQuestion option id `proceed_with_assumptions` — document waived step and remaining assumptions in `clarity.history` with `action: "waived"`.
-
-## Overall score
-
-`clarity.score` records the current blocking readiness score. Use the minimum active Specify/Plan score for gate decisions so one weak step blocks downstream work.
-
-## Tasks / Implement escalation
-
-- [@build-implementer](../../skills/build-implementer/SKILL.md): if code-spec step score was below threshold at waive, escalate ambiguity — do not guess
-- [@adlc5-tdd](../../skills/adlc5-tdd/SKILL.md): spec ambiguous → report; don't guess
+Preserve existing answers and approved execution scope. Changed intent, risk,
+effective policies, scope or scale NFRs requires reassessment. Implementation edits
+alone do not stale the intent review. Read legacy states normally, but assess an
+active legacy feature before its next protected transition. Never manufacture a
+review from a historical score or rewrite approval history to clear this check.

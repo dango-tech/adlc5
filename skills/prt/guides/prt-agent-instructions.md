@@ -31,7 +31,7 @@ Professional, neutral, fact-based. No jargon. No padding. No vague language. Eve
 8. **End with clear open questions** and decisions needed (owner + target date where known)
 9. **If input is vague:** Ask 1–3 targeted clarifying questions BEFORE generating the full PRT. Do not generate from a two-word description.
 10. **Never assume scope** — if something is not confirmed, flag it as `[ASSUMPTION]`
-11. **Clarity gate:** Do not mark PRT draft complete if clarity score for `spec-2-requirements` is below threshold without clarification round or documented waive — see [clarity-scoring.md](../../../core/guides/clarity-scoring.md)
+11. **Readiness evidence:** Resolve consequential ambiguity and review current intent before Specify exit. Clarity lint is advisory and cannot certify understanding or waive unresolved decisions — see [clarity-scoring.md](../../../core/guides/clarity-scoring.md) and [requirements readiness](../../../docs/requirements-readiness.md).
 
 ## Clarifying Question Bank
 

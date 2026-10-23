@@ -12,7 +12,7 @@ Compatibility reference for pre-v3 five-stage and delivery `current_phase` alias
 
 - **Step ID:** `{pipeline}-{n}-{slug}` (e.g. `plan-1-discovery`)
 - **Display label:** `Stage 3 — Plan · Step 1 — Design Discovery`
-- **Resume line:** announce display label + clarity score (see [clarity-scoring.md](clarity-scoring.md))
+- **Resume line:** announce the display label and current readiness blockers. Clarity lint is advisory (see [clarity-scoring.md](clarity-scoring.md)).
 
 Store optional `current_phase_display` in state when resuming.
 

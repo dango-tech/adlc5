@@ -139,7 +139,7 @@ Compaction: `scripts/memory/compact-stage.sh` at stage exits.
 
 After `init-workspace.sh`, governance copies to `.adlc5/governance/`. Per feature: copy `definition-of-done.md` into `.adlc5/{feature}/`.
 
-`verified` on a story ≠ production-ready — exit on `check-gates.py --gate pr-ready`.
+`verified` on a story does not establish PR readiness — exit on `check-gates.py --gate pr-ready`. Report deployment approval and live production qualification separately.
 
 ---
 

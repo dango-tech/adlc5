@@ -20,6 +20,24 @@ CONFIG_SPEC.loader.exec_module(configure_models)
 
 
 def main() -> None:
+    assert runner.decode_worker_result({'attempt_id': 'a', 'status': 'needs_human', 'summary': 'decision',
+        'payload_json': '{"question":{"text":"Who may export?"}}'})['question']['text'] == 'Who may export?'
+    fenced = 'Inspected the requirement.\n```json\n{"attempt_id":"a","status":"needs_human","payload_json":"{}"}\n```'
+    assert runner.parse_worker_result(fenced, 'cursor')['attempt_id'] == 'a'
+    for malformed in (fenced + '\ntrailing output', fenced + '\n' + fenced):
+        try:
+            runner.parse_worker_result(malformed, 'cursor')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('ambiguous cursor result accepted')
+    for invalid in ('[]', '{"status":"completed"}', 'not json'):
+        try:
+            runner.decode_worker_result({'payload_json': invalid})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('invalid or overriding transport payload accepted')
     assert runner.interaction_mode({"defaults": {"interaction_mode": "hitl"}}, {"interaction_mode": "autonomous"}) == "autonomous"
     assert runner.interaction_mode({"defaults": {"interaction_mode": "autonomous"}}, {}) == "autonomous"
     try:

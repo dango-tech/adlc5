@@ -8,12 +8,32 @@ When you need a **decision, preference, confirmation, or structured choice**, us
 |----------|-----------|
 | **Cursor** | `AskQuestion` tool (Q&A form) |
 | **Claude Code** | `AskUserQuestion` if available |
-| **Codex** | `request_user_input` / approval UI |
+| **Codex** | `request_user_input_async` when available; otherwise the available native question UI |
 | **OpenCode** | permission `ask` or skill tool |
 | **Gemini / Antigravity** | native choice UI when present |
 | **Fallback (all)** | Numbered options in chat — same `option.id` labels as below |
 
 Full tool mapping: [platform-tooling.md](platform-tooling.md).
+
+## Investigate before asking
+
+Inspect repository code, tests, approved rules and prior answers first. Research
+volatile technical facts using official sources, or run a safe bounded experiment
+for uncertain behavior. Ask for product tradeoffs, business rules, authorization
+and unresolved conflicts owned by the user. Assume only reversible, low-impact
+choices within existing authority; record consequence and revisit condition.
+An unsuccessful investigation does not grant permission to assume.
+
+Each consequential question states the decision, why it matters, a recommended
+option and tradeoff, alternatives and affected requirements. Preserve free-form
+answers. Ask one dependent decision at a time or batch at most two independent
+decisions. There is no universal five-question cap: stop when material unknowns
+are resolved or the existing time/cost/retry budget requires escalation.
+
+Reuse explicit instructions and previously approved mode, scope, logging and git
+choices on resume. Ask again only for a changed or conflicting choice. Elapsed
+time, silence and recommendations never constitute approval. Product answers and
+command permission use distinct records; see the [runner decision contract](../../docs/requirements-readiness.md#runner-decisions).
 
 ## When to use structured Q&A
 
@@ -143,7 +163,7 @@ Map `execution_mode` → `policies.yaml` `defaults.execution_mode`.
   "questions": [
     {
       "id": "advance_phase",
-      "prompt": "Plan Step 1 — Design Discovery complete (clarity 85/80). Ready for Step 2 — API & Integration Contracts?",
+      "prompt": "Design Discovery is complete and the current requirements review has no blockers. Continue to API & Integration Contracts?",
       "options": [
         { "id": "yes", "label": "Yes — continue to Contracts" },
         { "id": "revise", "label": "Revise Design Discovery first" },

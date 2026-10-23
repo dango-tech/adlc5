@@ -6,7 +6,17 @@ version: 5.0.1
 
 # ADLC5 — Implement
 
-**Stage 4** — deliver production-ready code through TDD and profile-routed verification, integration, QA, and PR substeps.
+**Stage 4** — deliver code with reviewable evidence through TDD and profile-routed verification, integration, QA, and PR substeps.
+
+Follow [profile routing](../../core/guides/profile-routing.md). Retain current
+authorization, compatibility, failure and operational constraints in coder packs.
+After verification, record readiness `delivery.conformance` against every
+requirement: missing, partial, contradictory, unrequested behavior and constraints.
+Hash the actual report and relevant implementation evidence. Satisfy applicable
+operational obligations with current evidence; unavailable checks remain blocked.
+Route findings through existing rework and retry limits; preserve progress and
+request human action when exhausted. Report local checks, CI, PR readiness,
+deployment approval and live observation separately.
 
 **Invoke:** `@adlc5-implement for [feature]`
 

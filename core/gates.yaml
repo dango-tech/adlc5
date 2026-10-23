@@ -4,12 +4,12 @@ schema_version: "3.0"
 gates:
   specify-complete:
     stage: specify
-    description: Git recorded, spec-handoff exists, clarity threshold met
+    description: Git recorded, intent present, current requirements and decision review
     script: check-gates.py
     checks:
       - git_isolation_recorded
       - spec_handoff_exists
-      - clarity_threshold
+      - requirements_readiness
 
   plan-complete:
     stage: plan
@@ -86,7 +86,7 @@ gates:
 
   pr-ready:
     stage: implement
-    description: Composite production-ready gate
+    description: Composite PR-readiness gate; deployment and live production qualification are separate
     script: check-gates.py
     terminal: true
     checks:

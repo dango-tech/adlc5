@@ -67,7 +67,7 @@ def command(*, host: str, mode: str, workspace: Path, prompt: str, model: str | 
         argv.append(prompt)
         return argv
     if host == "codex":
-        argv = ["codex", "exec", "--json", "--color", "never", "--sandbox", "workspace-write", "--approve-for-me",
+        argv = ["codex", "exec", "--json", "--color", "never", "--approve-for-me",
                 "--ignore-user-config", "--ignore-rules", "-C", str(workspace)]
         if model and model.lower() not in ("inherit", "host default"):
             argv.extend(("-m", model))
@@ -117,6 +117,7 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
     """Normalize supported host result formats; preserve denial and error signals."""
     if host == "codex":
         final, usage, model, session_id, calls = "", {}, None, None, 0
+        error = None
         for line in text.splitlines():
             try:
                 event = json.loads(line)
@@ -124,6 +125,8 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
                 continue
             if not isinstance(event, dict):
                 continue
+            if event.get('type') in ('error', 'turn.failed'):
+                error = event.get('message') or event.get('error') or 'Codex turn failed'
             if event.get("type") in ("thread.started", "thread.resumed"):
                 session_id = event.get("thread_id") or session_id
             if event.get("type") == "item.completed":
@@ -145,7 +148,8 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
         # Codex counts cached tokens inside input_tokens; the ledger prices them separately.
         if "input" in usage and "cache_read" in usage:
             usage["input"] = max(0, usage["input"] - usage["cache_read"])
-        return {"text": final, "usage": usage, "model_id": model, "session_id": session_id, "calls": calls}
+        return {"text": final, "usage": usage, "model_id": model, "session_id": session_id, "calls": calls,
+                **({'is_error': True, 'error': error} if error else {})}
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

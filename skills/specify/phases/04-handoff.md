@@ -11,6 +11,14 @@ Write `.adlc5/{feature}/spec-handoff.md` with:
 
 ## Gate
 
+Prepare `requirements-readiness.json` with `adlc5 readiness prepare --feature
+"{feature}"`. Review behavior, contradictions, negative cases and assumptions,
+record actual decisions and their evidence, then ingest with `adlc5 readiness
+record --feature "{feature}" --file PATH`. Preparation is a draft, not approval.
+High-risk review needs a session distinct from the author. Existing active features
+must be assessed explicitly; never derive a review from a legacy clarity score.
+See [requirements readiness](../../../docs/requirements-readiness.md).
+
 ```bash
 ./scripts/check-gates.py --feature "{feature}" --gate specify-complete
 ```

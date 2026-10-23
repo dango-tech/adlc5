@@ -49,7 +49,7 @@ Structured choices: **AskQuestion** — [askquestion-convention.md](core/guides/
 - This repo is the **framework distribution** — run lifecycles in consumer app repos, not here (except `dogfood/`).
 - Knowledge base in `shared/docs/knowledge-base/` is the sole in-repo book reference — no PDF paths in config.
 - Hooks: `.cursor/hooks.json` — secret scan, scope guard (warn by default when scope metadata/`ADLC5_SCOPE_GUARD` is set; `enforce` denies out-of-scope writes), post-edit test hint.
-- Production-ready = `check-gates.py --gate pr-ready` (or `./scripts/adlc5 gate`), not story `verified` alone.
+- PR-ready requires `check-gates.py --gate pr-ready` (or `./scripts/adlc5 gate`), not story `verified` alone. Deployment approval and live production qualification are separate evidence.
 - ADLC5 4.x = single tree at repo root (`core/`, `skills/`, `scripts/`, …); VERSION in `core/VERSION`. No dual-version docs or parallel version tree.
 - Spine ops go through `./scripts/adlc5` (and thin MCP `./scripts/adlc5-mcp.py`); do not treat A2A as the SDLC kernel or invent a second gate/state engine.
 - Project wiki is team-shared whole-repo memory; feature memory promotes only after `stage_status.implement: completed` with human-approved evidence.

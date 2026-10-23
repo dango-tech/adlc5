@@ -257,7 +257,8 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(replies), 6)  # the notification gets no reply
         self.assertEqual(by_id[1]["result"]["protocolVersion"], "2025-06-18")
         self.assertEqual(by_id[1]["result"]["serverInfo"]["version"], self.info["version"])
-        self.assertEqual(len(by_id[2]["result"]["tools"]), 15)
+        self.assertEqual(len(by_id[2]["result"]["tools"]), 16)
+        self.assertIn('adlc5_readiness', {tool['name'] for tool in by_id[2]['result']['tools']})
         call = json.loads(by_id[3]["result"]["content"][0]["text"])
         self.assertEqual(call["stdout"].strip(), f"adlc5 {self.info['version']}")
         cli = run([str(self.pkg / "bin/adlc5"), "state", "get", "--feature", "demo", "--workspace", str(repo)])

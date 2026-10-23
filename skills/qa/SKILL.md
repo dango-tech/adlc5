@@ -8,6 +8,12 @@ author: ADLC5 Contributors
 
 ## Intent
 
+Validate applicable readiness `delivery.obligations` using the planned method and
+current evidence. A profile cannot waive an applicable obligation. Missing access
+remains unverified. Use [profile routing](../../core/guides/profile-routing.md),
+and distinguish local validation, CI, PR readiness, deployment clearance and live
+production observation in the report.
+
 This skill runs a structured quality, security, and compliance pipeline against application code built during `@adlc5-implement` and optionally IaC in `infra/`. It produces a `deployment-clearance.md` gate artifact that the consumer's deployment pipeline checks before provisioning.
 
 **User invokes:** `@qa for [feature]`

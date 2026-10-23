@@ -172,6 +172,11 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
         "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "action": {"enum": ["check", "review", "approve", "build"]}, "file": {"type": "string"}}, "required": ["feature", "action"], "additionalProperties": False},
         "build": lambda a: ["evidence", a["action"], "--feature", a["feature"], *_opt("--workspace", a.get("workspace")), *_opt("--file", a.get("file"))],
     },
+    "adlc5_readiness": {
+        "description": "Review requirements, delivery obligations and changed intent through the canonical kernel",
+        "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "action": {"enum": ["prepare", "record", "check", "delivery", "impact"]}, "file": {"type": "string"}, "sources": {"type": "array", "items": {"type": "string"}}}, "required": ["feature", "action"], "additionalProperties": False},
+        "build": lambda a: _args_readiness(a),
+    },
     "adlc5_state_set": {
         "description": "Schema-validated metadata patch/replace; progression/results use transition/evidence",
         "inputSchema": {
@@ -257,6 +262,15 @@ def _args_pack(a: dict[str, Any]) -> list[str]:
         *_opt("--workspace", a.get("workspace")),
         *_opt("--persona", a.get("persona")),
     ]
+
+
+def _args_readiness(a: dict[str, Any]) -> list[str]:
+    sources = a.get('sources', [])
+    if not isinstance(sources, list) or any(not isinstance(name, str) for name in sources):
+        raise ValueError('sources must be an array of paths')
+    return ['readiness', a['action'], '--feature', a['feature'],
+            *_opt('--workspace', a.get('workspace')), *_opt('--file', a.get('file')),
+            *[arg for name in sources for arg in ('--source', name)]]
 
 
 def _args_clarity(a: dict[str, Any]) -> list[str]:

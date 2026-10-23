@@ -53,6 +53,8 @@ EXCLUDE_SUFFIXES = (".pyc", ".swp", ".bak", ".orig", ".log")
 REQUIRED_BASE = (
     "core/VERSION", "core/gates.yaml", "skills/adlc5/SKILL.md", "skills/adlc5-setup/SKILL.md",
     "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
+    "scripts/lib/requirements_readiness.py", "docs/requirements-readiness.md",
+    "scripts/runner/questions.py", "core/guides/profile-routing.md",
     "LICENSE",
 )
 REQUIRED_BY_HOST = {

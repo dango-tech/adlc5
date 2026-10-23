@@ -119,6 +119,9 @@ def main():
     
     # Output JSON matching the adlc5 clarity sub-schema
     output = {
+        "heuristic": True,
+        "gate_authority": False,
+        "limitations": "Document signals only; use adlc5 readiness for revision-bound requirements review.",
         "step_id": step_id,
         "score": result["score"],
         "open_items": result["open_items"],

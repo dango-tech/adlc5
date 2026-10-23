@@ -53,6 +53,7 @@ COMMANDS = {
     "gate": "Evaluate delivery/lifecycle gates (→ check-gates.py)",
     "pack": "Generate story context pack (→ generate-pack.sh)",
     "clarity": "Score a spec/design file (→ clarity-score.py)",
+    "readiness": "Review requirements, delivery obligations and changed intent",
     "phase": "Inspect legacy phase suggestion; canonical progression uses transition",
     "pilot": "One autopilot iteration (→ pilot-autopilot.sh)",
     "run": "Run the navigator with supervised headless workers (→ runner/run.py)",
@@ -92,6 +93,7 @@ Commands:
   gate           {COMMANDS['gate']}
   pack           {COMMANDS['pack']}
   clarity        {COMMANDS['clarity']}
+  readiness prepare|record|check|delivery|impact {COMMANDS['readiness']}
   phase          {COMMANDS['phase']}
   pilot          {COMMANDS['pilot']}
   run            {COMMANDS['run']}
@@ -211,6 +213,42 @@ def cmd_clarity(args: list[str]) -> int:
         return 0 if args and args[0] in ("-h", "--help") else 2
     script = SCRIPTS / "clarity-score.py"
     return run([sys.executable, str(script), *args])
+
+
+def cmd_readiness(args: list[str]) -> int:
+    from lib.requirements_readiness import prepare, record, check, load_record, delivery_draft, impact
+    parser = argparse.ArgumentParser(prog='adlc5 readiness')
+    parser.add_argument('action', choices=['prepare', 'record', 'check', 'delivery', 'impact'])
+    parser.add_argument('--feature', required=True)
+    parser.add_argument('--workspace', default='.')
+    parser.add_argument('--file', help='reviewed JSON record; relative to workspace')
+    parser.add_argument('--source', action='append', default=[], help='additional intent path for prepare; repeat for multiple files')
+    ns = parser.parse_args(args)
+    workspace = Path(ns.workspace).resolve()
+    try:
+        if ns.source and ns.action != 'prepare':
+            raise ValueError('--source is only supported by readiness prepare')
+        if ns.action == 'prepare':
+            result = prepare(workspace, ns.feature, ns.source)
+        elif ns.action == 'check':
+            result = check(workspace, ns.feature)
+        elif ns.action == 'delivery':
+            result = delivery_draft(workspace, ns.feature)
+        elif ns.action == 'impact':
+            result = impact(workspace, ns.feature)
+        else:
+            if not ns.file:
+                raise ValueError('readiness record requires --file')
+            path = Path(ns.file)
+            if not path.is_absolute():
+                path = workspace / path
+            record(workspace, ns.feature, load_record(path))
+            result = {'status': 'ok', 'feature': ns.feature}
+        print(json.dumps(result, indent=2))
+        return 2 if result.get('status') == 'fail' else 0
+    except (ValueError, TypeError, KeyError, OSError) as exc:
+        print(json.dumps({'status': 'error', 'message': str(exc)}))
+        return 2
 
 
 def cmd_phase(args: list[str]) -> int:
@@ -822,6 +860,7 @@ def main(argv: list[str]) -> int:
         "gate": cmd_gate,
         "pack": cmd_pack,
         "clarity": cmd_clarity,
+        "readiness": cmd_readiness,
         "phase": cmd_phase,
         "pilot": cmd_pilot,
         "run": cmd_run,

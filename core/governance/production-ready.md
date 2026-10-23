@@ -13,6 +13,11 @@ A feature may have every component story `verified` in canonical `.adlc5/{featur
 | **Production-ready** | All criteria in [definition-of-done.md](https://github.com/dango-tech/adlc5/blob/main/templates/definition-of-done.md) satisfied |
 | **PR-ready** | Deterministic gate `pr-ready` passes via `check-gates.py` |
 
+PR readiness is a review boundary. Local checks, CI, deployment approval and live
+production observation are separate claims. A passing `pr-ready` result alone
+does not establish production qualification. Applicable operational obligations
+need evidence under the [readiness contract](https://github.com/dango-tech/adlc5/blob/main/docs/requirements-readiness.md).
+
 ## Implement ladder (lifecycle)
 
 Canonical step IDs: [core/sdd-model.md](https://github.com/dango-tech/adlc5/blob/main/core/sdd-model.md). Legacy `assure-*` IDs normalize via [gates.yaml](https://github.com/dango-tech/adlc5/blob/main/core/gates.yaml) `legacy_aliases`.
@@ -38,7 +43,11 @@ Exit `0` + JSON `status: pass` → PR-ready. Exit `1` → blocked; orchestrator 
 
 ## Human approval (optional policy)
 
-When `policies.yaml` sets `autopilot.require_human_pr_approval: true`, `pr-ready` additionally requires a `clarity.history` entry of `type: pr_approval` with `approved_by: user` in `.adlc5/{feature}/state.json`. Use this in autonomous mode so no PR is declared production-ready without a human sign-off. See the [policy template](https://github.com/dango-tech/adlc5/blob/main/templates/policies.yaml.example).
+When `policies.yaml` sets `autopilot.require_human_pr_approval: true`, `pr-ready`
+requires a fresh local human approval record through `adlc5 evidence approve`,
+bound to current completion inputs. A historical `clarity.history` entry cannot
+substitute for it. High-risk work requires this policy. See the
+[policy template](https://github.com/dango-tech/adlc5/blob/main/templates/policies.yaml.example).
 
 ## Orchestrator status check
 

@@ -68,7 +68,7 @@ def path_matches_pattern(rel_path: str, pattern: str) -> bool:
 
 def is_feature_artifact(rel: str) -> bool:
     prefixes = ("memory/", "design/", "tasks/", "verify/", ".qa/", ".prt/", ".discover/", "spec-handoff.md", "change.md")
-    return rel.startswith(prefixes) or rel in ("spec-handoff.md", "change.md")
+    return rel.startswith(prefixes) or rel in ("spec-handoff.md", "change.md", "requirements-readiness.json")
 
 
 def check_persona_context(

@@ -29,6 +29,16 @@ path.write_text(json.dumps(deep_merge(json.loads(path.read_text()), json.loads(a
 PYFIXTURE
 }
 
+fixture_readiness() {
+  python3 - "$@" <<'PYREADINESS'
+from pathlib import Path
+import sys
+sys.path[:0] = ['scripts', 'scripts/tests']
+from readiness_fixture import reviewed_fixture
+reviewed_fixture(Path(sys.argv[1]), sys.argv[2])
+PYREADINESS
+}
+
 for tool in git python3 jq; do
   command -v "$tool" >/dev/null 2>&1 || fail "required tool '$tool' is missing; install Git, Python 3 and jq"
 done
@@ -301,7 +311,7 @@ mkdir -p "${TMP}/.adlc5/${PLAN_FEATURE}/design"
 cat >"${TMP}/.adlc5/${PLAN_FEATURE}/state.json" <<'EOF'
 {
   "schema_version": "3.0",
-  "feature_name": "plan-feature",
+  "feature": "plan-feature",
   "current_stage": "plan",
   "current_step": "plan-7-design-critique",
   "craftsmanship": { "architecture_review": "completed", "pattern_selection": "completed" }
@@ -310,6 +320,7 @@ EOF
 touch "${TMP}/.adlc5/${PLAN_FEATURE}/design/1a-discovery.md" \
       "${TMP}/.adlc5/${PLAN_FEATURE}/design/1b-contracts.md" \
       "${TMP}/.adlc5/${PLAN_FEATURE}/design/1c-operations.md"
+fixture_readiness "$TMP" "$PLAN_FEATURE"
 
 # missing critique -> warn (exit 2) in HITL
 set +e
@@ -1557,6 +1568,7 @@ acceptance_checks:
 # code spec
 EOF
 done
+fixture_readiness "$GRAPH_WS" valid
 ./scripts/check-gates.py --feature valid --workspace "$GRAPH_WS" --gate tasks-complete \
   >/tmp/task-graph-gate-valid.json || fail "valid task graph should pass tasks-complete"
 set +e
@@ -1609,9 +1621,10 @@ persona_mode:
 EOF
   fixture_state_patch --feature "$feature" --workspace "$ROUTE_WS" --patch \
     '{"current_stage":"specify","current_step":"specify-4-handoff","git":{"isolation":"current"},"clarity":{"score":100}}' >/dev/null
-  echo "# Spec handoff" >"${ROUTE_WS}/.adlc5/${feature}/spec-handoff.md"
+  printf '%s\n' '# Spec handoff' 'Preserve the profile routing fixture behavior.' >"${ROUTE_WS}/.adlc5/${feature}/spec-handoff.md"
   printf '%s\n' '{"categories":[],"uncertain":false,"rationale":"bounded routing fixture"}' \
     >"${ROUTE_WS}/.adlc5/${feature}/risk.json"
+  fixture_readiness "$ROUTE_WS" "$feature"
 done
 
 ./scripts/pilot-autopilot.sh --feature route-tiny --workspace "$ROUTE_WS" >/tmp/route-tiny.json
@@ -1633,7 +1646,8 @@ printf '%s\n' 'autopilot:' '  interaction_mode: autonomous' '  profile: tiny' \
   >"${QUOTE_WS}/.adlc5/route-quote/policies.yaml"
 fixture_state_patch --feature route-quote --workspace "$QUOTE_WS" --patch \
   '{"current_stage":"specify","current_step":"specify-4-handoff","git":{"isolation":"current"},"clarity":{"score":100}}' >/dev/null
-printf '%s\n' '# Spec handoff' >"${QUOTE_WS}/.adlc5/route-quote/spec-handoff.md"
+printf '%s\n' '# Spec handoff' 'Preserve the quoted-workspace routing behavior.' >"${QUOTE_WS}/.adlc5/route-quote/spec-handoff.md"
+fixture_readiness "$QUOTE_WS" route-quote
 ./scripts/pilot-autopilot.sh --feature route-quote --workspace "$QUOTE_WS" >/tmp/route-quote.json \
   || fail "profile routing should support apostrophes in workspace paths"
 jq -e '.action == "advance" and .suggested_next == "implement-1-build"' /tmp/route-quote.json >/dev/null \
@@ -1783,6 +1797,7 @@ printf '%s\n' '{"scripts":{"test":"true","lint":"true"}}' >"${ROUTE_WS}/package.
 cp templates/policies-tiny.yaml.example "${ROUTE_WS}/.adlc5/route-tiny-direct/policies.yaml"
 fixture_state_patch --feature route-tiny-direct --workspace "$ROUTE_WS" --patch \
   '{"current_stage":"implement","current_step":"implement-1-build","stage_status":{"specify":"completed","plan":"waived","tasks":"waived","implement":"in_progress"},"tasks":{"stories":[]}}' >/dev/null
+fixture_readiness "$ROUTE_WS" route-tiny-direct
 PATH="${FAKE_BIN}:$PATH" ./scripts/check-gates.py --feature route-tiny-direct --workspace "$ROUTE_WS" \
   --gate implement-1-build >/tmp/route-tiny-direct-build.json \
   || fail "tiny direct build should pass runnable test/lint gates without synthetic stories"
@@ -1802,6 +1817,7 @@ cat >"${ROUTE_WS}/.adlc5/route-tiny/evidence/checks.json" <<'EOF'
 EOF
 printf '%s\n' '{"coder_session_id":"fixture-coder","verifier_session_id":"fixture-reviewer","coder_model_id":"fixture-model","verifier_model_id":"fixture-model","disposition":"pass","blocking_findings":[]}' \
   >"${TMP}/tiny-review.json"
+fixture_readiness "$ROUTE_WS" route-tiny
 ./scripts/adlc5 evidence check --feature route-tiny --workspace "$ROUTE_WS" >/dev/null
 ./scripts/adlc5 evidence review --feature route-tiny --workspace "$ROUTE_WS" --file "${TMP}/tiny-review.json" >/dev/null
 set +e
@@ -2660,9 +2676,10 @@ pass "spec-lint.py: frontmatter contract"
 
 # check-gates: tasks-2-code-spec-complete wired to spec-lint
 cat >"${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/state.json" <<'EOF'
-{"schema_version":"3.0","feature_name":"lever2-feature","current_stage":"tasks","current_step":"tasks-2-code-spec","tasks":{"stories":[]}}
+{"schema_version":"3.0","feature":"lever2-feature","current_stage":"tasks","current_step":"tasks-2-code-spec","tasks":{"stories":[{"id":"US-001","status":"pending"}]}}
 EOF
 rm "${LEVER2_WS}/.adlc5/${LEVER2_FEATURE}/tasks/code-spec/US-002.md"
+fixture_readiness "$LEVER2_WS" "$LEVER2_FEATURE"
 set +e
 ./scripts/check-gates.py --feature "$LEVER2_FEATURE" --workspace "$LEVER2_WS" --gate tasks-2-code-spec-complete >/dev/null
 LEVER2_GATE_EC=$?
@@ -2967,7 +2984,7 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
-for test in test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
+for test in test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done
