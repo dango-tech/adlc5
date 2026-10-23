@@ -13,14 +13,15 @@
     <div class="workspace"><span class="eyebrow">Workspace</span><strong>{{TITLE}}</strong></div>
     <span class="local-pill">Local snapshot</span>
   </header>
-  <div class="band">
+  <nav id="navigation" class="band" aria-label="Main views"></nav>
+  <div id="workflow-picker" class="band" hidden>
     <label for="feature">Feature</label>
     <select id="feature" aria-label="Select feature"></select>
     <span class="band-divider" aria-hidden="true"></span>
     <span class="muted" id="capture"></span>
   </div>
   <main>
-    <section id="fleet" hidden aria-label="All ADLC5 activity"></section>
+    <section id="fleet" hidden aria-label="Current view"></section>
     <div id="features" aria-live="polite"></div>
     <footer>Read-only snapshot · regenerate the board to refresh · repository evidence is shown as captured</footer>
   </main>

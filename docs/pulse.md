@@ -4,6 +4,22 @@ Pulse presents a local, on-demand view of ADLC5 feature progress, recorded evide
 
 Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run consumer commands, change lifecycle state, write files, or make network requests. `board` is the explicit write operation: every invocation writes the shared offline page at `~/.adlc5/pulse/board.html`. Derived feature caches live under `~/.adlc5/pulse/workspaces/<workspace-hash>/`; no new Pulse files are written into consumer worktrees. `--open` opens that shared page.
 
+## Views
+
+The shared board opens on **Projects**, one application card per Git repository
+identity. Linked worktrees share a project; unrelated repositories with the same
+folder name do not. Project detail lists its workflows with active/archive filters,
+worktrees, agent badges and settings links. Workflow links open one delivery path
+with its evidence and next action, without the global inventories above it.
+**Activity** provides separate session/attempt views, search and 25-row pagination.
+**Settings** provides read-only machine/project/worktree configuration with source
+and override history. See [shared home and settings](shared-home.md).
+
+Hash routes support direct links and browser Back/Forward while remaining offline:
+`#projects`, `#project/<id>`, `#workflow/<id>`, `#activity`, `#settings`.
+The existing workspace/feature Board action opens the selected workflow; the
+all-projects command opens Projects. Capture time and coverage remain explicit.
+
 ## Commands
 
 ### All projects and historical sessions

@@ -162,12 +162,9 @@ def detect_platform(explicit: str | None = None) -> str:
 
 
 def merge_model_config(root: Path, workspace: Path | None) -> dict:
-    cfg: dict[str, Any] = {}
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from lib.config_layers import config_paths, merge
-    for _layer, path in config_paths(workspace):
-        cfg = merge(cfg, load_yaml_file(path))
-    return cfg
+    from lib.config_layers import effective_config
+    return effective_config(workspace)[0]
 
 
 def _feature_policy_knobs(workspace: Path | None, feature: str | None) -> dict[str, Any]:

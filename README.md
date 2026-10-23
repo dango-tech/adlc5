@@ -138,6 +138,8 @@ Every board command opens the shared `~/.adlc5/pulse/board.html` and includes di
 active/archived features, explicit native-host ADLC5 session references, and runner attempts.
 Add other repository locations with `--root PATH`; run the command again to refresh.
 Worktree rows show all recorded hosts with Claude Code, Codex, Cursor and Hermes Agent badges.
+Projects, individual workflows, paginated Activity and read-only Settings have separate
+views. See [shared configuration and storage](docs/shared-home.md) and [CI selection](docs/ci-selection.md).
 
 The offline board and cached band are generated when requested. Claude Code also
 shows an interactive Pulse band above the prompt; Codex and Cursor use the shared

@@ -65,9 +65,12 @@ def main():
         assert_safe_target(clone, env)
         for script in ("install.sh", "verify-install.sh"):
             subprocess.run([BASH, str(clone / "scripts" / script),
-                            "--platform", "claude"], env=env, check=True,
+                            "--platform", "claude", "--installation-only"], env=env, check=True,
                            stdout=subprocess.DEVNULL)
         assert (home / ".claude/skills/adlc5/SKILL.md").is_file()
+        assert (home / '.adlc5/install.yaml').is_file()
+        assert not (clone / 'config.yaml').exists(), 'installer duplicated machine config into source'
+        assert '.adlc5/runtimes/' in (home / '.claude/skills/adlc5').resolve().as_posix()
     print("PASS: isolated install, verification, prerequisite and dry-run contracts")
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from lib.pulse import Reader, _json, _jsonl, _safe_text, project_workspace
+from lib.config_layers import project_identity
 
 PRUNE = {'.git', '.agent-cache', 'node_modules', '.venv', 'venv', '__pycache__',
          'Pods', '.build', 'DerivedData', 'dist', 'build', '.next', '.terraform'}
@@ -213,12 +214,22 @@ def collect(roots: list[Path], session_roots: list[tuple[str, Path]], *, active_
                 host_map.setdefault(key, set()).add(observation['host'])
     for feature in features:
         feature['hosts'] = sorted(host_map[feature['workspace_key']])
+    inventory, projects = [], {}
+    for key, label in sorted(labels.items(), key=lambda item: item[1]):
+        path = Path(label).expanduser()
+        identity, common = project_identity(path)
+        name = common.parent.name if common.name == '.git' else path.name
+        inventory.append({'key': key, 'label': label, 'hosts': sorted(host_map[key]), 'project_id': identity})
+        project = projects.setdefault(identity, {'id': identity, 'name': _safe_text(name), 'workspace_keys': []})
+        project['workspace_keys'].append(key)
+    by_tree = {row['key']: row['project_id'] for row in inventory}
+    for feature in features:
+        feature['project_id'] = by_tree[feature['workspace_key']]
     return {'schema_version': '1.0', 'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
             'status': 'partial' if warnings else 'ok', 'capture': {'scope': 'fleet', 'stable': False},
             'workspace': {'label': 'All projects'}, 'features': features,
             'fleet': {'workspaces': len(labels), 'session_files_scanned': files,
-                      'workspace_inventory': [{'key': key, 'label': label, 'hosts': sorted(host_map[key])}
-                                              for key, label in sorted(labels.items(), key=lambda item: item[1])],
+                      'workspace_inventory': inventory, 'projects': list(projects.values()),
                       'sessions': native, 'attempts': list(attempts.values()),
                       'scope': 'Discovered local sources, not a guarantee of complete history. Feature snapshots, host sessions and attempts overlap; do not add them as run counts. Native token subtotals cover whole sessions, may include other work or copied fork prefixes, and must not be added to feature ledgers. Missing cost and independent outcomes stay unmeasured. Regenerate to include new runs.'},
             'warnings': sorted(set(warnings))}

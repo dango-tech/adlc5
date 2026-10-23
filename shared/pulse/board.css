@@ -128,3 +128,15 @@ footer { margin-top: 28px; padding: 13px 0 22px; border-top: 1px solid var(--lin
 .p-host-codex { color: #16846b; }
 .p-host-cursor { color: #8570ba; }
 .p-host-hermes { color: #a37516; }
+.p-projects { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px; margin-top: 24px; }
+.p-project { display: flex; flex-direction: column; align-items: flex-start; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.p-project > a { font-size: 21px; font-weight: 650; }
+.p-link { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); padding: 5px 0; }
+.p-link:hover, .p-link[aria-current="page"] { color: #16846b; border-color: currentColor; }
+#navigation { gap: 28px; }
+#fleet > h2 { margin-top: 30px; }
+#fleet select { max-width: 100%; margin: 16px 8px 16px 0; padding: 8px; }
+#fleet button { margin: 12px 8px 0 0; padding: 8px 14px; }
+#fleet table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#fleet th, #fleet td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+#fleet th { color: var(--muted); }

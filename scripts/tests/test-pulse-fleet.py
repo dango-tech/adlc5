@@ -39,7 +39,7 @@ class FleetTests(unittest.TestCase):
         self.assertTrue(all(f['usage']['known_cost_usd'] is None for f in data['features']))
         self.assertTrue(any(f['archive_id'] == 'old-20260101' for f in data['features']))
         page = board_document(data)
-        self.assertIn('Your ADLC5 activity', page)
+        self.assertIn('Your projects', page)
         self.assertIn("connect-src 'none'", page)
         self.assertNotIn('https://', page)
 

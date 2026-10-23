@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from lib.config_layers import config_paths, merge
+from lib.config_layers import config_paths, merge, effective_config
 from lib.model_routing import load_yaml_file
 from runner.hosts import AVAILABLE_MODES, MODES
 
@@ -25,17 +25,12 @@ HOSTS = {"codex": "codex", "claude": "claude", "cursor": "cursor-agent", "hermes
 
 def target_path(workspace: Path, repo: bool) -> Path:
     layers = config_paths(workspace)
-    return next(path for name, path in layers if name == ("repo" if repo else "master"))
+    return next(path for name, path in layers if name == ("project" if repo else "master"))
 
 
 def read_effective(workspace: Path) -> tuple[dict, dict[str, Path]]:
-    values: dict = {}
-    sources = {}
-    for name, path in config_paths(workspace):
-        overlay = load_yaml_file(path)
-        if overlay:
-            values = merge(values, overlay)
-            sources.update({key: path for key in overlay})
+    values, rows = effective_config(workspace)
+    sources = {row['key'].split('.')[0]: Path(row['source']) for row in rows}
     return values, sources
 
 

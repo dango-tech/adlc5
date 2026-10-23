@@ -56,7 +56,7 @@ REQUIRED_BASE = (
     "scripts/lib/requirements_readiness.py", "docs/requirements-readiness.md",
     "scripts/runner/questions.py", "core/guides/profile-routing.md",
     "core/pulse-snapshot.schema.json", "scripts/pulse.py", "scripts/pulse-statusline.py",
-    "scripts/lib/pulse.py", "scripts/lib/pulse_fleet.py", "skills/pulse/SKILL.md", "shared/pulse/board.html",
+    "scripts/lib/pulse.py", "scripts/lib/pulse_fleet.py", "scripts/lib/pulse_settings.py", "scripts/shared-home.py", "scripts/lib/config_layers.py", "skills/pulse/SKILL.md", "shared/pulse/board.html",
     "shared/pulse/board.css", "shared/pulse/board.js", "assets/brand/icon.svg",
     "LICENSE",
 )

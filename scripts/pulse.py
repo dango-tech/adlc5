@@ -38,7 +38,8 @@ def _atomic_write(path: Path, content: bytes) -> None:
     directory = path.parent
     fd, temp_name = tempfile.mkstemp(prefix=".pulse-", dir=directory)
     try:
-        os.fchmod(fd, 0o600)
+        if hasattr(os, 'fchmod'):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "wb") as stream:
             stream.write(content)
             stream.flush()
@@ -117,6 +118,16 @@ def _fleet_board(args, workspace=None, snapshot=None):
     data = collect(roots, [('codex', home / '.codex/sessions'), ('codex', home / '.codex/archived_sessions'),
                           ('claude', home / '.claude/projects'), ('cursor', home / '.cursor/projects')],
                    active_only=args.active_only, observations=observations)
+    from lib.pulse_settings import snapshot as settings_snapshot, integrations, shared_runtime
+    settings = {'machine': settings_snapshot(None)}
+    for row in data['fleet']['workspace_inventory']:
+        path = Path(row['label']).expanduser()
+        if path.is_dir():
+            settings['worktree:' + row['key']] = settings_snapshot(path)
+            settings.setdefault('project:' + row['project_id'], settings_snapshot(path, scope='project'))
+    data['settings'] = {'scopes': settings, 'integrations': integrations(ROOT),
+                        'shared_runtime': shared_runtime(),
+                        'scan_roots': [str(path).replace(str(home), '~') for path in roots]}
     if workspace:
         key = workspace_key(workspace)
         selected = next((f['identity'] for f in data['features'] if f['workspace_key'] == key

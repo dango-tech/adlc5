@@ -3002,9 +3002,15 @@ print("\n".join(p for p in paths if any(reserved.match(c) for c in p.split("/"))
   pass "no tracked path uses a Windows reserved device name"
 fi
 
-for test in test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-pulse-fleet.py test-telemetry-share.py; do
+for test in test-ci-plan.py test-shared-settings.py test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-pulse-fleet.py test-telemetry-share.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/tests/test-pulse-views.mjs || fail 'Pulse view routes'
+else
+  echo 'SKIP: Pulse DOM-contract unit test requires Node (CI runs it)'
+fi
 
 echo "All script contract tests passed."

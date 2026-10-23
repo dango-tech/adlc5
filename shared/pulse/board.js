@@ -46,7 +46,7 @@ for (const feature of data.features) {
 }
 if (data.selected_feature) selector.value = data.selected_feature;
 
-function render() {
+function renderWorkflow() {
   const feature = data.features.find(item => item.identity === selector.value);
   panel.replaceChildren();
   if (!feature) {
@@ -105,7 +105,7 @@ function render() {
     if (stage === name) button.setAttribute("aria-current", "step");
     button.append(make("span", "p-stage-name", `${String(index + 1).padStart(2, "0")} / ${name}`));
     button.append(make("span", "p-stage-state", label(status)));
-    button.addEventListener("click", () => { selectedStage = name; render(); panel.querySelector('.p-stage[aria-pressed="true"]')?.focus(); });
+    button.addEventListener("click", () => { selectedStage = name; renderWorkflow(); panel.querySelector('.p-stage[aria-pressed="true"]')?.focus(); });
     rail.append(button);
   }
   panel.append(rail);
@@ -129,7 +129,7 @@ function render() {
     const button = make("button", "", `${label(event.kind)} · ${label(event.status)}`);
     button.type = "button";
     button.setAttribute("aria-pressed", String(selectedEvent === index));
-    button.addEventListener("click", () => { selectedEvent = index; render(); panel.querySelector(`.p-events button:nth-of-type(${index + 1})`)?.focus(); });
+    button.addEventListener("click", () => { selectedEvent = index; renderWorkflow(); panel.querySelector(`.p-events button:nth-of-type(${index + 1})`)?.focus(); });
     const time = make("time", "", event.time || event.id || "Time unavailable");
     item.append(button, time);
     eventList.append(item);
@@ -181,71 +181,142 @@ function render() {
   if (feature.warnings?.length) panel.append(make("p", "p-warning muted", `Capture warnings · ${feature.warnings.join(" · ")}`));
 }
 
-selector.addEventListener("change", () => { selectedStage = null; selectedEvent = null; render(); });
 
-if (data.fleet) {
-  const fleet = document.getElementById("fleet");
-  fleet.hidden = false;
-  fleet.append(make("h1", "", "Your ADLC5 activity"), make("p", "muted", data.fleet.scope));
-  fleet.append(make("p", "muted", "Agent badges show recorded usage of the exact worktree, not live presence. Multiple badges mean multiple hosts have used that tree."));
-  const metrics = make("div", "p-metrics");
-  for (const [name, count] of [["Workspaces", data.fleet.workspaces], ["Feature snapshots", data.features.length],
-    ["Host sessions", data.fleet.sessions.length], ["Runner attempts", data.fleet.attempts.length]]) {
-    const metric = make("div", "p-metric");
-    metric.append(make("label", "", name), make("strong", "p-value", count));
-    metrics.append(metric);
+const fleet = document.getElementById("fleet");
+const nav = document.getElementById("navigation");
+const link = (text, route) => {
+  const node = make("a", "p-link", text);
+  node.href = "#" + route;
+  return node;
+};
+for (const [name, route] of [["Projects", "projects"], ["Activity", "activity"], ["Settings", "settings"]]) nav.append(link(name, route));
+selector.addEventListener("change", () => { location.hash = "workflow/" + encodeURIComponent(selector.value); });
+function table(headings, rows) {
+  const scroll = make("div", "p-table-scroll");
+  const node = make("table");
+  const header = make("tr");
+  for (const name of headings) header.append(make("th", "", name));
+  node.append(header);
+  for (const row of rows) {
+    const tr = make("tr");
+    for (const value of row) {
+      const td = make("td");
+      td.append(value instanceof Node ? value : document.createTextNode(value ?? "Not recorded"));
+      tr.append(td);
+    }
+    node.append(tr);
   }
-  fleet.append(metrics);
-  const search = make("input");
-  search.type = "search";
-  search.placeholder = "Search projects, features, sessions or hosts";
-  search.setAttribute("aria-label", "Search all activity");
-  fleet.append(search);
-  const view = make("div");
-  fleet.append(view);
-  function inventory() {
-    view.replaceChildren();
-    const query = search.value.toLowerCase();
-    const tables = [
-      ["Workspaces and recorded agents", ["Worktree", "Identity", "Agents observed using this tree"],
-        (data.fleet.workspace_inventory || []).map(w => [w.label, w.key, hostBadges(w.hosts)])],
-      ["Feature snapshots", ["Project", "Feature", "Agents", "Stage", "PR-ready evidence", "Recorded cost subtotal"],
-        data.features.map(f => [f.project, `${f.archive_id || f.id} · ${f.workspace_key}`, hostBadges(f.hosts), f.lifecycle.step || "Not recorded", f.evidence.pr_ready.status,
-          f.usage.known_cost_usd === null ? "Not measured" : `${money(f.usage.known_cost_usd)} · incomplete coverage`])],
-      ["Host sessions with explicit ADLC5 evidence", ["Project", "Host", "Session", "Last evidence", "Evidence", "Whole-session token subtotal", "Independent outcome"],
-        data.fleet.sessions.map(s => [s.project, hostBadges([s.host]), s.id, s.last || "Not recorded", s.evidence,
-          s.tokens === null ? "Not measured" : `${s.tokens.toLocaleString()} · ${s.token_source}`, s.outcome])],
-      ["Runner attempts", ["Project", "Feature", "Attempt", "Host", "Worker status", "Model"],
-        data.fleet.attempts.map(a => [a.project, a.feature, a.id, hostBadges([a.host]), a.status || "Not recorded", a.model])],
-    ];
-    for (const [title, headings, rows] of tables) {
-      const section = make("details", "p-inventory");
-      const filtered = rows.filter(row => row.map(cell => cell instanceof Node ? cell.textContent : cell).join(" ").toLowerCase().includes(query));
-      section.open = true;
-      section.append(make("summary", "", `${title} · ${filtered.length}`));
-      const scroll = make("div", "p-table-scroll");
-      const table = make("table");
-      const head = make("tr");
-      for (const heading of headings) head.append(make("th", "", heading));
-      table.append(head);
-      for (const row of filtered) {
-        const tr = make("tr");
-        for (const cell of row) {
-          const td = make("td");
-          td.append(cell instanceof Node ? cell : document.createTextNode(cell ?? "Not recorded"));
-          tr.append(td);
-        }
-        table.append(tr);
-      }
-      scroll.append(table);
-      section.append(scroll);
-      if (!filtered.length) section.append(make("p", "muted", "No matching recorded activity."));
-      view.append(section);
+  scroll.append(node);
+  return scroll;
+}
+const workspaces = data.fleet?.workspace_inventory || [];
+const projects = data.fleet?.projects || [];
+const hostsFor = keys => [...new Set(workspaces.filter(w => keys.includes(w.key)).flatMap(w => w.hosts))];
+function showProjects() {
+  fleet.append(make("h1", "", "Your projects"), make("p", "muted", "Applications first. Open a project to inspect its workflows and worktrees."));
+  const cards = make("div", "p-projects");
+  for (const project of projects) {
+    const features = data.features.filter(f => f.project_id === project.id);
+    const card = make("article", "p-project");
+    card.append(link(project.name, "project/" + project.id), hostBadges(hostsFor(project.workspace_keys)));
+    card.append(make("p", "muted", `${features.filter(f => !f.archive_id).length} active workflows · ${features.filter(f => f.archive_id).length} archived · ${project.workspace_keys.length} worktrees`));
+    const blockers = features.filter(f => !f.archive_id && f.evidence.pr_ready.status === "fail").length;
+    card.append(make("p", "", blockers ? `${blockers} workflows have failing local PR-ready evidence` : "Open to inspect delivery evidence"));
+    const recent = (data.fleet?.sessions || []).filter(s => s.workspace_keys?.some(key => project.workspace_keys.includes(key))).map(s => s.last).filter(Boolean).sort().at(-1);
+    card.append(make("small", "muted", "Last ADLC5 session evidence: " + (recent || "Not recorded")));
+    cards.append(card);
+  }
+  if (!projects.length) cards.append(make("p", "p-empty", "No projects found in the captured sources."));
+  fleet.append(cards);
+}
+function showProject(id) {
+  const project = projects.find(p => p.id === id);
+  if (!project) return fleet.append(make("p", "p-empty", "Project not found in this snapshot."));
+  fleet.append(link("Projects", "projects"), make("h1", "", project.name), hostBadges(hostsFor(project.workspace_keys)));
+  const filter = make("select");
+  filter.setAttribute("aria-label", "Workflow archive filter");
+  for (const [value, title] of [["active", "Active workflows"], ["archived", "Archived workflows"], ["all", "All workflows"]]) {
+    const option = make("option", "", title); option.value = value; filter.append(option);
+  }
+  filter.value = "active";
+  const workflows = make("div");
+  function list() {
+    workflows.replaceChildren();
+    const rows = data.features.filter(f => f.project_id === id && (filter.value === "all" || Boolean(f.archive_id) === (filter.value === "archived")));
+    workflows.append(table(["Workflow", "Worktree", "Agents", "Stage", "Local PR-ready", "Next action"], rows.map(f => [
+      link(f.archive_id || f.id, "workflow/" + encodeURIComponent(f.identity)), f.workspace_label, hostBadges(f.hosts), f.lifecycle.step, f.evidence.pr_ready.status, f.next_action.label])));
+    if (!rows.length) workflows.append(make("p", "p-empty", "No workflows match this filter."));
+  }
+  filter.addEventListener("change", list); list();
+  fleet.append(filter, workflows, make("h2", "", "Worktrees"));
+  fleet.append(table(["Worktree", "Recorded agents", "Settings"], workspaces.filter(w => w.project_id === id).map(w => [w.label, hostBadges(w.hosts), link("Inspect overrides", "settings/worktree:" + w.key)])));
+  fleet.append(link("Project settings", "settings/project:" + id));
+}
+function showActivity() {
+  fleet.append(make("h1", "", "Activity"), make("p", "muted", data.fleet?.scope || "Captured source records"));
+  const kind = make("select"); kind.setAttribute("aria-label", "Activity type");
+  for (const [value, title] of [["sessions", "Host sessions"], ["attempts", "Runner attempts"]]) { const option = make("option", "", title); option.value = value; kind.append(option); }
+  kind.value = "sessions";
+  const search = make("input"); search.type = "search"; search.placeholder = "Search activity"; search.setAttribute("aria-label", "Search activity");
+  const body = make("div"); let page = 0;
+  function list() {
+    body.replaceChildren();
+    const rows = (data.fleet?.[kind.value] || []).filter(row => [row.project, row.id, row.host, hostNames[row.host]].join(" ").toLowerCase().includes(search.value.toLowerCase()));
+    const visible = rows.slice(page * 25, page * 25 + 25);
+    body.append(make("p", "muted", `${rows.length} records · page ${page + 1} of ${Math.max(1, Math.ceil(rows.length / 25))}`));
+    body.append(kind.value === "sessions" ? table(["Project", "Agent", "Session", "Last evidence", "Whole-session tokens", "Outcome"], visible.map(s => [s.project, hostBadges([s.host]), s.id, s.last, s.tokens == null ? "Not measured" : s.tokens.toLocaleString(), s.outcome]))
+      : table(["Project", "Feature", "Attempt", "Agent", "Worker status", "Model"], visible.map(a => [a.project, a.feature, a.id, hostBadges([a.host]), a.status, a.model])));
+    for (const [title, delta] of [["Previous", -1], ["Next", 1]]) {
+      const button = make("button", "", title); button.disabled = page + delta < 0 || (page + delta) * 25 >= rows.length;
+      button.addEventListener("click", () => { page += delta; list(); }); body.append(button);
     }
   }
-  search.addEventListener("input", inventory);
-  inventory();
-  if (data.warnings?.length) fleet.append(make("p", "muted", `Coverage warnings: ${data.warnings.join(" · ")}`));
-  fleet.append(make("h2", "", "Selected feature details"));
+  for (const node of [kind, search]) node.addEventListener(node === kind ? "change" : "input", () => { page = 0; list(); });
+  fleet.append(kind, search, body); list();
 }
-render();
+function showSettings(scope = "machine") {
+  fleet.append(make("h1", "", "Settings"), make("p", "muted", "Read-only effective configuration at capture time. Explicit options override local defaults; enforced machine settings remain in force. Per-run options remain in workflow records. Derived caches are never configuration authority."));
+  const selector = make("select"); selector.setAttribute("aria-label", "Settings scope");
+  const scopes = data.settings?.scopes || {};
+  const names = {machine: "Machine"};
+  for (const p of projects) names["project:" + p.id] = "Project · " + p.name;
+  for (const w of workspaces) names["worktree:" + w.key] = "Worktree · " + w.label;
+  for (const key of Object.keys(scopes)) { const option = make("option", "", names[key] || key); option.value = key; selector.append(option); }
+  selector.value = scopes[scope] ? scope : "machine";
+  if (scope !== "machine" && !scopes[scope]) fleet.append(make("p", "p-warning", "Settings for this scope were not captured; showing machine settings."));
+  selector.addEventListener("change", () => { location.hash = "settings/" + selector.value; }); fleet.append(selector);
+  const settings = scopes[selector.value];
+  if (!settings) return fleet.append(make("p", "p-empty", "Settings were not captured. Regenerate the board."));
+  if (settings.error) fleet.append(make("p", "p-warning", settings.error));
+  fleet.append(table(["Setting", "Effective value", "State", "Source", "Previous layers"], settings.rows.map(r => [r.key, JSON.stringify(r.value), r.status, r.source, r.history.map(h => `${h.layer}: ${JSON.stringify(h.value)}`).join(" → ")])));
+  fleet.append(make("h2", "", "Configuration layers"), table(["Layer", "Source", "Available"], settings.layers.map(l => [l.layer, l.path, l.present ? "Yes" : "No"])));
+  fleet.append(make("h2", "", "Storage"), table(["Purpose", "Location"], Object.entries(settings.storage)));
+  fleet.append(make("h2", "", "Shared runtime"), table(["Property", "Value"], Object.entries(data.settings.shared_runtime || {})));
+  fleet.append(make("h2", "", "Reporting and telemetry"), make("p", "", settings.telemetry), make("p", "muted", "Scan roots: " + data.settings.scan_roots.join(" · ")));
+  fleet.append(make("h2", "", "Credential availability"), table(["Credential", "State"], Object.entries(settings.credentials)));
+  fleet.append(make("h2", "", "Host integrations"), make("p", "muted", "Cached versions do not establish which plugin is active in an existing host process."));
+  fleet.append(table(["Agent", "CLI on PATH", "Cached plugin versions", "Board runtime", "Observation"], data.settings.integrations.map(i => [hostBadges([i.host]), i.cli_available ? "Yes" : "No", i.cached_versions.join(", ") || "Not established", i.runtime_version, i.status])));
+}
+function route() {
+  let parts;
+  try { parts = location.hash.slice(1).split("/").map(decodeURIComponent); } catch { parts = ["projects"]; }
+  const [view, id] = parts;
+  panel.hidden = true; panel.replaceChildren(); fleet.hidden = false; fleet.replaceChildren();
+  document.getElementById("workflow-picker").hidden = view !== "workflow";
+  for (const item of nav.children) item.setAttribute("aria-current", item.href.endsWith("#" + (view === "project" || view === "workflow" ? "projects" : view || "projects")) ? "page" : "false");
+  if (view === "workflow") {
+    const feature = data.features.find(f => f.identity === id);
+    if (!feature) return fleet.append(make("p", "p-empty", "Workflow not found in this snapshot."));
+    fleet.append(link("Projects", "projects"), document.createTextNode(" / "), link(feature.project, "project/" + feature.project_id));
+    selector.value = id; selectedStage = null; selectedEvent = null; panel.hidden = false; renderWorkflow();
+  } else if (view === "project") showProject(id);
+  else if (view === "activity") showActivity();
+  else if (view === "settings") showSettings(id);
+  else showProjects();
+  const heading = (panel.hidden ? fleet : panel).querySelector("h1");
+  if (heading) { heading.setAttribute("tabindex", "-1"); heading.focus({preventScroll: true}); }
+  window.scrollTo?.(0, 0);
+}
+window.addEventListener("hashchange", route);
+if (!location.hash && data.selected_feature) location.hash = "workflow/" + encodeURIComponent(data.selected_feature);
+route();

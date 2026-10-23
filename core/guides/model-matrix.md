@@ -2,7 +2,7 @@
 
 **Purpose:** Match cognitive load to model capability so lifecycle work does not under- or over-spend tokens on the wrong model.
 
-**Config:** Choose per-host tiers with `adlc5 setup models`; values are stored in master `~/.adlc5/config.yaml` and optional repository overrides in `<git-common-dir>/adlc5-shared/config.yaml`. Run `adlc5 config show --workspace PATH` to inspect the effective values and their source. See [config.example.yaml](../../config.example.yaml).
+**Config:** Choose per-host tiers with `adlc5 setup models`; machine defaults live in `~/.adlc5/config.yaml`, project defaults in `~/.adlc5/projects/<repository-id>/config.yaml`, and explicit local overrides in `.adlc5/overrides.yaml`. Legacy repository config stays readable. Run `adlc5 config show --workspace PATH` or inspect Pulse Settings. See [shared-home resolution](../../docs/shared-home.md) and [config.example.yaml](../../config.example.yaml).
 
 **Resolver (authoritative for agents):**
 

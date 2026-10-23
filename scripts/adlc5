@@ -110,6 +110,7 @@ Commands:
   repo-index build|refresh|check {COMMANDS['repo-index']}
   resolve-model  {COMMANDS['resolve-model']}
   setup models   {COMMANDS['setup']}
+  setup storage  Stage the shared machine runtime under ~/.adlc5/runtimes/
   config show    {COMMANDS['config']}
   answer         {COMMANDS['answer']}
   cleanup-features  {COMMANDS['cleanup-features']}
@@ -318,6 +319,8 @@ def cmd_config(args: list[str]) -> int:
 
 
 def cmd_setup(args: list[str]) -> int:
+    if args and args[0] == 'storage':
+        return run([sys.executable, str(SCRIPTS / 'shared-home.py'), *args[1:]])
     if not args or args[0] != "models":
         print("Usage: ./scripts/adlc5 setup models [--host codex|claude|cursor|hermes] [--repo] [--accept-defaults] [--workspace DIR]", file=sys.stderr)
         return 2

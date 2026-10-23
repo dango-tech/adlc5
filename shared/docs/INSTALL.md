@@ -150,7 +150,7 @@ state. Re-running `init-workspace.sh` there previously re-copied the whole
 layer-2 scaffold, so a repo with three worktrees carried three independent
 copies of files that are identical by definition.
 
-`init-workspace.sh` is worktree-aware. Repository model settings live at `<git-common-dir>/adlc5-shared/config.yaml`; the master file is `~/.adlc5/config.yaml`. The legacy `.adlc5/config.yaml` remains readable during migration but is no longer the active store for new repositories.
+`init-workspace.sh` is worktree-aware. New model setup writes project settings under `~/.adlc5/projects/<repository-id>/config.yaml`; machine defaults live in `~/.adlc5/config.yaml`. The legacy Git-shared and `.adlc5/config.yaml` layers remain readable. Explicit per-worktree settings belong in `.adlc5/overrides.yaml`. See [shared-home resolution](../../docs/shared-home.md). Source installs link skills and rules to one content-addressed runtime under `~/.adlc5/runtimes/`; host-managed native plugin copies retain their normal update mechanism.
 
 **Layer 3 stays worktree-local on purpose.** Parallel worktrees exist to run different features; sharing `.adlc5/{feature}/` between them would merge unrelated lifecycle state. If two worktrees do end up with the same feature name, `init-feature.sh` warns and names the other worktree rather than merging silently.
 
@@ -162,7 +162,7 @@ copies of files that are identical by definition.
 |------|---------|
 | `.adlc5/workspace.json` | ADLC5-enabled project; records `adlc5_root` |
 | `~/.adlc5/config.yaml` | Master model tiers and defaults |
-| `<git-common-dir>/adlc5-shared/config.yaml` | Optional repository overrides shared by linked worktrees |
+| `~/.adlc5/projects/<repository-id>/config.yaml` | Project overrides shared by linked worktrees (legacy Git-common-dir configuration remains readable) |
 | `.adlc5/governance/` | DoD, production-ready, verifier rules (symlinked to the repo's shared store in a linked worktree) |
 | `.agents/` | Tracked constitution (`architecture.yaml`, `boundaries.yaml`, `commands.yaml`, `schemas/`) plus `skills/` symlinks |
 | `AGENTS.md` | Agent guidance (if missing) |

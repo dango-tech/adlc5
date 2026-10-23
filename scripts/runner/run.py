@@ -25,7 +25,7 @@ sys.path.insert(0, str(SCRIPTS))
 from runner import hosts  # noqa: E402
 from runner.questions import pending as pending_question, check_current as check_question, current_answers, StaleQuestion  # noqa: E402
 from lib.completion_evidence import fingerprint, records as evidence_records  # noqa: E402
-from lib.config_layers import config_paths  # noqa: E402
+from lib.config_layers import config_paths, effective_config  # noqa: E402
 from lib.model_routing import load_yaml_file, merge_model_config  # noqa: E402
 from lib.policies_load import CANONICAL_STEPS, load_policies, next_step_for_profile, profile_name, step_enabled  # noqa: E402
 from lib.state_v2 import load_feature_state, atomic_write_json  # noqa: E402
@@ -211,11 +211,7 @@ def acquire_lock(path: Path) -> None:
 def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: argparse.Namespace) -> tuple[str, str] | int:
     branch_prefix = "feat"
     # git_branch_prefix is retained in repository config independently of model setup.
-    for _source, path in config_paths(workspace):
-        if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if line.strip().startswith("git_branch_prefix:"):
-                    branch_prefix = line.split(":", 1)[1].strip().strip("\"'") or branch_prefix
+    branch_prefix = effective_config(workspace)[0].get('git_branch_prefix') or branch_prefix
     branch = f"{branch_prefix}/{feature}"
     dirty = bool(git(workspace, "status", "--porcelain", "--untracked-files=all"))
     if dirty:
@@ -716,6 +712,12 @@ def run(args: argparse.Namespace) -> int:
             raise RuntimeError("no host selected; pass --host or set default_host with 'adlc5 setup models'")
         if host not in hosts.HOSTS:
             raise RuntimeError(f"unsupported host: {host}")
+        options = {}
+        if args.host:
+            options['default_host'] = args.host
+        if args.mode:
+            options['platform_modes'] = {host: args.mode}
+        effective_config(workspace, options)  # Reject explicit attempts to bypass machine constraints.
         profile = profiles.get(host) if isinstance(profiles.get(host), dict) else {}
         configured = any(isinstance(profile.get(tier), dict) and profile[tier].get("model")
                          for tier in ("reasoning", "balanced", "execution"))
