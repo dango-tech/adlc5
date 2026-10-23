@@ -12,6 +12,29 @@ const money = value => typeof value === "number" ? `$${value.toFixed(2)}` : "Una
 const label = value => value ? String(value).replaceAll("_", " ") : "Not recorded";
 const statusClass = value => ["pass", "completed"].includes(value) ? "p-good" : ["fail", "unstable"].includes(value) ? "p-bad" : "p-warn";
 const evidenceStatus = (title, value, detail = "") => ({ title, value: label(value), detail });
+const hostNames = {claude: "Claude Code", codex: "Codex", cursor: "Cursor", hermes: "Hermes Agent"};
+const hostMarks = {
+  claude: "M12 2v20M2 12h20M5 5l14 14M5 19L19 5M8 3l8 18M3 8l18 8",
+  codex: "M9 5l-7 7 7 7M15 5l7 7-7 7M14 3l-4 18",
+  cursor: "M4 2l16 12-8 1-3 7zM12 15l6 6",
+  hermes: "M12 4v17M4 5l8 4 8-4M2 9l10 4 10-4M5 14l7 3 7-3",
+};
+function hostBadges(hosts = []) {
+  const group = make("span", "p-hosts");
+  if (!hosts.length) return make("span", "muted", "Host not recorded");
+  for (const host of hosts) {
+    const badge = make("span", `p-host p-host-${host}`);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", hostMarks[host] || "M4 4h16v16H4z");
+    svg.append(path);
+    badge.append(svg, make("span", "", hostNames[host] || host));
+    group.append(badge);
+  }
+  return group;
+}
 let selectedStage = null;
 let selectedEvent = null;
 
@@ -21,6 +44,7 @@ for (const feature of data.features) {
   option.value = feature.identity;
   selector.append(option);
 }
+if (data.selected_feature) selector.value = data.selected_feature;
 
 function render() {
   const feature = data.features.find(item => item.identity === selector.value);
@@ -37,6 +61,8 @@ function render() {
   const titleGroup = make("div");
   titleGroup.append(make("div", "eyebrow", feature.archive_id ? `Archived feature · ${feature.archive_id}` : "Feature lifecycle"));
   titleGroup.append(make("h1", "", feature.id));
+  if (feature.workspace_label) titleGroup.append(make("div", "sub", feature.workspace_label));
+  if (feature.hosts) titleGroup.append(hostBadges(feature.hosts));
   titleGroup.append(make("div", "sub", `${label(stage)} / ${label(feature.lifecycle.step)} · fingerprint ${feature.capture.input_fingerprint || "unavailable"}`));
   const state = make("span", `status ${currentStatus === "pass" ? "" : currentStatus === "fail" ? "fail" : "warn"}`, `Local PR-ready · ${label(currentStatus)}`);
   heading.append(titleGroup, state);
@@ -161,6 +187,7 @@ if (data.fleet) {
   const fleet = document.getElementById("fleet");
   fleet.hidden = false;
   fleet.append(make("h1", "", "Your ADLC5 activity"), make("p", "muted", data.fleet.scope));
+  fleet.append(make("p", "muted", "Agent badges show recorded usage of the exact worktree, not live presence. Multiple badges mean multiple hosts have used that tree."));
   const metrics = make("div", "p-metrics");
   for (const [name, count] of [["Workspaces", data.fleet.workspaces], ["Feature snapshots", data.features.length],
     ["Host sessions", data.fleet.sessions.length], ["Runner attempts", data.fleet.attempts.length]]) {
@@ -180,18 +207,20 @@ if (data.fleet) {
     view.replaceChildren();
     const query = search.value.toLowerCase();
     const tables = [
-      ["Feature snapshots", ["Project", "Feature", "Stage", "PR-ready evidence", "Recorded cost subtotal"],
-        data.features.map(f => [f.project, `${f.archive_id || f.id} · ${f.workspace_key}`, f.lifecycle.step || "Not recorded", f.evidence.pr_ready.status,
+      ["Workspaces and recorded agents", ["Worktree", "Identity", "Agents observed using this tree"],
+        (data.fleet.workspace_inventory || []).map(w => [w.label, w.key, hostBadges(w.hosts)])],
+      ["Feature snapshots", ["Project", "Feature", "Agents", "Stage", "PR-ready evidence", "Recorded cost subtotal"],
+        data.features.map(f => [f.project, `${f.archive_id || f.id} · ${f.workspace_key}`, hostBadges(f.hosts), f.lifecycle.step || "Not recorded", f.evidence.pr_ready.status,
           f.usage.known_cost_usd === null ? "Not measured" : `${money(f.usage.known_cost_usd)} · incomplete coverage`])],
       ["Host sessions with explicit ADLC5 evidence", ["Project", "Host", "Session", "Last evidence", "Evidence", "Whole-session token subtotal", "Independent outcome"],
-        data.fleet.sessions.map(s => [s.project, s.host, s.id, s.last || "Not recorded", s.evidence,
+        data.fleet.sessions.map(s => [s.project, hostBadges([s.host]), s.id, s.last || "Not recorded", s.evidence,
           s.tokens === null ? "Not measured" : `${s.tokens.toLocaleString()} · ${s.token_source}`, s.outcome])],
       ["Runner attempts", ["Project", "Feature", "Attempt", "Host", "Worker status", "Model"],
-        data.fleet.attempts.map(a => [a.project, a.feature, a.id, a.host, a.status || "Not recorded", a.model])],
+        data.fleet.attempts.map(a => [a.project, a.feature, a.id, hostBadges([a.host]), a.status || "Not recorded", a.model])],
     ];
     for (const [title, headings, rows] of tables) {
       const section = make("details", "p-inventory");
-      const filtered = rows.filter(row => row.join(" ").toLowerCase().includes(query));
+      const filtered = rows.filter(row => row.map(cell => cell instanceof Node ? cell.textContent : cell).join(" ").toLowerCase().includes(query));
       section.open = true;
       section.append(make("summary", "", `${title} · ${filtered.length}`));
       const scroll = make("div", "p-table-scroll");
@@ -201,7 +230,11 @@ if (data.fleet) {
       table.append(head);
       for (const row of filtered) {
         const tr = make("tr");
-        for (const cell of row) tr.append(make("td", "", cell));
+        for (const cell of row) {
+          const td = make("td");
+          td.append(cell instanceof Node ? cell : document.createTextNode(cell ?? "Not recorded"));
+          tr.append(td);
+        }
         table.append(tr);
       }
       scroll.append(table);

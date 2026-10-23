@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from lib.pulse_fleet import collect, discover, sessions
+from lib.pulse_fleet import collect, discover, sessions, workspace_key
 from lib.pulse import board_document
 
 
@@ -87,6 +87,37 @@ class FleetTests(unittest.TestCase):
         result = collect([repo], [])
         self.assertEqual(result['features'], [])
         self.assertTrue(result['warnings'])
+
+    def test_host_association_uses_exact_worktree_not_project_basename(self):
+        repo = self.root / 'one/repo'
+        other = self.root / 'two/repo'
+        for workspace in (repo, other):
+            (workspace / '.adlc5/feature/pilot').mkdir(parents=True)
+            (workspace / '.adlc5/feature/FEATURE.md').write_text('# Feature')
+        (repo / '.adlc5/feature/pilot/attempts.jsonl').write_text(json.dumps({'attempt_id': 'h', 'host': 'hermes'}) + '\n')
+        transcripts = self.root / 'sessions'
+        transcripts.mkdir()
+        (transcripts / 's.jsonl').write_text('\n'.join(json.dumps(row) for row in [
+            {'type': 'session_meta', 'payload': {'id': 's', 'cwd': str(repo)}},
+            {'type': 'response_item', 'payload': {'role': 'user', 'content': '@adlc5 build export'}},
+        ]))
+        data = collect([self.root], [('codex', transcripts)], observations=[{'workspace_key': workspace_key(repo), 'host': 'claude'}])
+        by_tree = {f['workspace_key']: f['hosts'] for f in data['features']}
+        self.assertEqual(by_tree[workspace_key(repo)], ['claude', 'codex', 'hermes'])
+        self.assertEqual(by_tree[workspace_key(other)], [])
+
+    def test_featureless_legacy_worktree_and_session_only_history_remain_visible(self):
+        repo = self.root / 'legacy-tree'
+        directory = repo / '.agent-cache/pulse'
+        directory.mkdir(parents=True)
+        (directory / 'workspace.html').write_text('Historical snapshot')
+        data = collect([self.root], [], observations=[{'workspace_key': 'a' * 10,
+            'workspace_label': '~/removed-tree', 'host': 'hermes'}])
+        self.assertEqual(data['features'], [])
+        self.assertEqual(data['fleet']['workspaces'], 2)
+        inventory = {w['key']: w for w in data['fleet']['workspace_inventory']}
+        self.assertIn(workspace_key(repo), inventory)
+        self.assertEqual(inventory['a' * 10]['hosts'], ['hermes'])
 
 
 if __name__ == '__main__':

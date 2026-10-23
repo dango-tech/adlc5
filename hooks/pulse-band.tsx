@@ -104,7 +104,7 @@ export const register: Register = on => {
         : 'Set ADLC5_FEATURE to pin one feature, then start or finish a turn to refresh Pulse.'
     const openBoard = async () => {
       if (!cwd || !pluginRoot) return
-      const args = ['python3', `${pluginRoot}/scripts/adlc5`, 'pulse', 'board', '--workspace', cwd, '--open']
+      const args = ['python3', `${pluginRoot}/scripts/adlc5`, 'pulse', 'board', '--workspace', cwd, '--host', 'claude', '--open']
       if (featureId) args.push('--feature', featureId)
       const result = await $.process.run(args).catch(() => undefined)
       $.ui.toast(result?.exitCode === 0 ? 'ADLC5 Pulse board opened' : 'ADLC5 Pulse board could not be opened')

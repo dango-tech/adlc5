@@ -8,12 +8,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from lib.pulse import Reader, _json, _safe_text, project_workspace
+from lib.pulse import Reader, _json, _jsonl, _safe_text, project_workspace
 
 PRUNE = {'.git', '.agent-cache', 'node_modules', '.venv', 'venv', '__pycache__',
          'Pods', '.build', 'DerivedData', 'dist', 'build', '.next', '.terraform'}
 KERNEL = re.compile(r'(?:scripts/adlc5|\badlc5)\s+(?:transition|gate|pilot|evidence|state|anchors|readiness|run)\b|(?:init-feature\.sh|pilot-autopilot\.sh)')
 REQUEST = re.compile(r'(?:@|\$|/)adlc5(?:[:\s-]|$)|\b(?:using|use|run|invoke|follow)\s+(?:the\s+)?adlc5\b', re.I)
+
+
+def workspace_key(workspace: Path) -> str:
+    return hashlib.sha256(str(workspace.resolve()).encode()).hexdigest()[:10]
+
+
+def workspace_label(workspace: Path) -> str:
+    try:
+        return '~/' + workspace.resolve().relative_to(Path.home()).as_posix()
+    except ValueError:
+        return _safe_text(str(workspace.resolve()), 400)
 
 
 def discover(roots: list[Path], warnings: list[str]) -> list[Path]:
@@ -29,7 +40,7 @@ def discover(roots: list[Path], warnings: list[str]) -> list[Path]:
                 names[:] = []
                 continue
             visited.add(current)
-            if '.adlc5' in names:
+            if '.adlc5' in names or any((current / '.agent-cache/pulse' / name).is_file() for name in ('workspace.json', 'workspace.html')):
                 found.add(current)
             names[:] = [name for name in names if name not in PRUNE and name != '.adlc5'
                         and not (current / name).is_symlink()]
@@ -76,6 +87,8 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
                             payload = {}
                         if event.get('type') == 'session_meta':
                             sid, cwd = payload.get('id') or sid, payload.get('cwd') or cwd
+                        elif event.get('type') == 'turn_context':
+                            cwd = payload.get('cwd') or cwd
                         elif host == 'claude':
                             sid, cwd = event.get('sessionId') or sid, event.get('cwd') or cwd
                         stats = counters.setdefault(host + ':' + str(sid), {'messages': {}, 'snapshot': None})
@@ -112,8 +125,14 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
                         when = _safe_text(event.get('timestamp'), 40) or None
                         row = rows.setdefault(key, {'id': _safe_text(sid, 150), 'host': host,
                             'project': _safe_text(Path(str(cwd)).name), 'evidence': 'requested',
+                            'workspace_keys': [], 'workspace_labels': {},
                             'first': when, 'last': when, 'tokens': None, 'cost_usd': None,
                             'outcome': 'Not established from transcript', 'sources': 0})
+                        if isinstance(cwd, str) and Path(cwd).is_absolute():
+                            identity = workspace_key(Path(cwd))
+                            if identity not in row['workspace_keys']:
+                                row['workspace_keys'].append(identity)
+                            row['workspace_labels'][identity] = workspace_label(Path(cwd))
                         row['first'] = min(row['first'] or when or '', when or row['first'] or '') or None
                         row['last'] = max(row['last'] or when or '', when or row['last'] or '') or None
                         if observed:
@@ -136,22 +155,30 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
     return sorted(rows.values(), key=lambda row: row['last'] or '', reverse=True), files
 
 
-def collect(roots: list[Path], session_roots: list[tuple[str, Path]], *, active_only=False) -> dict:
+def collect(roots: list[Path], session_roots: list[tuple[str, Path]], *, active_only=False, observations=()) -> dict:
     warnings = []
     workspaces = discover(roots, warnings)
-    features, attempts = [], {}
+    features, attempts, runner_hosts = [], {}, {}
     for workspace in workspaces:
         try:
             snapshot = project_workspace(workspace, active_only=active_only)
-            key = hashlib.sha256(str(workspace).encode()).hexdigest()[:10]
+            key = workspace_key(workspace)
             for item in snapshot['features']:
                 item['project'] = workspace.name
                 item['workspace_key'] = key
+                item['workspace_label'] = workspace_label(workspace)
                 item['identity'] = key + '-' + item['identity']
                 features.append(item)
             # Native runner results also cover hosts without durable transcript export.
             reader = Reader(workspace)
+            attempt_hosts = {}
             for directory in (workspace / '.adlc5', workspace / '.adlc5/_archive'):
+                for journal in sorted(directory.glob('*/pilot/attempts.jsonl')):
+                    events, _ = _jsonl(reader, journal)
+                    for event in events:
+                        if event.get('host') in ('claude', 'codex', 'cursor', 'hermes'):
+                            attempt_hosts[event.get('attempt_id')] = event['host']
+                            runner_hosts.setdefault(key, set()).add(event['host'])
                 for path in sorted(directory.glob('*/pilot/results/*.json')):
                     if path.name.endswith(('.schema.json', '.last-message.json', '.session.json', '.usage.json')):
                         continue
@@ -160,7 +187,7 @@ def collect(roots: list[Path], session_roots: list[tuple[str, Path]], *, active_
                         continue
                     attempt_id = value['attempt_id']
                     row = {'id': _safe_text(attempt_id, 150), 'project': workspace.name,
-                           'feature': _safe_text(path.parents[2].name), 'host': _safe_text(value.get('host') or 'not recorded'),
+                           'feature': _safe_text(path.parents[2].name), 'host': _safe_text(value.get('host') or attempt_hosts.get(attempt_id) or 'not recorded'),
                            'status': _safe_text(value.get('status')), 'model': _safe_text(value.get('model_id') or 'unknown'),
                            'session_id': _safe_text(value.get('host_session_id') or value.get('session_id')),
                            'wall_seconds': value.get('wall_seconds') if type(value.get('wall_seconds')) in (int, float) else None}
@@ -172,10 +199,26 @@ def collect(roots: list[Path], session_roots: list[tuple[str, Path]], *, active_
         except (OSError, ValueError, KeyError, TypeError):
             warnings.append('workspace_capture_unavailable: ' + workspace.name)
     native, files = sessions(session_roots, warnings)
+    host_map = {workspace_key(workspace): set(runner_hosts.get(workspace_key(workspace), ())) for workspace in workspaces}
+    labels = {workspace_key(workspace): workspace_label(workspace) for workspace in workspaces}
+    for session in native:
+        for key in session.get('workspace_keys', []):
+            host_map.setdefault(key, set()).add(session['host'])
+            labels.setdefault(key, session['workspace_labels'][key])
+    for observation in observations:
+        if isinstance(observation, dict) and re.fullmatch(r'[a-f0-9]{10}', str(observation.get('workspace_key', ''))) and observation.get('host') in ('claude', 'codex', 'cursor', 'hermes'):
+            key = observation['workspace_key']
+            if key in labels or isinstance(observation.get('workspace_label'), str):
+                labels.setdefault(key, _safe_text(observation.get('workspace_label'), 400))
+                host_map.setdefault(key, set()).add(observation['host'])
+    for feature in features:
+        feature['hosts'] = sorted(host_map[feature['workspace_key']])
     return {'schema_version': '1.0', 'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
             'status': 'partial' if warnings else 'ok', 'capture': {'scope': 'fleet', 'stable': False},
             'workspace': {'label': 'All projects'}, 'features': features,
-            'fleet': {'workspaces': len(workspaces), 'session_files_scanned': files,
+            'fleet': {'workspaces': len(labels), 'session_files_scanned': files,
+                      'workspace_inventory': [{'key': key, 'label': label, 'hosts': sorted(host_map[key])}
+                                              for key, label in sorted(labels.items(), key=lambda item: item[1])],
                       'sessions': native, 'attempts': list(attempts.values()),
                       'scope': 'Discovered local sources, not a guarantee of complete history. Feature snapshots, host sessions and attempts overlap; do not add them as run counts. Native token subtotals cover whole sessions, may include other work or copied fork prefixes, and must not be added to feature ledgers. Missing cost and independent outcomes stay unmeasured. Regenerate to include new runs.'},
             'warnings': sorted(set(warnings))}

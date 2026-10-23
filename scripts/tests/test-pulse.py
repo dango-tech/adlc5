@@ -21,6 +21,12 @@ class PulseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.workspace = Path(self.tmp.name).resolve()
+        self.home_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.home_tmp.cleanup)
+        self.home = Path(self.home_tmp.name).resolve()
+        self.env_patch = patch.dict(os.environ, HOME=str(self.home))
+        self.env_patch.start()
+        self.addCleanup(self.env_patch.stop)
         (self.workspace / ".adlc5").mkdir()
         subprocess.run(["git", "init", "-q", str(self.workspace)], check=True)
         subprocess.run(["git", "-C", str(self.workspace), "config", "maintenance.auto", "false"], check=True)
@@ -372,7 +378,10 @@ class PulseTests(unittest.TestCase):
         self.assertEqual(before, after)
         board = subprocess.run(command + ["pulse", "board", "--workspace", str(self.workspace)], capture_output=True, text=True, check=True)
         result = json.loads(board.stdout)
-        self.assertTrue((self.workspace / result["board"]).is_file())
+        self.assertEqual(Path(result['board']), self.home / '.adlc5/pulse/board.html')
+        self.assertTrue(Path(result['board']).is_file())
+        self.assertEqual(before, sorted(str(p.relative_to(self.workspace)) for p in self.workspace.rglob('*')))
+        self.assertFalse((self.workspace / '.agent-cache/pulse').exists())
         cached = subprocess.run(command + ["pulse", "band", "--cached", "--feature", "sample-feature", "--workspace", str(self.workspace)], capture_output=True, text=True)
         self.assertEqual(cached.returncode, 0, cached.stderr)
         self.assertIn("present freshness unverified", cached.stdout)
@@ -380,6 +389,27 @@ class PulseTests(unittest.TestCase):
         status = subprocess.run([sys.executable, str(ROOT / "scripts" / "pulse-statusline.py")], input="{}", capture_output=True, text=True, env=env)
         self.assertEqual(status.returncode, 0)
         self.assertIn("present freshness unverified", status.stdout)
+
+    def test_shared_board_records_multiple_hosts_and_keeps_worktree_caches_separate(self):
+        self.feature()
+        command = [sys.executable, str(ROOT / 'scripts/pulse.py'), 'board', '--workspace', str(self.workspace)]
+        for host in ('claude', 'codex', 'hermes', 'cursor'):
+            result = subprocess.run(command + ['--host', host], capture_output=True, text=True, check=True)
+        data = json.loads((self.home / '.adlc5/pulse/fleet.json').read_text())
+        self.assertEqual(data['features'][0]['hosts'], ['claude', 'codex', 'cursor', 'hermes'])
+        self.assertTrue(data['selected_feature'])
+        other = self.workspace / 'other-tree'
+        (other / '.adlc5').mkdir(parents=True)
+        subprocess.run([sys.executable, str(ROOT / 'scripts/pulse.py'), 'board', '--workspace', str(other)], check=True, capture_output=True)
+        self.assertEqual(len(list((self.home / '.adlc5/pulse/workspaces').iterdir())), 2)
+        self.assertEqual(json.loads(result.stdout)['board'], str(self.home / '.adlc5/pulse/board.html'))
+
+    def test_central_cache_refuses_symlink_without_writing_through_it(self):
+        self.feature()
+        (self.home / '.adlc5').symlink_to(self.workspace)
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/pulse.py'), 'board', '--workspace', str(self.workspace)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse((self.workspace / 'pulse').exists())
 
 
 if __name__ == "__main__":

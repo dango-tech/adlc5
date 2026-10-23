@@ -134,9 +134,10 @@ monitor the repository.
 ./scripts/adlc5 pulse handoff --workspace . --feature my-feature
 ```
 
-The all-projects board lives at `~/.config/adlc5/pulse/board.html` and includes discovered
+Every board command opens the shared `~/.adlc5/pulse/board.html` and includes discovered
 active/archived features, explicit native-host ADLC5 session references, and runner attempts.
 Add other repository locations with `--root PATH`; run the command again to refresh.
+Worktree rows show all recorded hosts with Claude Code, Codex, Cursor and Hermes Agent badges.
 
 The offline board and cached band are generated when requested. Claude Code also
 shows an interactive Pulse band above the prompt; Codex and Cursor use the shared

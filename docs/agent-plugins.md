@@ -140,7 +140,7 @@ Claude Code users may manually use the cached adapter after generating a board:
 }
 ```
 
-The adapter reads the consumer's `.agent-cache/pulse/` only and prints “present freshness unverified.” Set `ADLC5_WORKSPACE` when Claude's session input does not identify the consumer directory. Add the snippet manually to the project's Claude settings; plugin installation never changes an existing status line. If Ponytail or another status line is configured, keep it and use the board/skill directly unless you intentionally choose a replacement.
+The adapter reads that consumer's derived cache under `~/.adlc5/pulse/workspaces/` only and prints “present freshness unverified.” Set `ADLC5_WORKSPACE` when Claude's session input does not identify the consumer directory. Add the snippet manually to the project's Claude settings; plugin installation never changes an existing status line. If Ponytail or another status line is configured, keep it and use the board/skill directly unless you intentionally choose a replacement.
 
 See [ADLC5 Pulse](pulse.md) for commands, data semantics and refresh limits. Cursor package contents are tested; live Cursor IDE qualification remains pending until the package has been installed and exercised in Cursor.
 

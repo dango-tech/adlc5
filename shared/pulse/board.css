@@ -121,3 +121,10 @@ footer { margin-top: 28px; padding: 13px 0 22px; border-top: 1px solid var(--lin
   .p-next { align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+.p-hosts { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 5px 0; }
+.p-host { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 99px; font-size: 12px; white-space: nowrap; }
+.p-host svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.p-host-claude { color: #b36343; }
+.p-host-codex { color: #16846b; }
+.p-host-cursor { color: #8570ba; }
+.p-host-hermes { color: #a37516; }

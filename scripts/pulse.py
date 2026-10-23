@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import os
-import secrets
 import stat
 import sys
 import tempfile
@@ -20,7 +19,7 @@ from lib.package_guard import check_workspace, resolve_workspace  # noqa: E402
 from lib.pulse import Reader, band, board_document, handoff, project_workspace  # noqa: E402
 
 
-def _cache_dir(workspace: Path, parts=(".agent-cache", "pulse")) -> Path:
+def _cache_dir(workspace: Path, parts=(".adlc5", "pulse")) -> Path:
     root = workspace.resolve(strict=True)
     current = root
     for part in parts:
@@ -59,9 +58,9 @@ def _cache_key(feature: str | None) -> str:
 
 
 def _load_cache(workspace: Path, feature: str) -> dict:
-    directory = workspace / ".agent-cache" / "pulse"
+    directory = Path.home() / '.adlc5/pulse/workspaces' / _cache_key(str(workspace.resolve()))
     try:
-        for pathpart in (workspace / ".agent-cache", directory):
+        for pathpart in (Path.home() / '.adlc5', directory.parent.parent, directory.parent, directory):
             info = pathpart.lstat()
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
                 return {}
@@ -69,17 +68,70 @@ def _load_cache(workspace: Path, feature: str) -> dict:
         candidates = sorted(directory.glob("feature-*.json"))
         if len(candidates) > 200:
             return {}
-        reader = Reader(workspace)
+        reader = Reader(Path.home())
         for path in candidates:
             raw = reader.read(path)
             if raw is None:
                 continue
             data = json.loads(raw)
-            if isinstance(data, dict) and data.get("schema_version") == "1.0" and any(feature in (row.get("id"), row.get("archive_id")) for row in data.get("features", []) if isinstance(row, dict)):
+            if isinstance(data, dict) and data.get("schema_version") == "1.0" and any(not feature or feature in (row.get("id"), row.get("archive_id")) for row in data.get("features", []) if isinstance(row, dict)):
                 matches.append(data)
         return matches[0] if len(matches) == 1 else {}
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return {}
+
+
+def _fleet_board(args, workspace=None, snapshot=None):
+    from lib.pulse_fleet import collect, workspace_key, workspace_label
+    home = Path.home()
+    cache = _cache_dir(home)
+    sources = cache / 'roots.json'
+    # Retain roots from the first global-board implementation without moving old files.
+    legacy = home / '.config/adlc5/pulse/roots.json'
+    reader = Reader(home)
+    existing = []
+    for source in (sources, legacy):
+        raw = reader.read(source)
+        if raw is not None:
+            values = json.loads(raw)
+            if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                raise ValueError('invalid local Pulse root registry')
+            existing.extend(values)
+    defaults = [home / 'SourceCode/Github', home / '.codex/worktrees', home / 'Documents/Codex']
+    roots = sorted({path.expanduser().resolve() for path in [*defaults, *map(Path, existing), *map(Path, args.root), *([workspace] if workspace else [])]})
+    if workspace and snapshot is not None:
+        directory = _cache_dir(home, ('.adlc5', 'pulse', 'workspaces', _cache_key(str(workspace))))
+        for item in snapshot['features']:
+            entry = {**snapshot, 'features': [item], 'capture': {**snapshot['capture'], 'scope': 'feature'}}
+            _atomic_write(directory / f"feature-{item['identity']}.json", (json.dumps(entry) + '\n').encode())
+        if args.host:
+            _atomic_write(directory / f'host-{args.host}.json', json.dumps({
+                'workspace_key': workspace_key(workspace), 'host': args.host,
+                'workspace_label': workspace_label(workspace),
+                'observed_at': snapshot['generated_at']}).encode())
+    observations = []
+    for path in (cache / 'workspaces').glob('*/host-*.json'):
+        raw = reader.read(path)
+        if raw is not None:
+            observations.append(json.loads(raw))
+    data = collect(roots, [('codex', home / '.codex/sessions'), ('codex', home / '.codex/archived_sessions'),
+                          ('claude', home / '.claude/projects'), ('cursor', home / '.cursor/projects')],
+                   active_only=args.active_only, observations=observations)
+    if workspace:
+        key = workspace_key(workspace)
+        selected = next((f['identity'] for f in data['features'] if f['workspace_key'] == key
+                         and (not args.feature or args.feature in (f['id'], f.get('archive_id')))), None)
+        data['selected_feature'] = selected
+    _atomic_write(sources, (json.dumps([str(path) for path in roots], indent=2) + '\n').encode())
+    _atomic_write(cache / 'fleet.json', (json.dumps(data, ensure_ascii=True, indent=2) + '\n').encode())
+    path = cache / 'board.html'
+    _atomic_write(path, board_document(data).encode())
+    print(json.dumps({'status': data['status'], 'board': str(path), 'features': len(data['features']),
+                      'sessions': len(data['fleet']['sessions']), 'attempts': len(data['fleet']['attempts']),
+                      'captured_at': data['generated_at']}))
+    if args.open_board:
+        webbrowser.open(path.as_uri())
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -93,32 +145,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--open", action="store_true", dest="open_board")
     parser.add_argument("--all-projects", action="store_true", help="Write the global local board, including native session inventory")
     parser.add_argument("--root", action="append", default=[], help="Additional scan root for --all-projects; remembered locally")
+    parser.add_argument('--host', choices=('claude', 'codex', 'cursor', 'hermes'), help='Record the calling host for this workspace')
     args = parser.parse_args(argv)
+    if args.host and (args.action != 'board' or args.all_projects):
+        parser.error('--host requires board with a workspace')
     if args.all_projects:
         if args.action != 'board' or args.feature or args.archive_id or args.workspace or args.cached:
             parser.error('--all-projects is a board operation; use --root instead of workspace/feature selection')
         try:
-            from lib.pulse_fleet import collect
-            home = Path.home()
-            cache = _cache_dir(home, ('.config', 'adlc5', 'pulse'))
-            sources = cache / 'roots.json'
-            existing = json.loads(sources.read_text()) if sources.exists() else []
-            if not isinstance(existing, list) or any(not isinstance(value, str) for value in existing):
-                raise ValueError('invalid local Pulse root registry')
-            defaults = [home / 'SourceCode/Github', home / '.codex/worktrees', home / 'Documents/Codex']
-            roots = sorted({path.expanduser().resolve() for path in [*defaults, *map(Path, existing), *map(Path, args.root)]})
-            data = collect(roots, [('codex', home / '.codex/sessions'), ('codex', home / '.codex/archived_sessions'),
-                                  ('claude', home / '.claude/projects'), ('cursor', home / '.cursor/projects')], active_only=args.active_only)
-            _atomic_write(sources, (json.dumps([str(path) for path in roots], indent=2) + '\n').encode())
-            _atomic_write(cache / 'fleet.json', (json.dumps(data, ensure_ascii=True, indent=2) + '\n').encode())
-            path = cache / 'board.html'
-            _atomic_write(path, board_document(data).encode())
-            print(json.dumps({'status': data['status'], 'board': str(path), 'features': len(data['features']),
-                              'sessions': len(data['fleet']['sessions']), 'attempts': len(data['fleet']['attempts']),
-                              'captured_at': data['generated_at']}))
-            if args.open_board:
-                webbrowser.open(path.as_uri())
-            return 0
+            return _fleet_board(args)
         except (OSError, ValueError) as exc:
             print(json.dumps({'status': 'error', 'error': str(exc)}), file=sys.stderr)
             return 2
@@ -157,34 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             print(handoff(data, args.feature), end="")
             return 0
         if args.action == "board":
-            cache = _cache_dir(workspace)
-            selection = data.get("features", [])
-            suffix = selection[0].get("identity") if args.feature and selection else _cache_key(None)
-            key = f"feature-{suffix}" if args.feature else "workspace"
-            generation = secrets.token_hex(12)
-            data["generation_id"] = generation
-            encoded = (json.dumps(data, ensure_ascii=True, indent=2) + "\n").encode()
-            html_path = cache / f"{key}.html"
-            json_path = cache / f"{key}.json"
-            _atomic_write(json_path, encoded)
-            for item in selection:
-                entry = dict(data)
-                entry["capture"] = {**data["capture"], "scope": "feature"}
-                entry["features"] = [item]
-                _atomic_write(cache / f"feature-{item['identity']}.json", (json.dumps(entry, ensure_ascii=True, indent=2) + "\n").encode())
-            try:
-                _atomic_write(html_path, board_document(data).encode("utf-8"))
-            except Exception:
-                # The cached snapshot is harmless but has no paired board generation.
-                json_path.unlink(missing_ok=True)
-                raise
-            print(json.dumps({"status": data["status"], "generation_id": generation, "snapshot": str(json_path.relative_to(workspace)), "board": str(html_path.relative_to(workspace)), "captured_at": data["generated_at"]}))
-            if args.open_board:
-                try:
-                    webbrowser.open(html_path.as_uri())
-                except Exception as exc:
-                    print(f"warning: browser could not be opened: {type(exc).__name__}", file=sys.stderr)
-            return 0
+            return _fleet_board(args, workspace, data)
     except (ValueError, OSError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}), file=sys.stderr)
         return 2
