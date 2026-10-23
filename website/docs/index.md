@@ -2,7 +2,7 @@
 description: "ADLC5 is an AI coding delivery workflow for software teams: Specify, Plan, Tasks, and Implement, connected by repository intelligence and current evidence."
 ---
 
-# Deliver code with ADLC5
+# ADLC5 developer guide
 
 <img alt="ADLC5 — AI Development Lifecycle" src="assets/brand/logo-light.svg#only-light" width="480">
 <img alt="ADLC5 — AI Development Lifecycle" src="assets/brand/logo-dark.svg#only-dark" width="480">
@@ -19,8 +19,8 @@ not identical generated code.
 
 Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
-Use it in your application repository. This repository distributes the framework
-and a portable `dogfood/` consumer example.
+Use ADLC5 in your application repository. This repository distributes the
+framework and a portable `dogfood/` consumer example.
 
 ## Five pillars, connected delivery
 
@@ -39,11 +39,15 @@ The distinction is how these capabilities connect the lifecycle. Read
 [Intelligence](intelligence.md) for a worked flow, commands, and honest limits.
 SOUL supports this pillar as the reasoning discipline across the four stages.
 
-## Start here
+## Choose your next step
 
-1. [Install ADLC5](installation.md) for your agent host.
-2. [Initialize your workspace and feature](quickstart.md).
-3. Invoke `@adlc5 for my-feature` and follow the [four-stage lifecycle](lifecycle.md).
+| If you want to… | Start here |
+| --- | --- |
+| Install for your agent host | [Installation](installation.md) |
+| Deliver your first feature | [Quickstart](quickstart.md) |
+| See the stages in a complete example | [Walkthrough](walkthrough.md) |
+| Diagnose a failed command or gate | [Troubleshooting](support.md) |
+| Check releases and host support | [Releases](releases.md) |
 
 ## Proportionate depth
 
@@ -63,7 +67,13 @@ Checks and reviews must apply to the current patch and acceptance inputs.
 deployment and live host qualification need separate evidence.
 Read the [completion limits](lifecycle.md#what-completion-establishes) before making release claims.
 
-The [reference](reference.md) links to the canonical repository documentation,
+The [reference](reference.md) links to canonical repository documentation,
 kernel commands, skill map, and [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview).
-The [README](https://github.com/dango-tech/adlc5#readme) is the install-oriented
-project entry point; repository documents remain authoritative.
+The [README](https://github.com/dango-tech/adlc5#readme) remains the install-oriented
+project entry point; repository documents define the technical contracts.
+
+## Get help and contribute
+
+Use [GitHub Discussions](https://github.com/dango-tech/adlc5/discussions) for
+questions and ideas, or [GitHub Issues](https://github.com/dango-tech/adlc5/issues)
+for reproducible bugs. Read the [support guide](support.md) before filing.

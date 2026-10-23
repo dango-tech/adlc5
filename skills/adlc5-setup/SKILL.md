@@ -1,7 +1,7 @@
 ---
 name: adlc5-setup
 description: Set up or verify ADLC5 in the current repository when ADLC5 runs as a host plugin — preflight tools, create missing workspace scaffolding, flag classic-install duplicates. Safe to repeat. Invoke via @adlc5-setup.
-version: 5.0.1
+version: 5.1.0
 ---
 
 # ADLC5 — Setup (plugin hosts)

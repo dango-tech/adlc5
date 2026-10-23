@@ -33,7 +33,7 @@ DIST_SCRIPTS="${ROOT}/scripts"
 # shellcheck source=../../scripts/lib/telemetry.sh
 source "${DIST_SCRIPTS}/lib/telemetry.sh"
 export ADLC5_WORKSPACE="$WORKSPACE"
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 
 DELIVERY="${WORKSPACE}/.adlc5/${FEATURE}/delivery/state.json"
 REPORT="${WORKSPACE}/.adlc5/${FEATURE}/verify/verification-report.md"

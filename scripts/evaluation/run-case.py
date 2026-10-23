@@ -92,7 +92,10 @@ def prepare(args):
             if frozen_revision != args.speckit_revision:
                 raise ValueError('Spec Kit revision must be the exact commit SHA')
         # tar reads only a trusted repository revision into a new empty directory.
-        archive = subprocess.run(['git', 'archive', frozen_revision], cwd=source_root, capture_output=True, check=True)
+        # The frozen baseline predates the skills/aux rename; Git for Windows rejects
+        # reserved names unless told the revision is trusted.
+        relax = ['-c', 'core.protectNTFS=false'] if os.name == 'nt' else []
+        archive = subprocess.run(['git', *relax, 'archive', frozen_revision], cwd=source_root, capture_output=True, check=True)
         subprocess.run(['tar', '-x', '-C', str(framework)], input=archive.stdout, check=True)
     manifest = dict({key: value for key, value in case.items() if key != 'stakeholder_script'}, arm=args.arm, run_id=run.name, node_id='host-delivery', host=args.host, model=args.model,
                     created_at=datetime.now(timezone.utc).isoformat(), fixture_revision=revision,

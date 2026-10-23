@@ -80,3 +80,54 @@ blended quality score. See [evaluation.md](evaluation.md).
 ## Retention
 
 No rotation is performed by ADLC5. Consumer projects may archive or truncate `events.jsonl` per ops policy.
+
+## Optional minimized sharing
+
+Local event files remain local. They can contain feature names, run IDs, script
+details and test/command output, so they are **never uploaded verbatim**. The
+separate exporter reads those files locally and emits fixed event/status bucket
+counts since the last successfully sent batch. A local cursor (which may contain
+workspace feature-directory names) stays in `.adlc5/telemetry` and is never
+transmitted. It sends no prompt, source, command, output, repository or feature
+label, timestamp, run ID, usage record, or persistent user identifier. It does
+not calculate savings or accuracy. Use [the controlled evaluator](evaluation.md)
+for measured comparisons; quality gates remain ahead of cost claims.
+
+Sharing is disabled by default per workspace. Preview is local and makes no
+network request. Opt-in displays the payload and requires typing `yes`; opting
+in does not upload anything. Sending is a separate command and asks again. The
+endpoint has no built-in default; set `ADLC5_TELEMETRY_ENDPOINT` to an
+operator-managed HTTPS intake URL only after deploying and reviewing it:
+
+```bash
+./scripts/adlc5 telemetry preview --workspace .
+./scripts/adlc5 telemetry opt-in --workspace .
+ADLC5_TELEMETRY_ENDPOINT=https://telemetry.example.com \
+  ./scripts/adlc5 telemetry send --workspace .
+./scripts/adlc5 telemetry opt-out --workspace .
+```
+
+The exporter queues at most 10 aggregate submissions locally and tries the
+oldest submission at most twice per explicit `send`. Failures retain that
+submission for a later manual retry; there is no background retry. Opt-out
+deletes consent, the local queue, and the sharing cursor, but does not delete
+the existing local event files or records already received by an endpoint.
+
+Structured and free-text feedback uses a separate endpoint and requires an
+explicit `feedback` submission. Optional free text is separately previewed and
+limited to 1,000 characters. Do not include secrets, personal data, prompts or
+source code. Free text is not anonymous; it is stored separately from aggregate
+telemetry.
+
+The reference receiver is in [`telemetry-intake/`](../telemetry-intake/README.md).
+It validates an allowlisted schema, limits requests to 4 KiB and 3 per minute
+per transport IP, uses only the IP for Cloudflare's transient rate-limit key,
+and does not store that IP or log request headers/body. Cloudflare still
+processes connection metadata, including source IP, so this is minimized
+telemetry, not a promise of anonymity. The reference receiver applies a 90-day
+retention policy. Operators must also review Cloudflare account/zone logging and
+their privacy notice before enabling a public endpoint.
+
+Pulse integration is a follow-up: only controlled evaluator reports with
+comparable baseline runs and accepted outcomes can support measured savings or
+quality displays. Aggregate operational telemetry alone cannot establish either.

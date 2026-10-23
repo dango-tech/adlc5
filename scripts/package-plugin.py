@@ -42,7 +42,7 @@ MTIME = 315532800  # 1980-01-01, the earliest zip timestamp
 INCLUDE_PREFIXES = (
     ".claude-plugin/", ".claude/hooks/", ".codex-plugin/", ".codex/hooks/", ".cursor/rules/", ".cursor-plugin/",
     ".mcp.json", "mcp.json", "plugin.json", "bin/", "hooks/", "platform/",
-    "core/", "skills/", "scripts/", "shared/", "templates/", "docs/",
+    "core/", "skills/", "scripts/", "shared/", "templates/", "docs/", "assets/brand/",
     "config.example.yaml", "LICENSE", "README.md", "CHANGELOG.md",
 )
 EXCLUDE_PREFIXES = (
@@ -55,11 +55,15 @@ REQUIRED_BASE = (
     "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
     "scripts/lib/requirements_readiness.py", "docs/requirements-readiness.md",
     "scripts/runner/questions.py", "core/guides/profile-routing.md",
+    "core/pulse-snapshot.schema.json", "scripts/pulse.py", "scripts/pulse-statusline.py",
+    "scripts/lib/pulse.py", "skills/pulse/SKILL.md", "shared/pulse/board.html",
+    "shared/pulse/board.css", "shared/pulse/board.js", "assets/brand/icon.svg",
     "LICENSE",
 )
 REQUIRED_BY_HOST = {
     "claude": (
     ".claude-plugin/plugin.json", ".mcp.json", "hooks/claude.json", "bin/adlc5", "bin/adlc5-run",
+    "hooks/pulse-band.json", "hooks/pulse-band.tsx",
     ".claude/hooks/claude-usage.sh", ".claude/hooks/engagement-gate.sh", "LICENSE",
     ),
     "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json", ".mcp.json"),
@@ -70,7 +74,7 @@ HOST_ONLY_PREFIXES = {
     # Keep repository marketplace metadata outside the distributable Claude plugin.
     # The builder emits a Claude-only marketplace catalog as a sibling directory.
     "claude": (".claude-plugin/marketplace.json", ".codex-plugin/", ".cursor-plugin/", "platform/codex-plugin/", "mcp.json"),
-    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "bin/", "platform/codex-plugin/"),
+    "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "hooks/pulse-band.", "bin/", "platform/codex-plugin/"),
     "cursor": (".claude-plugin/", ".claude/", ".codex-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/", "mcp.json"),
 }
 
@@ -260,9 +264,14 @@ def main() -> int:
     parser.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "adlc5-dist"))
     parser.add_argument("--host", choices=("all", "codex", "claude", "cursor"), default="all")
     parser.add_argument("--check", action="store_true", help="validate host package inputs only; write nothing")
+    parser.add_argument("--claude-hosted", action="store_true", help="omit PATH executables for Claude Desktop upload/directory validation")
     ns = parser.parse_args()
+    if ns.claude_hosted and ns.host != "claude":
+        parser.error("--claude-hosted requires --host claude")
     hosts = ("codex", "claude", "cursor") if ns.host == "all" else (ns.host,)
     files_by_host = {host: for_host(collect(ROOT, host), host, (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()) for host in hosts}
+    if ns.claude_hosted:
+        files_by_host["claude"] = {name: value for name, value in files_by_host["claude"].items() if not name.startswith("bin/")}
     version = (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()
     if ns.check:
         print(json.dumps({"status": "ok", "version": version, "hosts": {host: len(files) for host, files in files_by_host.items()}}))

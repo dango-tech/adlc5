@@ -13,11 +13,19 @@ import argparse
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
+ROOT = SCRIPT_DIR.parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 sys.path.insert(0, str(SCRIPT_DIR))
 from lib.adlc5_paths import delivery_state_path, load_delivery_state  # noqa: E402
 from lib.simple_yaml import load_frontmatter  # noqa: E402
@@ -45,7 +53,7 @@ def emit_telemetry(feature: str, event: str, status: str, phase: str, details: d
     env["ADLC5_WORKSPACE"] = str(Path(os.environ.get("ADLC5_WORKSPACE", ".")).resolve())
     subprocess.run(
         [
-            "bash",
+            BASH,
             "-c",
             f'source "{lib}" && telemetry_emit "{feature}" "{event}" "check-gates.py" "{status}" "{phase}" \'{details_json}\'',
         ],
@@ -85,8 +93,8 @@ def run_custom_gate(name: str, command: str, workspace: Path, cwd: str | None) -
     run_dir = workspace / cwd if cwd else workspace
     try:
         proc = subprocess.run(
-            command,
-            shell=True,
+            # /bin/sh -c is what shell=True runs on POSIX; Windows would get cmd.exe.
+            ["/bin/sh" if os.name != "nt" else BASH, "-c", command],
             cwd=str(run_dir),
             capture_output=True,
             text=True,
@@ -195,7 +203,7 @@ def check_assure_verification(delivery: dict, workspace: Path, feature: str) -> 
         sync = SCRIPT_DIR / "sync-verification-report.sh"
         if sync.is_file():
             proc = subprocess.run(
-                [str(sync), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(sync), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -736,7 +744,7 @@ def check_quality_gates(
         lint_script = SCRIPT_DIR / "run-lint.sh"
         if lint_script.is_file():
             proc = subprocess.run(
-                ["bash", str(lint_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(lint_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -775,7 +783,7 @@ def check_quality_gates(
         test_script = SCRIPT_DIR / "run-tests.sh"
         if test_script.is_file():
             proc = subprocess.run(
-                ["bash", str(test_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(test_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -814,7 +822,7 @@ def check_quality_gates(
         arch_script = SCRIPT_DIR / "check-architecture.sh"
         if arch_script.is_file():
             proc = subprocess.run(
-                ["bash", str(arch_script), "--feature", feature, "--workspace", str(workspace)],
+                [BASH, str(arch_script), "--feature", feature, "--workspace", str(workspace)],
                 capture_output=True,
                 text=True,
             )
@@ -1156,9 +1164,23 @@ def aggregate_status(checks: list[dict]) -> str:
 
 
 def append_evidence(workspace: Path, feature: str, event: dict) -> None:
-    log_path = workspace / ".adlc5" / feature / "evidence" / "events.jsonl"
-    if not log_path.parent.is_dir():
-        return
+    from lib.completion_evidence import folder
+    log_path = folder(workspace, feature) / "events.jsonl"
+    current = workspace
+    for part in (".adlc5", feature, "evidence"):
+        current = current / part
+        try:
+            info = current.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise ValueError("gate evidence path contains a symlink")
+        except FileNotFoundError:
+            current.mkdir()
+    try:
+        info = log_path.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            raise ValueError("gate evidence log is unsafe")
+    except FileNotFoundError:
+        pass
     line = json.dumps(event, separators=(",", ":"))
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(line + "\n")
@@ -1184,9 +1206,13 @@ def main() -> int:
         print(json.dumps({"gate": args.gate, "status": "fail", "error": str(exc), "checks": []}))
         return 3
     gate_id = normalize_gate_id(args.gate)
-    from lib.completion_evidence import records, fingerprint, completion_checks
+    from lib.completion_evidence import records, fingerprint, completion_checks, gate_dependency_digest, gate_evaluator_id
+    receipt_before = receipt_dependencies_before = evaluator_id = None
     try:
         current_fingerprint = fingerprint(workspace, args.feature)
+        receipt_before = current_fingerprint
+        receipt_dependencies_before = gate_dependency_digest(workspace, args.feature)
+        evaluator_id = gate_evaluator_id(ROOT)
         fresh_review = next((r for r in reversed(records(workspace, args.feature)) if r.get("kind") == "review" and r.get("fingerprint") == current_fingerprint), None)
         if lifecycle:
             approvals = [r for r in records(workspace, args.feature) if r.get("kind") == "approval" and r.get("fingerprint") == current_fingerprint]
@@ -1278,6 +1304,14 @@ def main() -> int:
         if profile_name(policies) in ("standard", "high_risk", "full"):
             checks.append(check_spec_lint(workspace, args.feature))
     status = aggregate_status(checks)
+    receipt_after = receipt_dependencies_after = None
+    receipt_stable = False
+    try:
+        receipt_after = fingerprint(workspace, args.feature)
+        receipt_dependencies_after = gate_dependency_digest(workspace, args.feature)
+        receipt_stable = bool(receipt_before and receipt_dependencies_before and receipt_before == receipt_after and receipt_dependencies_before == receipt_dependencies_after)
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        pass
     out = {
         "gate": args.gate,
         "status": status,
@@ -1295,8 +1329,17 @@ def main() -> int:
                 "event": "gate_check",
                 "gate": args.gate,
                 "status": status,
+                "time": datetime.now(timezone.utc).isoformat(),
                 "step": lifecycle.get("current_step"),
                 "stage": lifecycle.get("current_stage"),
+                "input_fingerprint_before": receipt_before,
+                "input_fingerprint_after": receipt_after,
+                "dependency_digest_before": receipt_dependencies_before,
+                "dependency_digest_after": receipt_dependencies_after,
+                "evaluator_id": evaluator_id,
+                "stable": receipt_stable,
+                "inputs_verifiable": not any(str(c.get("id", "")).startswith("custom_gate_") for c in checks if isinstance(c, dict)),
+                "checks": [{"id": c.get("id"), "status": c.get("status")} for c in checks if isinstance(c, dict)],
             },
         )
 

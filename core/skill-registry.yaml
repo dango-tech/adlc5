@@ -1,6 +1,6 @@
 # ADLC5 invokable skill registry (~12 core + aux)
 schema_version: "3.0"
-framework_version: "5.0.1"
+framework_version: "5.1.0"
 
 personas_registry: "core/personas.yaml"
 
@@ -36,6 +36,12 @@ core:
     model_tier: implementation
 
 auxiliary:
+  - id: adlc5-pulse
+    invoke: "@adlc5-pulse"
+    path: skills/pulse/SKILL.md
+    stage: implement
+    description: On-demand local delivery snapshot, offline board, and handoff
+
   - id: discover
     invoke: "@discover"
     path: skills/discover/SKILL.md

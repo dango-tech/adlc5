@@ -19,6 +19,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 sys.path.insert(0, str(SCRIPTS))
 from runner import hosts  # noqa: E402
 from runner.questions import pending as pending_question, check_current as check_question, current_answers, StaleQuestion  # noqa: E402
@@ -34,7 +36,7 @@ def now() -> str:
 
 
 def call(workspace: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run([str(SCRIPTS / "adlc5"), *args, "--workspace", str(workspace)],
+    proc = subprocess.run([sys.executable, str(SCRIPTS / "adlc5"), *args, "--workspace", str(workspace)],
                           cwd=workspace, text=True, capture_output=True, check=False)
     if check and proc.returncode:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"adlc5 {args[0]} failed")
@@ -273,7 +275,7 @@ def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: st
         targets = [story] if story else ([s.get("id") for s in stories if s.get("type") != "integration" and s.get("status") in ("implementation_complete", "verified")] if step.endswith("verify") else [])
         packs = []
         for story_id in targets:
-            proc = subprocess.run([str(SCRIPTS / "memory/generate-pack.sh"), "--feature", feature,
+            proc = subprocess.run([BASH, str(SCRIPTS / "memory/generate-pack.sh"), "--feature", feature,
                                    "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") or rework else "tester",
                                    "--workspace", str(workspace)], cwd=workspace, capture_output=True, text=True)
             if proc.returncode:
@@ -430,7 +432,7 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], brief: st
                 if (workspace / ".adlc5" / feature / "STOP").exists():
                     stopped = True
                     break
-                switch = subprocess.run([str(SCRIPTS / "pilot-check-kill-switch.sh"), "--feature", feature,
+                switch = subprocess.run([BASH, str(SCRIPTS / "pilot-check-kill-switch.sh"), "--feature", feature,
                                          "--workspace", str(workspace)], cwd=workspace, capture_output=True, text=True)
                 if switch.returncode:
                     stopped = True
@@ -609,7 +611,7 @@ def ingest(workspace: Path, feature: str, attempt: dict[str, Any], result: dict[
 
 
 def check_gate(workspace: Path, feature: str, gate: str) -> bool:
-    proc = subprocess.run([str(SCRIPTS / "check-gates.py"), "--feature", feature, "--gate", gate, "--workspace", str(workspace)],
+    proc = subprocess.run([sys.executable, str(SCRIPTS / "check-gates.py"), "--feature", feature, "--gate", gate, "--workspace", str(workspace)],
                           cwd=workspace, text=True, capture_output=True, check=False)
     try:
         return proc.returncode == 0 and json.loads(proc.stdout).get("status") == "pass"
@@ -760,7 +762,7 @@ def run(args: argparse.Namespace) -> int:
                           "config_layers": [source for source, path in config_paths(workspace) if path.is_file()]}), file=sys.stderr)
         recover(workspace, args.feature, journal_path, events, run_id)
         while True:
-            nav = subprocess.run([str(SCRIPTS / "pilot-autopilot.sh"), "--feature", args.feature, "--workspace", str(workspace)],
+            nav = subprocess.run([BASH, str(SCRIPTS / "pilot-autopilot.sh"), "--feature", args.feature, "--workspace", str(workspace)],
                                  cwd=workspace, capture_output=True, text=True)
             try:
                 action = json.loads(nav.stdout)

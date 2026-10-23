@@ -1,7 +1,7 @@
 ---
 name: adlc5-implement
 description: ADLC5 Stage 4 Implement — TDD build, verify, integrate, QA, PR. Invoke via @adlc5-implement.
-version: 5.0.1
+version: 5.1.0
 ---
 
 # ADLC5 — Implement

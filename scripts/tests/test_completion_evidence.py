@@ -6,7 +6,7 @@ import tempfile
 from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.completion_evidence import config, append, completion_checks, fingerprint, run_checks, transition
+from lib.completion_evidence import SHELL, config, append, completion_checks, fingerprint, run_checks, transition
 from lib.state_v2 import set_feature_state
 from readiness_fixture import reviewed_fixture
 
@@ -65,7 +65,7 @@ def demo():
         real_run = subprocess.run
         with patch('lib.completion_evidence.subprocess.run', wraps=real_run) as run:
             assert run_checks(workspace, 'demo')['results'][0]['status'] == 'pass'
-            assert next(call.kwargs['timeout'] for call in run.call_args_list if call.kwargs.get('shell')) == 900
+            assert next(call.kwargs['timeout'] for call in run.call_args_list if call.args[0][0] == SHELL) == 900
         for invalid in (0, -1, True, 1.5, '900', None):
             checks.write_text(json.dumps([{'id': 'acceptance', 'command': 'true', 'timeout_seconds': invalid}]))
             try:
@@ -76,7 +76,7 @@ def demo():
                 raise AssertionError(f'invalid timeout accepted: {invalid!r}')
         checks.write_text(json.dumps([{'id': 'acceptance', 'command': 'true', 'timeout_seconds': 1}]))
         def timeout_command(*args, **kwargs):
-            if kwargs.get('shell'):
+            if args[0][0] == SHELL:
                 raise subprocess.TimeoutExpired(args[0], kwargs['timeout'])
             return real_run(*args, **kwargs)
         with patch('lib.completion_evidence.subprocess.run', side_effect=timeout_command):

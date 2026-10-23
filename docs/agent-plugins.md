@@ -44,6 +44,20 @@ The public directory shared by ChatGPT and Codex is a separate submission route 
 
 The current ADLC5 Codex package configures a local stdio MCP server (`python3 ./scripts/adlc5-mcp.py`). OpenAI's public submission guidance requires a remotely reachable HTTPS MCP endpoint for public submissions; the local stdio package is therefore for local/repo marketplace distribution. To pursue a public listing, deploy an HTTPS MCP service and create a public-submission package/configuration that points to it, then submit that package and endpoint through the portal. Keep the local package available for developers who want the self-contained local runtime.
 
+### Hermes
+
+ADLC5 ships as a Portable Agent Plugin v1 package (`plugin.json`, `skills/`,
+`mcp.json`). Install and enable it directly from the repository:
+
+```bash
+hermes plugins install dango-tech/adlc5 --no-enable
+hermes plugins enable adlc5
+```
+
+Skills are namespaced and discovered via `skills_list`/`skill_view`; MCP servers
+from `mcp.json` load on the next session. Classic skills install via
+`./scripts/install.sh --platform ...` remains available.
+
 ### Claude Code
 
 Register the generated local marketplace and install from it:
@@ -73,6 +87,8 @@ cp -R /tmp/adlc5-dist/cursor/adlc5 "$HOME/.cursor/plugins/local/adlc5"
 
 Restart Cursor or run **Developer: Reload Window**. Open **Customize**, find ADLC5 under local plugins, and install/enable it. After install or update, invoke `adlc5-setup` in the consumer repository.
 
+The Cursor MCP config resolves its launcher and working directory through `${CURSOR_PLUGIN_ROOT}` so it remains anchored to the installed package when Cursor starts it from another directory. Cursor does not expand the standard `${PLUGIN_ROOT}` variable in `mcp.json`.
+
 For team distribution, admins can import `https://github.com/dango-tech/adlc5` through **Dashboard → Plugins & MCPs → Add Marketplace** (Teams/Enterprise feature); `.cursor-plugin/marketplace.json` lists the plugin at the repository root.
 
 For Cursor's public marketplace:
@@ -84,6 +100,16 @@ For Cursor's public marketplace:
 
 Cursor's submission checklist requires an open-source plugin, a valid root `plugin.json` or `.cursor-plugin/plugin.json`, a unique lowercase kebab-case name, valid component files and paths, usage documentation, and local testing. This repository includes both manifest formats and a root README; `.cursor-plugin/marketplace.json` describes the repository's plugin catalog. Team marketplaces are private distribution and do not create a public listing.
 
+### Claude Desktop upload
+
+The Desktop upload/directory validator rejects top-level `bin/` executables. Build its package with:
+
+```bash
+python3 scripts/package-plugin.py --host claude --claude-hosted --out /tmp/adlc5-desktop-dist
+```
+
+Upload the generated ZIP through **Customize → Plugins → Add plugin → Upload plugin**. This variant uses the same skills, MCP server, and Pulse mod, but omits automatic shell PATH launchers. Its session hook reports the absolute Python kernel path; the Pulse card invokes that declared runtime directly. The standard local CLI marketplace build keeps the PATH launchers.
+
 ### Claude directory publishing
 
 Claude Code marketplace publishing and Anthropic's public directory are separate routes. The repo marketplace supports Claude Code CLI installation. Anthropic's directory is browsable on claude.ai and in Cowork; a directory installation can sync into Claude Code as `adlc5@synced`.
@@ -91,13 +117,32 @@ Claude Code marketplace publishing and Anthropic's public directory are separate
 Build the Claude package and run strict validation before submitting:
 
 ```bash
-python3 scripts/package-plugin.py --host claude --out /tmp/adlc5-dist
+python3 scripts/package-plugin.py --host claude --claude-hosted --out /tmp/adlc5-dist
 claude plugin validate --strict /tmp/adlc5-dist/claude/adlc5
 ```
 
 Then sign in to the [Claude developer portal](https://claude.ai/directory/manage) and submit the plugin. Submission requires an eligible paid claude.ai plan or an authorized Team/Enterprise organization role. The portal applies additional checks beyond CLI validation. Review the component support matrix before claiming support on claude.ai, Cowork, and Claude Code. Bump the plugin version for each directory release.
 
 The generated Claude package omits the repository marketplace catalog. The shared source repository includes Codex-specific marketplace policy fields and repo-level `CLAUDE.md`; neither belongs in the packaged plugin submitted for strict validation.
+
+### Pulse plugin surfaces
+
+All three packages expose the shared `@adlc5-pulse` skill and the read-only `adlc5_pulse` MCP snapshot tool. Generate the offline board with `./scripts/adlc5 pulse board --workspace .`. The Claude Code package additionally registers a native interactive band above the prompt, with Review, Audit, Board, and Details actions. Codex and Cursor keep the shared skill/MCP/CLI experience because their documented plugin surfaces do not expose a persistent custom prompt band.
+
+Claude Code users may manually use the cached adapter after generating a board:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "ADLC5_FEATURE=my-feature python3 /path/to/adlc5/scripts/pulse-statusline.py"
+  }
+}
+```
+
+The adapter reads the consumer's `.agent-cache/pulse/` only and prints “present freshness unverified.” Set `ADLC5_WORKSPACE` when Claude's session input does not identify the consumer directory. Add the snippet manually to the project's Claude settings; plugin installation never changes an existing status line. If Ponytail or another status line is configured, keep it and use the board/skill directly unless you intentionally choose a replacement.
+
+See [ADLC5 Pulse](pulse.md) for commands, data semantics and refresh limits. Cursor package contents are tested; live Cursor IDE qualification remains pending until the package has been installed and exercised in Cursor.
 
 ## Source checkout and classic skills install
 

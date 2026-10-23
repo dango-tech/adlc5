@@ -17,6 +17,7 @@ and current evidence connect all four stages.
 | [Installation](https://github.com/dango-tech/adlc5/blob/main/shared/docs/INSTALL.md) | Hosts, configuration, worktrees, updates, cleanup |
 | [ADLC5 lifecycle](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5.md) | Stages, gates, acceptance anchors |
 | [Kernel](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5-kernel.md) | Command façade, state, MCP, usage |
+| [Pulse](pulse.md) | On-demand snapshot, offline local board, evidence freshness and usage coverage |
 | [Evidence-backed completion](https://github.com/dango-tech/adlc5/blob/main/docs/evidence-completion.md) | Checks, independent review, approvals, recovery |
 | [Skill map](https://github.com/dango-tech/adlc5/blob/main/shared/docs/SKILL-MAP.md) | Lifecycle and auxiliary invokes |
 | [Repository context](https://github.com/dango-tech/adlc5/blob/main/core/guides/repository-context.md) | Constitution and generated intelligence |
@@ -55,4 +56,4 @@ prefix invoke names. Use the skill map for the full catalog.
 ## Maintain this site
 
 The [site maintenance guide](https://github.com/dango-tech/adlc5/blob/main/docs/documentation-site.md)
-contains local preview, validation, and GitHub Pages setup instructions.
+contains local preview, validation, and Vercel deployment instructions.

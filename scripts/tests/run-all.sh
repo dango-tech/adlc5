@@ -8,6 +8,9 @@ cd "$ROOT"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
+# Fixture symlinks. MSYS is set for this command only, so the scripts under
+# test must enable native Windows symlinks themselves (lib/symlinks.sh).
+fixture_symlink() { MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ln -s "$@"; }
 
 # Gate fixtures deliberately exercise otherwise unreachable/invalid states.
 # Write local JSON directly; normal API protection is tested below.
@@ -201,7 +204,9 @@ jq -e '.run_id == "run-1" and .node_id == "verify" and .parent_node_ids == ["bui
 NOJQ_BIN="${CORR_WS}/no-jq-bin"
 mkdir -p "$NOJQ_BIN"
 for cmd in python3 date mkdir; do
-  ln -s "$(command -v "$cmd")" "${NOJQ_BIN}/${cmd}"
+  # Wrappers, not symlinks: Windows refuses symlinks without Developer Mode.
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v "$cmd")" >"${NOJQ_BIN}/${cmd}"
+  chmod +x "${NOJQ_BIN}/${cmd}"
 done
 ADLC5_WORKSPACE="$CORR_WS" ADLC5_RUN_ID="run-fallback" ADLC5_NODE_ID="build" \
   ADLC5_PARENT_NODE_IDS='["specify"]' ADLC5_ATTEMPT="1" ADLC5_OUTCOME="pass" \
@@ -740,7 +745,7 @@ cat >"${WIKI_LINK_WS}/wiki/drafts/promote-${WIKI_LINK_FEATURE}/approved.json" <<
 {"feature":"wiki-link-gate","approved_by":"user","candidates":[{"id":"escape","action":"promote_entity","target":"wiki/entities/escape.md"}]}
 EOF
 rm -rf "${WIKI_LINK_WS}/wiki/entities"
-ln -s "$WIKI_OUTSIDE" "${WIKI_LINK_WS}/wiki/entities"
+fixture_symlink "$WIKI_OUTSIDE" "${WIKI_LINK_WS}/wiki/entities"
 set +e
 ./scripts/wiki/promote-apply.sh --feature "$WIKI_LINK_FEATURE" --workspace "$WIKI_LINK_WS" >/dev/null 2>&1
 WIKI_ROOT_LINK_EC=$?
@@ -962,9 +967,9 @@ pass "pr-ready custom_gates"
 # cleanup-stale-skills
 CLEAN_TMP="${TMP}/cleanup-skills"
 mkdir -p "$CLEAN_TMP"
-ln -s "/tmp/nonexistent/skills/adlc5-spec" "${CLEAN_TMP}/adlc5-spec"
-ln -s "/tmp/nonexistent/skills/adlc5" "${CLEAN_TMP}/adlc5"
-ln -s "${ROOT}/skills/discover" "${CLEAN_TMP}/discover"
+fixture_symlink "/tmp/nonexistent/skills/adlc5-spec" "${CLEAN_TMP}/adlc5-spec"
+fixture_symlink "/tmp/nonexistent/skills/adlc5" "${CLEAN_TMP}/adlc5"
+fixture_symlink "${ROOT}/skills/discover" "${CLEAN_TMP}/discover"
 mkdir -p "${CLEAN_TMP}/other-vendor"
 echo "not adlc5" >"${CLEAN_TMP}/other-vendor/SKILL.md"
 ./scripts/cleanup-stale-skills.sh --skills-target "$CLEAN_TMP" --prune-stale-skills >/dev/null
@@ -977,8 +982,8 @@ pass "cleanup-stale-skills prune"
 # cleanup-stale-skills — rules prune (ADLC5 symlinks only; keep user files)
 RULES_TMP="${TMP}/cleanup-rules"
 mkdir -p "$RULES_TMP"
-ln -s "${ROOT}/.cursor/rules/agent-discipline.mdc" "${RULES_TMP}/agent-discipline.mdc"
-ln -s "${ROOT}/.cursor/rules/missing-retired.mdc" "${RULES_TMP}/adlc5-forge.mdc"
+fixture_symlink "${ROOT}/.cursor/rules/agent-discipline.mdc" "${RULES_TMP}/agent-discipline.mdc"
+fixture_symlink "${ROOT}/.cursor/rules/missing-retired.mdc" "${RULES_TMP}/adlc5-forge.mdc"
 echo "user rule body" >"${RULES_TMP}/my-custom-rule.mdc"
 ./scripts/cleanup-stale-skills.sh --rules-target "$RULES_TMP" --prune-stale-rules >/dev/null
 [[ -L "${RULES_TMP}/adlc5-forge.mdc" ]] && fail "cleanup should remove stale ADLC5 rule symlink"
@@ -1639,6 +1644,7 @@ jq -e '.action == "advance" and .suggested_next == "plan-1-engineering-architect
 
 QUOTE_WS="${TMP}/route'space"
 mkdir -p "$QUOTE_WS"
+QUOTE_WS="$(cd "$QUOTE_WS" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 ./scripts/init-feature.sh --feature route-quote --workspace "$QUOTE_WS" \
   --mode brownfield --interaction autonomous >/dev/null
 mkdir -p "${QUOTE_WS}/.adlc5/route-quote"
@@ -1964,8 +1970,8 @@ EC_DIRECT=$?
 EC_FACADE=$?
 set -e
 [[ "$EC_DIRECT" -eq "$EC_FACADE" ]] || fail "adlc5 clarity exit mismatch"
-python3 - <<'PY'
-import json
+python3 - /tmp/adlc5-clarity-direct.json /tmp/adlc5-clarity-facade.json <<'PY'
+import json, sys
 from pathlib import Path
 def norm(p):
     d = json.loads(Path(p).read_text())
@@ -1973,8 +1979,7 @@ def norm(p):
     if isinstance(d.get("detailed_report"), dict):
         d["detailed_report"].pop("scored_at", None)
     return d
-a = norm("/tmp/adlc5-clarity-direct.json")
-b = norm("/tmp/adlc5-clarity-facade.json")
+a, b = (norm(p) for p in sys.argv[1:])
 if a != b:
     raise SystemExit(f"clarity JSON mismatch:\n{a}\n{b}")
 PY
@@ -2296,7 +2301,7 @@ pass "patterns lookup + façade"
 
 # adlc5 MCP smoke (tool list + version via same façade invoke path)
 ./scripts/adlc5-mcp.py --smoke >/tmp/adlc5-mcp-smoke.json
-jq -e '.status == "ok" and (.tools | index("adlc5_version")) and (.tools | index("adlc5_gate"))' \
+jq -e '.status == "ok" and .pulse_read_only == true and (.tools | index("adlc5_version")) and (.tools | index("adlc5_gate")) and (.tools | index("adlc5_pulse"))' \
   /tmp/adlc5-mcp-smoke.json >/dev/null || fail "adlc5-mcp smoke tool list"
 grep -Eq 'adlc5 [0-9]+\.[0-9]+\.[0-9]+' /tmp/adlc5-mcp-smoke.json || fail "adlc5-mcp smoke version"
 pass "adlc5-mcp smoke"
@@ -2984,7 +2989,20 @@ jq -e '.results[0].status == "fail" and (.results[0].story_id == null)' <<<"$LEV
 pass "spec-lint.py: malformed YAML frontmatter fails validation, not silently accepted"
 rm -rf "$LEVER4_WS"
 
-for test in test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py; do
+# Windows cannot check out paths with a reserved device name in any component
+# (aux, con, nul, com1, ...), even with an extension, so a clone fails there.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  RESERVED_PATHS=$(git ls-files -z | python3 -c '
+import re, sys
+reserved = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.IGNORECASE)
+paths = sys.stdin.read().split("\0")
+print("\n".join(p for p in paths if any(reserved.match(c) for c in p.split("/"))))
+')
+  [[ -z "$RESERVED_PATHS" ]] || fail "tracked paths use Windows reserved names: $RESERVED_PATHS"
+  pass "no tracked path uses a Windows reserved device name"
+fi
+
+for test in test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-telemetry-share.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done

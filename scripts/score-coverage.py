@@ -11,11 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
+BASH = shutil.which("bash") or "bash"
 
 
 def emit_telemetry(feature: str, event: str, status: str, phase: str, details: dict) -> None:
@@ -27,7 +30,7 @@ def emit_telemetry(feature: str, event: str, status: str, phase: str, details: d
     env["ADLC5_WORKSPACE"] = str(Path(os.environ.get("ADLC5_WORKSPACE", ".")).resolve())
     subprocess.run(
         [
-            "bash",
+            BASH,
             "-c",
             f'source "{lib}" && telemetry_emit "{feature}" "{event}" "score-coverage.py" "{status}" "{phase}" \'{details_json}\'',
         ],

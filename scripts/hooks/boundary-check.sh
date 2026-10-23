@@ -16,7 +16,7 @@ done
 
 [[ -n "$FEATURE" ]] || { echo "ERROR: --feature required" >&2; exit 1; }
 
-WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+WORKSPACE="$(cd "$WORKSPACE" && { pwd -W 2>/dev/null || pwd; })"  # C:/... on Git for Windows
 STATE="${WORKSPACE}/.adlc5/${FEATURE}/state.json"
 
 if [[ ! -f "$STATE" ]]; then

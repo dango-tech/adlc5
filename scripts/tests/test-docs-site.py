@@ -14,9 +14,12 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE_URL = "https://docs.example.test/adlc5/"
+BASE_URL = os.environ.get("DOCS_SITE_URL", "https://docs.example.test/adlc5/")
+BASE_PATH = urlsplit(BASE_URL).path.rstrip("/") + "/"
 PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
-         "lifecycle/index.html", "running/index.html", "intelligence/index.html", "reference/index.html")
+         "walkthrough/index.html", "lifecycle/index.html", "running/index.html",
+         "intelligence/index.html", "support/index.html", "releases/index.html",
+         "pulse/index.html", "telemetry/index.html", "reference/index.html")
 
 
 class Document(HTMLParser):
@@ -64,9 +67,11 @@ class DocsSiteTests(unittest.TestCase):
                 target = urlsplit(urljoin(BASE_URL + source, link))
                 if target.netloc != urlsplit(BASE_URL).netloc:
                     continue
+                if target.path in ("/_vercel/insights/script.js", "/_vercel/speed-insights/script.js"):
+                    continue  # Served by Vercel's analytics routes, not the static build.
                 with self.subTest(source=source, link=link):
-                    self.assertTrue(target.path.startswith("/adlc5/"), "Escapes project subpath")
-                    relative = unquote(target.path.removeprefix("/adlc5/"))
+                    self.assertTrue(target.path.startswith(BASE_PATH), "Escapes configured site path")
+                    relative = unquote(target.path.removeprefix(BASE_PATH))
                     if not relative or relative.endswith("/"):
                         relative += "index.html"
                     self.assertTrue((self.site / relative).is_file(), f"Missing {relative}")
@@ -76,7 +81,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())
         locations = {entry["location"].split("#")[0] for entry in index["docs"]}
-        self.assertTrue({"", "installation/", "quickstart/", "lifecycle/", "running/", "intelligence/", "reference/"} <= locations)
+        self.assertTrue({"", "installation/", "quickstart/", "walkthrough/", "lifecycle/", "running/", "intelligence/", "support/", "releases/", "pulse/", "telemetry/", "reference/"} <= locations)
 
     def test_adlc5_cli_references_exist(self):
         surfaces = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"), *(ROOT / "website/docs").rglob("*.md")]
@@ -94,7 +99,7 @@ class DocsSiteTests(unittest.TestCase):
         for page in PAGES:
             self.assertIn(page, self.documents)
             html = (self.site / page).read_text()
-            for label in ("Overview", "Installation", "Quickstart", "Lifecycle", "Intelligence", "Reference"):
+            for label in ("Home", "Installation", "Quickstart", "Walkthrough", "Lifecycle", "Running agents", "Intelligence", "Troubleshooting", "Releases", "Reference"):
                 self.assertIn(label, html)
             self.assertIn('aria-label="Search"', html)
             self.assertIn("__drawer", html)
@@ -117,18 +122,57 @@ class DocsSiteTests(unittest.TestCase):
         for command in ("package-plugin.py", "claude --plugin-dir", "plugin-setup.sh"):
             self.assertIn(command, installation)
         self.assertNotIn("plugin-setup.py", installation)
+        pulse = " ".join(" ".join(self.documents["pulse/index.html"].text).split())
+        for term in ("on-demand", "offline", "complete_total_usd", "Cursor", "qualification"):
+            self.assertIn(term, pulse)
         for page in PAGES:
             self.assertNotIn("dango85", (self.site / page).read_text())
         self.assertTrue((self.site / "assets/brand/icon.svg").is_file())
 
+    def test_vercel_analytics_is_limited_to_root_domain_builds(self):
+        enabled = urlsplit(BASE_URL).hostname == "adlc5.dev" and urlsplit(BASE_URL).path == "/"
+        self.assertEqual((self.site / "assets/speed-insights.mjs").is_file(), enabled)
+        for page in PAGES:
+            with self.subTest(page=page):
+                scripts = [link for link in self.documents[page].links
+                           if link == "/_vercel/insights/script.js"]
+                self.assertEqual(len(scripts), int(enabled))
+                html = (self.site / page).read_text(encoding="utf-8")
+                self.assertEqual("injectSpeedInsights()" in html, enabled)
+
     def test_workflow_actions_are_sha_pinned(self):
         workflow = (ROOT / ".github/workflows/docs.yml").read_text()
-        actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow, re.MULTILINE)
+        deploy_workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
+        release_workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
+        actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow + deploy_workflow + release_workflow, re.MULTILINE)
         self.assertEqual(len(actions), 5)
         for action in actions:
             with self.subTest(action=action):
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
+    def test_vercel_preview_deploys_main_changes_and_manual_dispatch_only(self):
+        config = json.loads((ROOT / "vercel.json").read_text())
+        self.assertEqual(config["installCommand"], "npm ci && uv venv .venv-docs && uv pip install --python .venv-docs/bin/python -r requirements-docs.txt")
+        self.assertEqual(config["buildCommand"], ".venv-docs/bin/python -m mkdocs build --strict && cp node_modules/@vercel/speed-insights/dist/index.mjs site/assets/speed-insights.mjs")
+        self.assertEqual(config["git"]["deploymentEnabled"], {"main": False})
+        workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
+        self.assertRegex(workflow, r"(?m)^  push:\n    branches: \[main\]$")
+        for path in ("assets/brand/**", "mkdocs.yml", "package.json", "package-lock.json", "requirements-docs.txt",
+                     "vercel.json", "website/docs/**", "website/overrides/**"):
+            self.assertIn(f"- '{path}'", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("environment: private-preview", workflow)
+
+    def test_production_release_is_manual_and_gated(self):
+        workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main' && inputs.preview_verified", workflow)
+        self.assertIn("environment: production", workflow)
+        self.assertIn("preview_verified:", workflow)
+        self.assertIn("vercel deploy --prod --yes", workflow)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

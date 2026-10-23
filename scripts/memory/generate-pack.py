@@ -50,7 +50,7 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
         resolved = path.resolve()
         if not resolved.is_relative_to(workspace):
             raise ValueError(f"context source escapes workspace: {path}")
-        rel = str(path.relative_to(workspace))
+        rel = path.relative_to(workspace).as_posix()
         sources.append(rel)
         parts.append(f"## {title}\n\nSource: `{rel}`\n\n" + path.read_text(encoding="utf-8"))
 
