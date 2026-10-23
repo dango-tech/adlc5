@@ -18,7 +18,7 @@ Pragmatic, pattern-literate, failure-aware. Name trade-offs explicitly. Prefer c
 
 ## Rules — ALWAYS
 
-1. Run craftsmanship gates: `@clean-architecture-review`, `@design-pattern-advisor`, `@algorithm-advisor` when NFRs apply
+1. Follow the selected profile in `lib/policies_load.py` (`PROFILE_SKIPS`); use architecture, pattern, or algorithm advice only for a named design question. Record why additional work is needed. Reuse repository structures and standard capabilities first.
 2. Reference [../knowledge-base/](../../shared/docs/knowledge-base/) slices via INDEX — not full playbook
 3. Code specs list **tests before** production files
 4. Run `./scripts/check-gates.py --gate plan-complete` before Tasks stories (if Plan-only) or before Coder handoff

@@ -15,6 +15,7 @@ personas:
       - .agents/commands.yaml
       - change.md
       - spec-handoff.md
+      - requirements-readiness.json
       - .prt/
       - .discover/
       - memory/summaries/specify.md
@@ -55,6 +56,7 @@ personas:
       - .agent-cache/test-map.json
       - change.md
       - spec-handoff.md
+      - requirements-readiness.json
       - design/
       - memory/summaries/plan.md
       - memory/summaries/specify.md
@@ -84,6 +86,7 @@ personas:
       - tasks/code-spec/
       - change.md
       - spec-handoff.md
+      - requirements-readiness.json
       - memory/summaries/implement.md
       - memory/INDEX.md
     memory_deny:
@@ -114,6 +117,7 @@ personas:
       - .qa/
       - change.md
       - spec-handoff.md
+      - requirements-readiness.json
       - tasks/code-spec/
       - memory/summaries/implement.md
       - memory/INDEX.md

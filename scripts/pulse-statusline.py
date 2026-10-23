@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import stat
 import sys
 from pathlib import Path
 
@@ -12,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "scripts"))
 from lib.package_guard import check_workspace  # noqa: E402
-from lib.pulse import Reader, band  # noqa: E402
+from lib.pulse import band  # noqa: E402
+from pulse import _load_cache  # noqa: E402
 
 
 def main() -> int:
@@ -33,36 +33,11 @@ def main() -> int:
         if problem:
             print("ADLC5 Pulse · snapshot unavailable")
             return 0
-        cache = workspace / ".agent-cache" / "pulse"
-        try:
-            for directory in (workspace / ".agent-cache", cache):
-                info = directory.lstat()
-                if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-                    raise ValueError("unsafe cache")
-        except OSError:
+        snapshot = _load_cache(workspace, feature)
+        if not snapshot:
             print("ADLC5 Pulse · snapshot unavailable")
             return 0
-        snapshots = []
-        reader = Reader(workspace)
-        cache_files = sorted(cache.glob("feature-*.json"))
-        if len(cache_files) > 200:
-            print("ADLC5 Pulse · snapshot unavailable")
-            return 0
-        for path in cache_files:
-            try:
-                raw = reader.read(path)
-                if raw is None:
-                    continue
-                value = json.loads(raw)
-                if isinstance(value, dict) and value.get("schema_version") == "1.0":
-                    snapshots.append(value)
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                continue
-        candidates = [item for item in snapshots if any(feature in (row.get("id"), row.get("archive_id")) for row in item.get("features", []) if isinstance(row, dict))] if feature else snapshots
-        if len(candidates) != 1:
-            print("ADLC5 Pulse · snapshot unavailable")
-            return 0
-        print(band(candidates[0], feature) + " · present freshness unverified")
+        print(band(snapshot, feature) + " · present freshness unverified")
         return 0
     except Exception:
         print("ADLC5 Pulse · snapshot unavailable")

@@ -2,9 +2,72 @@
 
 Pulse presents a local, on-demand view of ADLC5 feature progress, recorded evidence, usage coverage, and a suggested next action. It is available in ADLC5 5.1.0 through the shared CLI, a read-only MCP snapshot tool, and the Codex, Claude Code, and Cursor plugin packages.
 
-Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run consumer commands, change lifecycle state, write files, or make network requests. `board` is the explicit write operation: it writes a sanitized snapshot and a self-contained offline HTML file under the consumer's ignored `.agent-cache/pulse/` directory. `--open` asks the local browser to open that file.
+Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run consumer commands, change lifecycle state, write files, or make network requests. `board` is the explicit write operation: every invocation writes the shared offline page at `~/.adlc5/pulse/board.html`. Derived feature caches live under `~/.adlc5/pulse/workspaces/<workspace-hash>/`; no new Pulse files are written into consumer worktrees. `--open` opens that shared page.
+
+## Views
+
+The shared board opens on **Projects**, one application card per Git repository
+identity. Linked worktrees share a project; unrelated repositories with the same
+folder name do not. Project detail lists its workflows with active/archive filters,
+worktrees, agent badges and settings links. Workflow links open one delivery path
+with its evidence and next action, without the global inventories above it.
+**Activity** provides separate session/attempt views, search and 25-row pagination.
+**Settings** provides read-only machine/project/worktree configuration with source
+and override history. See [shared home and settings](shared-home.md).
+
+Hash routes support direct links and browser Back/Forward while remaining offline:
+`#projects`, `#project/<id>`, `#workflow/<id>`, `#activity`, `#settings`.
+The existing workspace/feature Board action opens the selected workflow; the
+all-projects command opens Projects. Capture time and coverage remain explicit.
 
 ## Commands
+
+### All projects and historical sessions
+
+```bash
+./scripts/adlc5 pulse board --all-projects --open
+./scripts/adlc5 pulse board --all-projects --root /path/to/other/projects --open
+```
+
+The global board lives at `~/.adlc5/pulse/board.html`. It reuses the same
+Pulse cards and adds searchable inventories of feature snapshots, native host
+sessions with explicit ADLC5 request/tool evidence, and runner attempts. Standard
+roots are `~/SourceCode/Github`, `~/.codex/worktrees`, and `~/Documents/Codex`;
+additional `--root` directories are remembered in the private local root registry.
+Nested worktrees and archived features are included. Codex active/archived,
+Claude Code and Cursor JSONL transcript inventories are scanned locally. Other
+hosts appear through retained runner results. No raw prompts or command output
+are included, and nothing is uploaded. Generated global files have private modes.
+
+This is a snapshot of discovered sources, not proof of complete history: deleted
+or inaccessible records, provider-only history and unsupported transcript formats
+cannot be recovered automatically. Coverage warnings remain visible. Native
+session token subtotals cover entire conversations, not just ADLC5 work; they may
+overlap fork prefixes and are not added to feature ledgers. Cost and independent
+outcomes stay unmeasured without attributable evidence. Feature snapshots,
+sessions and attempts overlap and must not be added as a single run count.
+Regenerate with the same command and reload the file to include new runs.
+
+### Agent context and existing pages
+
+Workspace and feature rows display distinct labeled icons for Claude Code, Codex,
+Cursor and Hermes Agent. All hosts observed on the exact same resolved worktree
+appear together. Attribution comes from explicit ADLC5 native-session evidence,
+runner attempt journals, or a caller identifying itself with `board --workspace .
+--host claude|codex|cursor|hermes`. Claude's Board action supplies its host automatically.
+This means **observed usage**, not a live process or proof of simultaneous activity.
+Matching uses the full worktree identity, never just the repository basename;
+missing or unresolvable host attribution stays unknown.
+
+Old worktree-local HTML pages and the earlier `~/.config/adlc5/pulse/board.html`
+are historical snapshots. They are not moved or deleted. The first central refresh
+reads the earlier global root registry and regenerates from source records.
+Update the plugin and use its Board action or the current CLI to open the new page.
+Feature lifecycle state remains in the consumer's `.adlc5/`; only derived Pulse
+reports and caches are centralized. Worktree removal therefore does not erase the
+central cache, but a fresh scan cannot recover deleted source history.
+
+### One workspace
 
 Run from a consumer workspace, or provide `--workspace`:
 
@@ -23,7 +86,11 @@ Archived features use their archive directory ID to distinguish them from an act
 ./scripts/adlc5 pulse snapshot --workspace . --archive-id my-feature-20261017
 ```
 
-After generating the board, `pulse band --cached --feature my-feature` reads a cached feature snapshot. It labels the capture time and says present freshness is unverified. Regenerate the board to refresh the cache. A workspace board also stores one feature cache for each observed feature.
+The workspace/feature arguments select the initial feature in the shared board;
+they do not produce a separate HTML page. After generating it,
+`pulse band --cached --feature my-feature` and the optional status-line adapter
+read that workspace's central feature cache. They label freshness as unverified.
+Regenerate the board to refresh the cache.
 
 The CLI returns exit 0 for valid empty or partial observations, 2 for invalid workspaces/arguments/unsafe paths, and 1 for unexpected output failures. Machine-readable snapshot JSON is written to stdout; warnings use safe relative source identifiers.
 

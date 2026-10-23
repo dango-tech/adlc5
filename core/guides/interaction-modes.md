@@ -43,13 +43,13 @@ Controls **when** the SDD must clarify ambiguities with the user.
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `autopilot.interaction_mode` in `policies.yaml` | `hitl` | Mandatory clarification loops in Specify + Plan when clarity < threshold (default) |
-| | `autonomous` | Agent may proceed with documented `[ASSUMPTION]` tags; user waives at own risk |
+| `autopilot.interaction_mode` in `policies.yaml` | `hitl` | Clarify unresolved consequential decisions in Specify + Plan (default) |
+| | `autonomous` | Agent may record reversible nonblocking assumptions; unresolved consequential decisions still block |
 
 **Balanced default (recommended):**
 
 - `interaction_mode: hitl` for **Specify** and **Plan** substeps
-- **Tasks / Implement:** no forced clarification loop if `clarity.score >= threshold`; subagents still escalate ambiguity
+- **Tasks / Implement:** preserve current requirement decisions; escalate new material ambiguity and reassess changed intent. Clarity scores do not waive readiness checks.
 
 ## First-run AskQuestion (orchestrator)
 
@@ -63,7 +63,7 @@ Store durable policy choices in `.adlc5/{feature}/policies.yaml`; record the act
 
 ## Navigator (`@adlc5` every invocation)
 
-Even when `interaction_mode: autonomous`, **stage scope is never silent**. Every `@adlc5 for {feature}` runs the navigator ([phases/00-navigator.md](../../skills/adlc5/SKILL.md)) and **AskQuestion** for session `interaction_mode`, `autopilot_substeps`, and `target_outcome`. See [governance/autopilot-stage-picker.md](../governance/autopilot-stage-picker.md).
+Preserve stage scope, interaction mode and target outcome already supplied by the user or recorded for this feature. Run the navigator on resume, but ask only about missing or conflicting consequential choices. See the [orchestrator](../../skills/adlc5/SKILL.md) and [requirements readiness](../../docs/requirements-readiness.md).
 
 Autonomous mode remains part of `@adlc5`; it does not use a separate pilot skill.
 

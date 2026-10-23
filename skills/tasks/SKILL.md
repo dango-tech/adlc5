@@ -8,6 +8,12 @@ version: 5.1.0
 
 **Stage 3** — decompose work and write TDD-ready code specs.
 
+Map every requirement and decision to its affected stories in readiness
+`delivery.traceability`, with acceptance IDs matching each code spec. Unknown
+dependencies block implementation. On intent changes, run `readiness impact`,
+reassess risk and applicability, preserve old anchors and request an attributable
+acceptance revision through the existing anchor workflow. Do not silently relock.
+
 **Invoke:** `@adlc5-tasks for [feature]`
 
 ## Persona handoff
@@ -27,6 +33,10 @@ Load [analyst.md](../../templates/personas/analyst.md) or [architect.md](../../t
 | `tasks-2-code-spec` | Tests listed before code; frontmatter linted (`spec-lint.py`) | `tasks/code-spec/{story-id}.md` |
 
 ## Scripts
+
+Read the current `requirements-readiness.json` when decomposing the handoff.
+Preserve its reviewed decisions and acceptance scenarios in stories and code specs;
+changed intent requires reassessment before progression.
 
 Populate each story's `acceptance` entries (unique ID, owner, file/command evidence)
 in canonical `state.tasks.stories` while authoring `tasks/stories.json`. Criteria

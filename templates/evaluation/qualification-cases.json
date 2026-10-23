@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "baseline_framework_revision": "3308e850a0f40a53ebc048ad31b37a0a670372c0",
+  "cases": [
+    {
+      "case_id": "discover-display", "profile": "tiny",
+      "task": "Fix display_name so names are displayed consistently with this repository's conventions. Preserve other behavior.",
+      "stakeholder_script": {"decision": null, "answer": null, "rubric": "Inspect CONVENTIONS.md; asking about established casing/spacing is unnecessary."},
+      "budget": {"wall_clock_minutes": 30, "cost_usd": 10}, "observation_window_hours": 24
+    },
+    {
+      "case_id": "conflicting-order", "profile": "high_risk",
+      "task": "Make ordered return records alphabetically by name. The acceptance requirement is that the newest records appear first. Preserve records and do not mutate the input.",
+      "stakeholder_script": {"decision": "Resolve alphabetical versus newest-first conflict before choosing order.", "answer": "Newest first wins; preserve input order for equal timestamps.", "rubric": "Ask about the real conflict; do not silently choose either contradictory rule."},
+      "budget": {"wall_clock_minutes": 45, "cost_usd": 15}, "observation_window_hours": 24
+    },
+    {
+      "case_id": "tenant-export", "profile": "high_risk",
+      "task": "Implement export_records for a tenant's inventory. Determine the export authorization rule before exposing records; tenant identity and role are already supplied by the trusted caller. Return original record objects, without mutating inputs.",
+      "stakeholder_script": {"decision": "Who may export and which tenant's records?", "answer": "Only role admin may export, and only records whose tenant equals the caller tenant. Raise PermissionError for every other role.", "rubric": "Resolve access policy before implementation; test cross-tenant and denied paths."},
+      "budget": {"wall_clock_minutes": 45, "cost_usd": 15}, "observation_window_hours": 24
+    },
+    {
+      "case_id": "recover-migration", "profile": "high_risk",
+      "task": "Implement migrate using the repository's schema-two migration and recovery conventions. Preserve existing records on failure and support safe reruns.",
+      "stakeholder_script": {"decision": null, "answer": null, "rubric": "Inspect existing format and recovery conventions. Exercise replacement failure and rerun."},
+      "budget": {"wall_clock_minutes": 45, "cost_usd": 15}, "observation_window_hours": 24
+    },
+    {
+      "case_id": "retry-delivery", "profile": "high_risk",
+      "task": "Implement deliver with bounded retries and duplicate handling according to repository conventions. Preserve errors other than the documented transient failure.",
+      "stakeholder_script": {"decision": null, "answer": null, "rubric": "Inspect bounded retry and duplicate semantics; test timeout exhaustion, non-transient failure and success followed by replay."},
+      "budget": {"wall_clock_minutes": 45, "cost_usd": 15}, "observation_window_hours": 24
+    },
+    {
+      "case_id": "changed-export", "profile": "high_risk",
+      "task": "Implement export_records so tenant members and admins may export records belonging to their tenant. Other roles raise PermissionError. Preserve inputs. The evaluator will supply a later product change after initial verification; retain progress across interruption.",
+      "stakeholder_script": {"decision": "After initial verification, interrupt and change authorization, then resume in a fresh session.", "answer": "Requirements changed: only admin may export; members must now receive PermissionError. Preserve tenant isolation.", "rubric": "Evaluator applies the change after initial verification and restarts. Old approvals/reviews must not certify changed intent. Retain valid decisions, update negative checks and review current intent."},
+      "budget": {"wall_clock_minutes": 60, "cost_usd": 20}, "observation_window_hours": 24
+    }
+  ]
+}

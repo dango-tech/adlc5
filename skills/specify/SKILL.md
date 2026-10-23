@@ -53,6 +53,14 @@ URLs. Stale or unverified load-bearing claims block handoff. Follow
 
 Before leaving Specify:
 
+Record the current intent and decision review using `adlc5 readiness prepare`,
+fill the actual requirement/decision/review evidence, then `readiness record
+--file PATH`. Inspect/research what the repository or official sources can answer;
+ask the user for consequential decisions. A clarity score never certifies readiness.
+High-risk intent requires an independent review session. See
+[requirements readiness](../../docs/requirements-readiness.md) for the record contract
+and migration of existing features. Do not fabricate a passing review to clear a gate.
+
 ```bash
 ./scripts/adlc5 gate --feature "{feature}" --gate specify-complete
 ./scripts/memory/compact-stage.sh --feature "{feature}" --stage specify

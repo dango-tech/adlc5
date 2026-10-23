@@ -14,6 +14,7 @@ PLATFORM="all"
 DRY_RUN=0
 KEEP_BACKUP=0
 INSTALL_OK=0
+INSTALLATION_ONLY=0
 RULES_ONLY=0
 SKILLS_ONLY=0
 
@@ -29,6 +30,7 @@ Usage: ./scripts/install.sh [OPTIONS]
   --skills-only     Install skills globally only (skip rules)
   --dry-run         Print actions without creating symlinks or backups
   --keep-backup     Keep this run's backup AND skip aged backup prune (default: prune aged backups)
+  --installation-only  Verify installed files without repeating the contract suite
   --print-version   Print ADLC5 semver from core/VERSION and exit
   -h, --help        Show help
 
@@ -55,6 +57,7 @@ while [[ $# -gt 0 ]]; do
     --skills-only) SKILLS_ONLY=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --keep-backup) KEEP_BACKUP=1; shift ;;
+    --installation-only) INSTALLATION_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -85,20 +88,10 @@ if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)';
 fi
 
 
-CONFIG="${ROOT}/config.yaml"
-if [[ ! -f "$CONFIG" ]]; then
-  if [[ -f "${ROOT}/config.example.yaml" ]]; then
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      CONFIG="${ROOT}/config.example.yaml"
-    else
-      cp "${ROOT}/config.example.yaml" "$CONFIG"
-      echo "Created config.yaml from config.example.yaml"
-    fi
-  else
-    echo "ERROR: config.yaml not found" >&2
-    exit 1
-  fi
-fi
+CONFIG="$HOME/.adlc5/install.yaml"
+[[ -f "$CONFIG" ]] || CONFIG="${ROOT}/config.yaml"
+[[ -f "$CONFIG" ]] || CONFIG="${ROOT}/config.example.yaml"
+[[ -f "$CONFIG" ]] || { echo "ERROR: install configuration not found" >&2; exit 1; }
 
 get_yaml_value() {
   local key="$1" file="$2"
@@ -134,7 +127,7 @@ assert_safe_install_target() {
   fi
   abs_target="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$target")"
   abs_skills="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$skills")"
-  if [[ "$abs_target" == "$abs_skills" || "$abs_target" == "${abs_skills}/"* ]]; then
+  if [[ "$abs_target" == "$abs_skills" || "$abs_target" == "${abs_skills}/"* || "$abs_target" == "$ROOT/skills" || "$abs_target" == "$ROOT/skills/"* ]]; then
     echo "ERROR: ${label} resolves inside the adlc5 clone (${abs_target})." >&2
     echo "  Use a user-global path in config.yaml, or init a consumer project:" >&2
     echo "  ./scripts/init-workspace.sh --project /path/to/your-app" >&2
@@ -244,9 +237,28 @@ link_path() {
   echo "  Linked: ${label} -> ${dest}"
 }
 
+SHARED_RUNTIME=""
+ensure_shared_runtime() {
+  if [[ "$DRY_RUN" -eq 0 && -z "$SHARED_RUNTIME" ]]; then
+    SHARED_RUNTIME="$(python3 "$ROOT/scripts/shared-home.py" --source "$ROOT")"
+    if [[ ! -f "$HOME/.adlc5/install.yaml" ]]; then
+      python3 - "$ROOT" "$CONFIG" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / 'scripts'))
+from pulse import _atomic_write
+_atomic_write(Path.home() / '.adlc5/install.yaml', Path(sys.argv[2]).read_bytes())
+PY
+    fi
+    CONFIG="$HOME/.adlc5/install.yaml"
+    SKILLS_ROOT="$SHARED_RUNTIME/skills"
+  fi
+}
+
 install_skills_to() {
   local target="$1" platform_slug="$2"
   assert_safe_install_target "$target" "skills target (${platform_slug})"
+  ensure_shared_runtime
   echo "Skills (${platform_slug}): ${target}"
   local count=0
 
@@ -262,11 +274,12 @@ install_skills_to() {
 }
 
 install_cursor_rules() {
+  ensure_shared_runtime
   local rules_target platform_slug="cursor-rules"
   rules_target="$(get_path rules_install_target "~/.cursor/rules")"
   echo "Rules (${platform_slug}): ${rules_target}"
   local rule_file name
-  for rule_file in "${ROOT}/.cursor/rules"/*.mdc; do
+  for rule_file in "${SHARED_RUNTIME:-$ROOT}/.cursor/rules"/*.mdc; do
     [[ -f "$rule_file" ]] || continue
     name="$(basename "$rule_file")"
     link_path "$rule_file" "${rules_target}/${name}" "$name" "$platform_slug"
@@ -383,7 +396,9 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "Verifying install..."
-if ! "${ROOT}/scripts/verify-install.sh" --platform "$PLATFORM"; then
+VERIFY_ARGS=(--platform "$PLATFORM")
+[[ "$INSTALLATION_ONLY" -eq 1 ]] && VERIFY_ARGS+=(--installation-only)
+if ! "${ROOT}/scripts/verify-install.sh" "${VERIFY_ARGS[@]}"; then
   echo "Verification failed — backup kept at: ${BACKUP_ROOT}" >&2
   exit 1
 fi

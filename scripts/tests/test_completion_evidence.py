@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.completion_evidence import SHELL, config, append, completion_checks, fingerprint, run_checks, transition
 from lib.state_v2 import set_feature_state
+from readiness_fixture import reviewed_fixture
 
 
 def demo():
@@ -20,6 +21,7 @@ def demo():
         state = {'schema_version': '3.0', 'feature': 'demo', 'current_stage': 'specify', 'current_step': 'specify-0-git', 'stage_status': {'specify': 'in_progress', 'plan': 'pending', 'tasks': 'pending', 'implement': 'pending'}, 'tasks': {'stories': []}}
         (base / 'state.json').write_text(json.dumps(state))
         (base / 'policies.yaml').write_text('autopilot:\n  profile: tiny\n')
+        reviewed_fixture(workspace)
         checks = base / 'evidence/checks.json'
         checks.write_text(json.dumps([{'id': 'acceptance', 'command': 'true'}]))
         assert set_feature_state(workspace, 'demo', patch={'current_step': 'implement-5-pr'})['error'] == 'protected_state'
@@ -46,6 +48,7 @@ def demo():
         (base / 'policies.yaml').unlink()
         fallback = workspace / '.adlc5/policies.yaml'
         fallback.write_text('autopilot:\n  profile: tiny\n')
+        reviewed_fixture(workspace)
         run_checks(workspace, 'demo')
         append(workspace, 'demo', {'kind': 'review', 'fingerprint': fingerprint(workspace, 'demo'), 'disposition': 'pass', 'blocking_findings': []})
         assert completion_checks(workspace, 'demo')[0]['status'] == 'pass'

@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from readiness_fixture import reviewed_fixture
 
 
 def mcp_call(name, arguments):
@@ -111,6 +113,7 @@ def exercise(profile, transport="cli", *, no_story=False):
             state["stage_status"].update(implement="in_progress", tasks="completed")
         (feature / "state.json").write_text(json.dumps(state))
         if profile == "tiny":
+            reviewed_fixture(workspace)
             invoke("transition", "implement-1-build")
             statuses = json.loads((feature / "state.json").read_text())["stage_status"]
             assert statuses["plan"] == statuses["tasks"] == "waived"
@@ -118,6 +121,8 @@ def exercise(profile, transport="cli", *, no_story=False):
             assert routed["persona"]["active"] == "coder"
             assert routed["implement"]["current_substep"] == "implement-1-build"
         (feature / "build.json").write_text(json.dumps({"story_ids": [] if no_story else ["US-1"]}))
+        if profile != 'tiny':
+            reviewed_fixture(workspace)
         invoke("evidence", "build", "--file", str(feature / "build.json"))
         invoke("transition", "implement-2-verify")
         routed = json.loads((feature / "state.json").read_text())

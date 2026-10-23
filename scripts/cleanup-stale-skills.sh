@@ -208,9 +208,17 @@ is_adlc5_rules_path() {
 
 is_stale_adlc5_dest() {
   local dest="$1" name="$2"
+  dest="${dest%/}"
   [[ -z "$dest" ]] && return 1
 
   local expected="${SKILLS_ROOT}/${name}"
+  case "$dest" in
+    */.adlc5/runtimes/*/skills/"$name")
+      if [[ -f "${dest%/skills/*}/.adlc5-runtime.json" && -r "$dest/SKILL.md" ]]; then
+        return 1
+      fi
+      ;;
+  esac
   case "$dest" in
     "${expected}"|"${expected}/"|"${expected}"/*)
       return 1

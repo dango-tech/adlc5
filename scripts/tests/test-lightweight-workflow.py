@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from lib.policies_load import next_step_for_profile, profile_risk_errors
 from lib.personas_load import check_persona_context
+from readiness_fixture import reviewed_fixture
 
 spec = importlib.util.spec_from_file_location("generate_pack", ROOT / "scripts/memory/generate-pack.py")
 pack = importlib.util.module_from_spec(spec)
@@ -35,7 +36,18 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "spec-handoff"):
                 pack.assemble(workspace, "demo", "one", "coder")
             (directory / "spec-handoff.md").write_text("# Acceptance\nDo the independently checked thing.")
+            reviewed_fixture(workspace)
+            from lib.requirements_readiness import load_record, record, source
+            readiness_path = directory / 'requirements-readiness.json'
+            review = load_record(readiness_path)
+            review['delivery']['constraints'] = [{'requirement_ids': ['FIXTURE-1'],
+                'text': 'Denied tenant access must fail before reading records.',
+                'source': source(workspace, '.adlc5/demo/spec-handoff.md')}]
+            record(workspace, 'demo', review)
             content, sources = pack.assemble(workspace, "demo", "one", "coder")
+            self.assertIn('Denied tenant access must fail before reading records.', content)
+            self.assertIn('Current requirements and decision review', content)
+            self.assertIn('.adlc5/demo/requirements-readiness.json', sources)
             self.assertIn("Do the independently checked thing", content)
             self.assertIn("AC-1", content)
             self.assertIn("tasks/code-spec/one.md", sources[0])

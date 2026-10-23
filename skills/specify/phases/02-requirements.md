@@ -6,9 +6,11 @@
 
 Artifacts: `.prt/{feature}/prt.md`
 
-## Clarity gate
+## Readiness evidence
 
-Run clarity scoring before advance — threshold from `state.clarity.threshold` (default 80).
+Use clarity lint to identify investigation hints. Before leaving Specify, require
+current decision and review evidence through `adlc5 readiness`; a numeric score
+does not authorize progression.
 
 ## State
 

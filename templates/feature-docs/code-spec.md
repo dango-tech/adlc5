@@ -13,6 +13,11 @@ The prose body below the frontmatter is what a human or @build-implementer
 reads for judgment calls the frontmatter can't express (why this approach,
 edge cases, error handling) — the frontmatter is the checklist, not a
 replacement for it.
+
+Register this story's requirement IDs, decision IDs and acceptance IDs in
+requirements-readiness.json delivery.traceability. Acceptance IDs must match
+this frontmatter. Preserve frozen anchors when intent changes; request an
+attributable revision rather than silently relocking them.
 -->
 ---
 story_id: US-000

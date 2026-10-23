@@ -295,8 +295,9 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(replies), 6)  # the notification gets no reply
         self.assertEqual(by_id[1]["result"]["protocolVersion"], "2025-06-18")
         self.assertEqual(by_id[1]["result"]["serverInfo"]["version"], self.info["version"])
+        self.assertIn('adlc5_readiness', {tool['name'] for tool in by_id[2]['result']['tools']})
         tools = by_id[2]["result"]["tools"]
-        self.assertEqual(len(tools), 16)
+        self.assertEqual(len(tools), 17)
         pulse = next(tool for tool in tools if tool["name"] == "adlc5_pulse")
         self.assertTrue(pulse["annotations"]["readOnlyHint"])
         call = json.loads(by_id[3]["result"]["content"][0]["text"])

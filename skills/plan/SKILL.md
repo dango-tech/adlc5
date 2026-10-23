@@ -20,6 +20,10 @@ tracked `.agents/` constitution first, then `.agent-cache/repo-index.json` and o
 the module/symbol/dependency/test records relevant to the feature. Source remains
 authoritative; generated cache observations never override constitution constraints.
 
+Read the current `requirements-readiness.json` alongside the handoff so reviewed
+decisions and assumptions reach design. Reassess changed intent before protected
+progression; see [requirements readiness](../../docs/requirements-readiness.md).
+
 | Step | Craftsmanship | Artifact |
 |------|---------------|----------|
 | `plan-1-engineering-architecture` | `@clean-architecture-review` | `craftsmanship.architecture_review` |
@@ -43,6 +47,12 @@ stale information is a blocker, not an assumption. Follow
 [current-information.md](../../core/guides/current-information.md).
 
 ## Proportionate planning
+
+Use [profile routing](../../core/guides/profile-routing.md) as the authority.
+Before leaving Plan, fill `adlc5 readiness delivery`: assess operational
+applicability and planned validation. Standard routes still assess applicable
+obligations even when they skip the full operations document. Record the reason
+before additional research, patterns, algorithms or architecture work.
 
 For `standard`, write one `design/plan.md`: existing flow to reuse, affected files
 and boundaries, intended behavior, compatibility/risk decisions, and checks.

@@ -50,6 +50,9 @@ def command(argv, cwd):
 
 def prepare(args):
     bank = json.loads((ROOT / 'templates/evaluation/cases.json').read_text())
+    if args.suite == 'extended':
+        extension = json.loads((ROOT / 'templates/evaluation/qualification-cases.json').read_text())
+        bank = dict(extension, cases=bank['cases'] + extension['cases'])
     if bank.get('schema_version') != 1:
         raise ValueError('unsupported case bank schema')
     case = next((c for c in bank['cases'] if c['case_id'] == args.case), None)
@@ -64,28 +67,42 @@ def prepare(args):
     run.mkdir(parents=True, exist_ok=False)
     repo = run / 'consumer'
     shutil.copytree(ROOT / 'dogfood/consumer', repo, ignore=shutil.ignore_patterns('__pycache__'))
-    shutil.copy(ROOT / 'scripts/evaluation/acceptance.py', run / 'acceptance.py')
+    qualification = 'stakeholder_script' in case
+    if qualification:
+        for path in (ROOT / 'dogfood/qualification').iterdir():
+            if path.is_file():
+                shutil.copy(path, repo / path.name)
+    shutil.copy(ROOT / 'scripts/evaluation' / ('qualification-acceptance.py' if qualification else 'acceptance.py'), run / 'acceptance.py')
     shutil.copy(repo / 'regression.py', run / 'regression.py')
     command(['git', 'init', '-q', str(repo)], ROOT)
     command(['git', 'add', '.'], repo)
     command(['git', '-c', 'user.name=ADLC5 fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Frozen consumer starting point'], repo)
     revision = command(['git', 'rev-parse', 'HEAD'], repo)
     framework = ROOT
-    if args.arm == 'baseline':
+    frozen_revision = bank['baseline_framework_revision']
+    if args.arm in ('baseline', 'speckit'):
         framework = run / 'framework'
         framework.mkdir()
+        source_root = ROOT
+        if args.arm == 'speckit':
+            if not args.speckit_path or not args.speckit_revision or len(args.speckit_revision) != 40:
+                raise ValueError('Spec Kit requires --speckit-path and a full pinned --speckit-revision')
+            source_root = Path(args.speckit_path).resolve()
+            frozen_revision = command(['git', 'rev-parse', args.speckit_revision + '^{commit}'], source_root)
+            if frozen_revision != args.speckit_revision:
+                raise ValueError('Spec Kit revision must be the exact commit SHA')
         # tar reads only a trusted repository revision into a new empty directory.
         # The frozen baseline predates the skills/aux rename; Git for Windows rejects
         # reserved names unless told the revision is trusted.
         relax = ['-c', 'core.protectNTFS=false'] if os.name == 'nt' else []
-        archive = subprocess.run(['git', *relax, 'archive', bank['baseline_framework_revision']], cwd=ROOT, capture_output=True, check=True)
+        archive = subprocess.run(['git', *relax, 'archive', frozen_revision], cwd=source_root, capture_output=True, check=True)
         subprocess.run(['tar', '-x', '-C', str(framework)], input=archive.stdout, check=True)
-    manifest = dict(case, arm=args.arm, run_id=run.name, node_id='host-delivery', host=args.host, model=args.model,
+    manifest = dict({key: value for key, value in case.items() if key != 'stakeholder_script'}, arm=args.arm, run_id=run.name, node_id='host-delivery', host=args.host, model=args.model,
                     created_at=datetime.now(timezone.utc).isoformat(), fixture_revision=revision,
-                    framework_path=str(framework), framework_sha256=framework_digest(framework), framework_revision=command(['git', 'rev-parse', bank['baseline_framework_revision'] if args.arm == 'baseline' else 'HEAD'], ROOT),
+                    framework_path=str(framework), framework_sha256=framework_digest(framework), framework_revision=frozen_revision if args.arm == 'speckit' else command(['git', 'rev-parse', frozen_revision if args.arm == 'baseline' else 'HEAD'], ROOT),
                     fixture_source_sha256={p.name: digest(p) for p in sorted(repo.glob('*.py'))},
                     fixture_case_sha256=hashlib.sha256(json.dumps(case, sort_keys=True).encode()).hexdigest(),
-                    framework_dirty=bool(command(['git', 'status', '--porcelain'], ROOT)) if args.arm != 'baseline' else False,
+                    framework_dirty=bool(command(['git', 'status', '--porcelain'], ROOT)) if args.arm in ('direct', 'candidate') else False,
                     frozen_files={name: digest(run / name) for name in ('acceptance.py', 'regression.py')},
                     acceptance_command=[sys.executable, str(run / 'acceptance.py'), str(repo), args.case],
                     regression_command=[sys.executable, str(run / 'regression.py')])
@@ -93,9 +110,16 @@ def prepare(args):
     write(run / 'manifest-lock.json', {'sha256': digest(run / 'manifest.json')})
     write(run / 'observations.json', dict(rework=None, human_rejected=None, escaped_defects=None,
         observation_completed_at=None, interventions=None, reviewer_findings=[], quality_gates_passed=None,
-        usage=[], telemetry=[]))
+        question_review=None, active_seconds=None, human_wait_seconds=None, usage=[], telemetry=[]))
     handoff = f'''# Fresh host session handoff\n\nCase: {args.case}; arm: {args.arm}; profile: {case['profile']}\nHost/model: {args.host} / {args.model}\nConsumer: {repo}\nFramework: {framework}\n\n{case['task']}\n\nFrozen acceptance: `{shlex.join(manifest['acceptance_command'])}`\nFrozen regression: `PYTHONPATH={shlex.quote(str(repo))} {shlex.join(manifest['regression_command'])}`. If using a different Python runtime, prepare all arms with that same runtime.\nDo not change the frozen scripts or task. Do not commit consumer implementation.\nFor framework arms invoke @adlc5 for {args.case}, initialize canonical acceptance entries before locking anchors, and use the selected profile. Use this framework path, not your global installation. Follow host-native sessions; record actual calls, interventions and accounting with run_id {run.name} and node_id host-delivery (or matching finer-grained node IDs).\nDirect arm performs the same consumer tests and independent diff review.\nHigh-risk runs require genuine human approval; leave readiness unknown until it occurs.\nResume in a fresh session from manifest.json, feature artifacts/state and kernel pilot/state get output. Never reconstruct progress from chat or assert completion via state set.\nPopulate observations.json from actual telemetry/usage and review; escaped_defects stays null until the {case['observation_window_hours']}-hour observation window finishes. Cost/token source belongs on every usage record. Collection measures elapsed wall time from preparation, including human idle time.\n'''
     (run / 'HANDOFF.md').write_text(handoff)
+    if args.arm in ('direct', 'speckit'):
+        handoff = handoff.replace('For framework arms invoke @adlc5', 'For ADLC5 baseline/candidate arms only, invoke @adlc5')
+        handoff += '\nUse direct coding for the direct arm. For Spec Kit, inspect this pinned checkout and use its actual documented workflow; do not apply ADLC5 internal gates.\n'
+    handoff += '\nAll arms require the same independent external review, bound to framework_digest(consumer), in independent-review.json with patch_sha256, coder_session_id, verifier_session_id, disposition and blocking_findings. Internal process conformance is reported separately.\n'
+    (run / 'HANDOFF.md').write_text(handoff)
+    if qualification:
+        write(run / 'STAKEHOLDER.json', case['stakeholder_script'])
     print(run / 'HANDOFF.md')
 
 
@@ -117,7 +141,7 @@ def collect(args):
         (run / (kind + '.log')).write_text(result.stdout + result.stderr)
         results[kind] = dict(exit_code=result.returncode, elapsed_seconds=time.monotonic() - started, output_sha256=digest(run / (kind + '.log')))
     gate_passed = False
-    if manifest['arm'] != 'direct':
+    if manifest['arm'] in ('baseline', 'candidate'):
         policy_query = "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from lib.policies_load import load_policies, profile_name; print(profile_name(load_policies(Path(sys.argv[2]), sys.argv[3])))"
         actual_profile = subprocess.run([sys.executable, '-c', policy_query, str(framework / 'scripts'), str(run / 'consumer'), manifest['case_id']], capture_output=True, text=True, check=True).stdout.strip()
         gate_passed = actual_profile == manifest['profile']
@@ -127,11 +151,14 @@ def collect(args):
             (run / (name + '.log')).write_text(result.stdout + result.stderr)
             results[name] = dict(exit_code=result.returncode, output_sha256=digest(run / (name + '.log')))
             gate_passed = gate_passed and result.returncode == 0
-    else:
-        review_path = run / 'independent-review.json'
-        if review_path.is_file():
-            review = json.loads(review_path.read_text())
-            gate_passed = bool(review.get('coder_session_id') and review.get('verifier_session_id') and review['coder_session_id'] != review['verifier_session_id'] and review.get('disposition') == 'pass' and review.get('blocking_findings') == [])
+    process_conformance = gate_passed if manifest['arm'] in ('baseline', 'candidate') else None
+    review_path = run / 'independent-review.json'
+    external_review = False
+    if review_path.is_file():
+        review = json.loads(review_path.read_text())
+        external_review = bool(review.get('coder_session_id') and review.get('verifier_session_id')
+            and review['coder_session_id'] != review['verifier_session_id'] and review.get('disposition') == 'pass'
+            and review.get('blocking_findings') == [] and review.get('patch_sha256') == framework_digest(run / 'consumer'))
     if framework_digest(framework) != manifest['framework_sha256']:
         raise ValueError('framework changed while collecting checks')
     started = datetime.fromisoformat(manifest['created_at'])
@@ -139,7 +166,21 @@ def collect(args):
         anchors_passed=results['acceptance']['exit_code'] == 0 and not changed, regression_passed=results['regression']['exit_code'] == 0,
         anchor_changed=changed, elapsed_seconds=(datetime.now(timezone.utc) - started).total_seconds(),
         **{k: observations.get(k) for k in ('rework', 'human_rejected', 'escaped_defects', 'interventions', 'reviewer_findings')})
-    outcome['quality_gates_passed'] = gate_passed
+    outcome['quality_gates_passed'] = external_review
+    outcome['process_conformance'] = process_conformance
+    for field in ('active_seconds', 'human_wait_seconds'):
+        value = observations.get(field)
+        if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
+            raise ValueError(field + ' must be an observed nonnegative duration or null')
+        outcome[field] = value
+    question_review = observations.get('question_review')
+    if question_review is not None:
+        counts = ('unnecessary_questions', 'missed_consequential_questions', 'lost_answers', 'repeated_setup_questions')
+        if not isinstance(question_review, dict) or not isinstance(question_review.get('reviewer'), str) or not question_review['reviewer'].strip():
+            raise ValueError('question review needs an actual adjudicator')
+        if any(type(question_review.get(field)) is not int or question_review[field] < 0 for field in counts):
+            raise ValueError('question review counts must be observed nonnegative integers')
+    outcome['question_review'] = question_review
     completed = observations.get('observation_completed_at')
     if not completed or datetime.fromisoformat(completed) > datetime.now(timezone.utc) or (datetime.fromisoformat(completed) - started).total_seconds() < manifest['observation_window_hours'] * 3600:
         outcome['escaped_defects'] = None
@@ -175,7 +216,10 @@ def main():
     subs = parser.add_subparsers(dest='operation', required=True)
     p = subs.add_parser('prepare')
     p.add_argument('--case', required=True)
-    p.add_argument('--arm', choices=['direct', 'baseline', 'candidate'], required=True)
+    p.add_argument('--suite', choices=['pilot', 'extended'], default='pilot')
+    p.add_argument('--arm', choices=['direct', 'baseline', 'candidate', 'speckit'], required=True)
+    p.add_argument('--speckit-path')
+    p.add_argument('--speckit-revision')
     p.add_argument('--host', required=True)
     p.add_argument('--model', required=True)
     p.add_argument('--directory', required=True)

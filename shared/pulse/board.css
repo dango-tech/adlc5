@@ -30,6 +30,14 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.p-inventory { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 18px 0; }
+.p-inventory summary { cursor: pointer; font-weight: 650; }
+.p-table-scroll { overflow-x: auto; max-height: 480px; margin-top: 12px; }
+.p-inventory table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.p-inventory th, .p-inventory td { padding: 9px; text-align: left; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; max-width: 300px; }
+.p-inventory th { position: sticky; top: 0; background: var(--surface); }
+#fleet input { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
 body { margin: 0; color: var(--text); background: var(--bg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .chrome { display: flex; align-items: center; gap: 24px; padding: 15px max(24px, calc((100% - 1120px) / 2)); background: #101317; color: #f4f4f5; }
 .brand { display: flex; align-items: center; gap: 9px; font: 800 18px ui-monospace, SFMono-Regular, monospace; letter-spacing: -.4px; }
@@ -113,3 +121,22 @@ footer { margin-top: 28px; padding: 13px 0 22px; border-top: 1px solid var(--lin
   .p-next { align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+.p-hosts { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 5px 0; }
+.p-host { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 99px; font-size: 12px; white-space: nowrap; }
+.p-host svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.p-host-claude { color: #b36343; }
+.p-host-codex { color: #16846b; }
+.p-host-cursor { color: #8570ba; }
+.p-host-hermes { color: #a37516; }
+.p-projects { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px; margin-top: 24px; }
+.p-project { display: flex; flex-direction: column; align-items: flex-start; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.p-project > a { font-size: 21px; font-weight: 650; }
+.p-link { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); padding: 5px 0; }
+.p-link:hover, .p-link[aria-current="page"] { color: #16846b; border-color: currentColor; }
+#navigation { gap: 28px; }
+#fleet > h2 { margin-top: 30px; }
+#fleet select { max-width: 100%; margin: 16px 8px 16px 0; padding: 8px; }
+#fleet button { margin: 12px 8px 0 0; padding: 8px 14px; }
+#fleet table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#fleet th, #fleet td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+#fleet th { color: var(--muted); }

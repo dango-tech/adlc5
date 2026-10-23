@@ -56,6 +56,13 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
 
     include(spec, "Code spec" if spec.name != "change.md" else "Bounded change")
     include(handoff, "Locked requirements")
+    readiness = directory / 'requirements-readiness.json'
+    if readiness.exists():
+        from lib.requirements_readiness import check
+        assessed = check(workspace, feature)
+        if assessed['status'] != 'pass':
+            raise ValueError(assessed['message'])
+        include(readiness, 'Current requirements and decision review')
     for rel in ("AGENTS.md", ".agents/architecture.yaml", ".agents/boundaries.yaml", ".agents/commands.yaml"):
         path = workspace / rel
         if path.is_file():

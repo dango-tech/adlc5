@@ -14,7 +14,7 @@ Pulse is an on-demand snapshot of ADLC5 feature progress, recorded evidence, usa
 ./scripts/adlc5 pulse handoff --workspace . --feature my-feature
 ```
 
-`snapshot` and `band` are read-only. `board` explicitly writes a local, self-contained offline page and a derived cache under the consumer's ignored `.agent-cache/pulse/`. Rerun `board` to refresh it. `handoff` prints a summary for review; it does not write to a clipboard or send it elsewhere.
+`snapshot` and `band` are read-only. Every `board` command writes the shared offline page at `~/.adlc5/pulse/board.html`, with derived caches keyed by worktree under `~/.adlc5/pulse/workspaces/`. The page includes discovered projects and all recorded host badges per worktree: Claude Code, Codex, Cursor and Hermes Agent. These reflect observed usage, not live presence. Rerun `board` to refresh it. `handoff` prints a summary for review; it does not write to a clipboard or send it elsewhere.
 
 Evidence is current at capture time. A local `pr-ready` gate observation is not remote CI, human approval, deployment, or production health. `known_cost_usd` is an attributable subtotal, not an invoice; `complete_total_usd` stays null because ledger coverage is unproven. Missing, unavailable, or unpriced records remain unknown. See the [full Pulse guide](https://github.com/dango-tech/adlc5/blob/main/docs/pulse.md) for security, data, and plugin details.
 

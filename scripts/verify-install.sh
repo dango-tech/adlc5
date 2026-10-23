@@ -8,6 +8,7 @@ source "${ROOT}/scripts/lib/adlc5-dirs.sh"
 SKILLS_ROOT="$(adlc5_skills_dir "$ROOT")"
 cd "$ROOT"
 PLATFORM="all"
+RUN_CONTRACTS=1
 
 adlc5_version() {
   local f="${ROOT}/core/VERSION"
@@ -18,9 +19,10 @@ adlc5_version() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform) PLATFORM="${2:?}"; shift 2 ;;
+    --installation-only) RUN_CONTRACTS=0; shift ;;
     --version) shift 2 ;; # legacy ignored arg; use --print-version
     --print-version) echo "adlc5 $(adlc5_version)"; exit 0 ;;
-    -h|--help) echo "Usage: verify-install.sh [--platform NAME] [--print-version]"; exit 0 ;;
+    -h|--help) echo "Usage: verify-install.sh [--platform NAME] [--installation-only] [--print-version]"; exit 0 ;;
     *) echo "Unknown: $1" >&2; exit 1 ;;
   esac
 done
@@ -38,7 +40,8 @@ if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)';
 fi
 
 
-CONFIG="${ROOT}/config.yaml"
+CONFIG="$HOME/.adlc5/install.yaml"
+[[ -f "$CONFIG" ]] || CONFIG="${ROOT}/config.yaml"
 [[ -f "$CONFIG" ]] || CONFIG="${ROOT}/config.example.yaml"
 [[ -f "$CONFIG" ]] || { echo "ERROR: no config" >&2; exit 1; }
 
@@ -281,7 +284,7 @@ for s in scripts/advance-phase.sh scripts/check-gates.py scripts/delivery-retry-
     errors=$((errors + 1))
   fi
 done
-if [[ -x "${ROOT}/scripts/tests/run-all.sh" ]]; then
+if [[ "$RUN_CONTRACTS" -eq 1 && -x "${ROOT}/scripts/tests/run-all.sh" ]]; then
   if contract_output=$("${ROOT}/scripts/tests/run-all.sh" 2>&1); then
     echo "  OK (contract tests): scripts/tests/run-all.sh"
   else

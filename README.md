@@ -32,7 +32,7 @@ cp config.example.yaml config.yaml
 To build and register the host-native **Codex, Claude Code, and Cursor plugins**, see
 [Build and install the ADLC5 agent plugins](docs/agent-plugins.md). Each plugin bundles
 the shared framework with host-specific metadata; the local package builder creates all
-three packages from this checkout and includes registration and public marketplace
+four host packages from this checkout and includes registration and public marketplace
 submission steps for each host.
 
 **Experimental supervised runner:** configure per-host tiers with
@@ -130,8 +130,16 @@ monitor the repository.
 ```bash
 ./scripts/adlc5 pulse snapshot --workspace .
 ./scripts/adlc5 pulse board --workspace .
+./scripts/adlc5 pulse board --all-projects --open
 ./scripts/adlc5 pulse handoff --workspace . --feature my-feature
 ```
+
+Every board command opens the shared `~/.adlc5/pulse/board.html` and includes discovered
+active/archived features, explicit native-host ADLC5 session references, and runner attempts.
+Add other repository locations with `--root PATH`; run the command again to refresh.
+Worktree rows show all recorded hosts with Claude Code, Codex, Cursor and Hermes Agent badges.
+Projects, individual workflows, paginated Activity and read-only Settings have separate
+views. See [shared configuration and storage](docs/shared-home.md) and [CI selection](docs/ci-selection.md).
 
 The offline board and cached band are generated when requested. Claude Code also
 shows an interactive Pulse band above the prompt; Codex and Cursor use the shared

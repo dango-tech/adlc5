@@ -7,6 +7,13 @@ description: ADLC5 subagent — read-only verification of story implementation a
 
 ## Intent
 
+Use readiness requirement/decision references and story traceability to compare
+the implementation with customer intent, not just its own tests. Check missing,
+partial, contradictory and unrequested behavior plus mandatory constraints.
+Return findings for the existing bounded rework loop and evidence suitable for
+`delivery.conformance`; the orchestrator records it after a passing review.
+Operational evidence must match [profile routing](../../core/guides/profile-routing.md).
+
 **Read-only** comparison of implemented code against code spec, design docs, and acceptance criteria. Returns a structured pass/fail report. Does **not** modify any files.
 
 **Spawned by:** `@adlc5-implement` during `implement-2-verify` or `implement-3-integrate`  
