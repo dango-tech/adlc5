@@ -29,7 +29,7 @@ cp config.example.yaml config.yaml
 ./scripts/verify-install.sh --platform codex
 ```
 
-To build and register the host-native **Codex, Claude Code, and Cursor plugins**, see
+To build and register the host-native **Codex, Claude Code, Cursor, and Hermes Agent plugins**, see
 [Build and install the ADLC5 agent plugins](docs/agent-plugins.md). Each plugin bundles
 the shared framework with host-specific metadata; the local package builder creates all
 four host packages from this checkout and includes registration and public marketplace
@@ -190,8 +190,12 @@ see [telemetry and privacy boundaries](docs/telemetry.md).
 
 ## Host support
 
-The contract-test CI matrix covers Ubuntu and macOS; disposable installation smoke
-covers Claude skill links and kernel verification. See [cross-platform details](shared/docs/CROSS-PLATFORM.md)
+The full contract-test CI matrix covers Ubuntu and macOS, with focused Windows
+regressions. Package publication additionally requires the four-host archive and
+installer contracts on Ubuntu, macOS and Windows; these mock native host commands.
+Disposable installation smoke covers Claude skill links and kernel verification.
+[Bounded signed-in host qualification](docs/live-host-qualification.md) records
+exact scenarios and limits; it is not a full host/OS certification matrix. See [cross-platform details](shared/docs/CROSS-PLATFORM.md)
 and the [host plugin build/install guide](docs/agent-plugins.md) for package creation,
 registration, and host-specific qualification boundaries.
 Live delivery/resume qualification must be recorded per host before broader claims.
