@@ -23,6 +23,18 @@ Use the release's validation link for OS test results. Checks cover archive
 integrity, extraction, installer plans and preservation; they do not establish
 live end-to-end qualification for every host/OS combination.
 
+## GitHub Packages
+
+The [repository Packages tab](https://github.com/dango-tech/adlc5/packages)
+contains registry copies of the same archives. Each host uses
+`ghcr.io/dango-tech/adlc5-<host>-plugin:5.1.0`, where `<host>` is `codex`,
+`claude-code`, `cursor` or `hermes`. Use
+`oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0` in an empty directory,
+then verify and extract the downloaded archive. These are OCI archive bundles,
+not runnable containers; Docker is not required. See the
+[registry guide](https://github.com/dango-tech/adlc5/blob/main/docs/agent-plugins.md#github-packages-registry).
+The direct ZIP/tar.gz links above remain the simplest download path.
+
 ## Prerequisites and installation
 
 Install Python 3.10+, Git, Bash 3.2+ and jq, plus your selected agent. On Windows,
