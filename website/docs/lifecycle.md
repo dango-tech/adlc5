@@ -21,6 +21,16 @@ reviewed guidance, focused context, and current evidence.
 Use `@adlc5 for my-feature` to orchestrate the whole flow. SOUL keeps cross-cutting
 reasoning guards in view while deterministic gates remain the enforcement.
 
+## Review intent before progression
+
+Requirements readiness records intent, consequential questions, acceptance,
+traceability, and applicable operational obligations against current source
+fingerprints. Agents inspect repository evidence before asking the user questions;
+product answers do not authorize shell commands. Changed or missing intent sources
+invalidate earlier review. Implementation conformance must use real reviewer
+session identities. See the [requirements readiness contract](https://github.com/dango-tech/adlc5/blob/main/docs/requirements-readiness.md)
+for prepare, record, check, question/resume, delivery and impact commands.
+
 ## Lock acceptance before building
 
 Assess risk explicitly. Authentication, money, secrets, migration, concurrency,

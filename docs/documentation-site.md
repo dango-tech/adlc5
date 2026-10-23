@@ -27,7 +27,9 @@ python scripts/tests/test-docs-site.py
 git diff --check
 ```
 
-The documentation workflow runs strict build and site checks on PRs and pushes.
+The main CI selects strict documentation builds from the entire PR diff and
+runs full validation on main. The Documentation workflow is a manual validation
+entry point.
 It does not publish the site. `.venv-docs/`, `.vercel/`, and `site/` are local
 or generated files.
 

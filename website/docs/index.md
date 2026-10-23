@@ -39,6 +39,10 @@ The distinction is how these capabilities connect the lifecycle. Read
 [Intelligence](intelligence.md) for a worked flow, commands, and honest limits.
 SOUL supports this pillar as the reasoning discipline across the four stages.
 
+[Download host plugin packages](downloads.md) for Codex, Claude Code, Cursor,
+and Hermes Agent. See [configuration](configuration.md) for shared storage and
+worktree overrides.
+
 ## Choose your next step
 
 | If you want to… | Start here |

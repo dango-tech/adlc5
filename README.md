@@ -120,6 +120,16 @@ SOUL is the supporting reasoning discipline across all four stages.
 [Repository context and limits](core/guides/repository-context.md) explains the
 mechanics. Better code, fewer errors, or lower token costs require comparative measurements.
 
+## Requirements readiness
+
+Intent review, consequential questions, traceability and operational obligations
+are bound to current requirement sources. Changes invalidate earlier review;
+implementation conformance records actual reviewer sessions. See
+[requirements readiness](docs/requirements-readiness.md).
+
+[Download host plugin packages](https://adlc5.dev/downloads/) for Windows, macOS
+and Ubuntu; see that page for prerequisites and qualification limits.
+
 ## ADLC5 Pulse
 
 Use Pulse for an on-demand view of a feature's stage, recorded checks/review, local

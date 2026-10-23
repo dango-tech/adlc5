@@ -38,7 +38,9 @@ markdown_extensions:
   - pymdownx.superfences
 nav:
   - Home: index.md
+  - Downloads: downloads.md
   - Installation: installation.md
+  - Configuration: configuration.md
   - Quickstart: quickstart.md
   - Walkthrough: walkthrough.md
   - Lifecycle: lifecycle.md
