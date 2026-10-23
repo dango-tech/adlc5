@@ -14,6 +14,10 @@ and current evidence connect all four stages.
 
 | Guide | Contents |
 | --- | --- |
+| [Downloads](downloads.md) | Four host packages, checksums, OS prerequisites and installer steps |
+| [Configuration](configuration.md) | Shared home, local overrides and Settings |
+| [Requirements readiness](https://github.com/dango-tech/adlc5/blob/main/docs/requirements-readiness.md) | Intent review, clarification, traceability and stale evidence |
+| [CI selection](https://github.com/dango-tech/adlc5/blob/main/docs/ci-selection.md) | PR-wide test selection and required checks |
 | [Installation](https://github.com/dango-tech/adlc5/blob/main/shared/docs/INSTALL.md) | Hosts, configuration, worktrees, updates, cleanup |
 | [ADLC5 lifecycle](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5.md) | Stages, gates, acceptance anchors |
 | [Kernel](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5-kernel.md) | Command façade, state, MCP, usage |

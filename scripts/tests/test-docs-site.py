@@ -16,7 +16,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = os.environ.get("DOCS_SITE_URL", "https://docs.example.test/adlc5/")
 BASE_PATH = urlsplit(BASE_URL).path.rstrip("/") + "/"
-PAGES = ("index.html", "installation/index.html", "quickstart/index.html",
+PAGES = ("downloads/index.html", "configuration/index.html", "index.html", "installation/index.html", "quickstart/index.html",
          "walkthrough/index.html", "lifecycle/index.html", "running/index.html",
          "intelligence/index.html", "support/index.html", "releases/index.html",
          "pulse/index.html", "telemetry/index.html", "reference/index.html")
@@ -77,6 +77,15 @@ class DocsSiteTests(unittest.TestCase):
                     self.assertTrue((self.site / relative).is_file(), f"Missing {relative}")
                     if target.fragment and relative in self.documents:
                         self.assertIn(unquote(target.fragment), self.documents[relative].ids)
+
+    def test_downloads_cover_four_hosts_and_checksums(self):
+        doc = self.documents['downloads/index.html']
+        links = set(doc.links)
+        base = 'https://github.com/dango-tech/adlc5/releases/download/v5.1.0/'
+        for host in ('codex', 'claude-code', 'cursor', 'hermes'):
+            for suffix in ('zip', 'tar.gz'):
+                self.assertIn(base + f'adlc5-{host}-plugin-5.1.0.{suffix}', links)
+        self.assertIn(base + 'SHA256SUMS', links)
 
     def test_search(self):
         index = json.loads((self.site / "search/search_index.json").read_text())

@@ -26,15 +26,20 @@ Availability of an adapter does not establish equal end-to-end delivery validati
 See the [cross-platform reference](https://github.com/dango-tech/adlc5/blob/main/shared/docs/CROSS-PLATFORM.md)
 for qualification and host-specific steps.
 
-Keep the distribution clone available: installed skills and rules link to it.
-Configure install targets and model routing in the clone's `config.yaml`;
-do not point install targets at the clone's own `skills/` directory.
+Source installs stage a content-addressed runtime under `~/.adlc5/runtimes/`.
+Machine configuration and project defaults also live under `~/.adlc5/`; explicit
+worktree overrides take precedence except for enforced policy. See
+[configuration and storage](configuration.md). Keep the distribution clone for updates.
 
-## Native agent plugins: Codex, Claude Code, and Cursor
+## Native agent plugins: Codex, Claude Code, Cursor, and Hermes Agent
 
-The repository provides buildable packages for all three plugin hosts. From an
+[Download a package](downloads.md) for your host, extract it, and run
+`python3 install.py --dry-run` followed by `python3 install.py` (Windows:
+`py -3 install.py`). The installer prints the remaining host-specific steps.
+
+The repository provides buildable packages for all four plugin hosts. From an
 ADLC5 checkout, run `python3 scripts/package-plugin.py --check` and then
-`python3 scripts/package-plugin.py --out /tmp/adlc5-dist`. This creates the three
+`python3 scripts/package-plugin.py --out /tmp/adlc5-dist`. This creates the four
 host-specific packages and local Codex and Claude Code marketplaces. See the
 [all-host plugin guide](https://github.com/dango-tech/adlc5/blob/main/docs/agent-plugins.md)
 for building one host, registering and installing each package, and submitting
@@ -68,9 +73,9 @@ setup reports duplicates without deleting them. This is a local/private package,
 not a public directory listing. See the
 [plugin installation guide](https://github.com/dango-tech/adlc5/blob/main/shared/docs/INSTALL.md#claude-code-plugin-local-package).
 
-The package has archive, MCP stdio, bootstrap, and hook tests plus a recorded live
-local session for setup, gate checks, engagement warning, and resume. A full
-human-approved lifecycle on it and live Codex qualification remain pending.
+Package tests and bounded signed-in host qualification are separate evidence.
+See the [recorded host qualification](https://github.com/dango-tech/adlc5/blob/main/docs/live-host-qualification.md)
+for the exact cases, retries, and limits. The comparative campaign remains unexecuted.
 
 ## Update and verify
 

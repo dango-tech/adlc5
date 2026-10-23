@@ -57,6 +57,17 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(json.loads(wrapped.stdout)['host'], host)
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_extracted_archives_run_from_paths_with_spaces(self):
+        for host in ('codex', 'claude', 'cursor', 'hermes'):
+            label = 'claude-code' if host == 'claude' else host
+            destination = self.home / ('extracted package ' + host)
+            with zipfile.ZipFile(next(self.out.glob('adlc5-' + label + '-plugin-*.zip'))) as bundle:
+                bundle.extractall(destination)
+            result = subprocess.run([sys.executable, str(destination / 'install.py'), '--dry-run'],
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(result.stdout)['host'], host)
+        self.assertFalse((self.home / '.adlc5').exists())
+
     def test_codex_prepares_supported_marketplace_without_fake_install(self):
         with patch.object(installer.shutil, 'which', return_value='/example/codex'), patch.object(installer.subprocess, 'run') as run:
             result = installer.install(self.out / 'codex/adlc5')

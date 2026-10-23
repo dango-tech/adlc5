@@ -16,9 +16,17 @@ Pulse is an on-demand snapshot of ADLC5 feature progress, recorded evidence, usa
 
 `snapshot` and `band` are read-only. Every `board` command writes the shared offline page at `~/.adlc5/pulse/board.html`, with derived caches keyed by worktree under `~/.adlc5/pulse/workspaces/`. The page includes discovered projects and all recorded host badges per worktree: Claude Code, Codex, Cursor and Hermes Agent. These reflect observed usage, not live presence. Rerun `board` to refresh it. `handoff` prints a summary for review; it does not write to a clipboard or send it elsewhere.
 
+## Navigate the board
+
+Use Projects to select an application, Project to compare its worktrees, Workflow
+to inspect one feature, and paginated Activity for historical records. Settings
+shows effective machine, project, and worktree values, their provenance and
+overrides; it is read-only and excludes credential values. See
+[configuration and storage](configuration.md).
+
 Evidence is current at capture time. A local `pr-ready` gate observation is not remote CI, human approval, deployment, or production health. `known_cost_usd` is an attributable subtotal, not an invoice; `complete_total_usd` stays null because ledger coverage is unproven. Missing, unavailable, or unpriced records remain unknown. See the [full Pulse guide](https://github.com/dango-tech/adlc5/blob/main/docs/pulse.md) for security, data, and plugin details.
 
-The same skill and read-only snapshot tool ship in the Codex, Claude Code, and Cursor packages. Claude Code also displays a native interactive band above the prompt, refreshed at session start and after completed turns. Review and Audit invoke existing skills; Board writes and opens the offline board; Details expands the captured evidence. Codex and Cursor use the shared skill/MCP/CLI interfaces because their documented plugin surfaces do not expose a persistent custom prompt band. Claude may still use an optional cached status line configured manually. Live host qualification remains separate from package tests.
+The same skill and read-only snapshot tool ship in the Codex, Claude Code, Cursor, and Hermes Agent packages. Claude Code also displays a native interactive band above the prompt, refreshed at session start and after completed turns. Review and Audit invoke existing skills; Board writes and opens the offline board; Details expands the captured evidence. Codex and Cursor use the shared skill/MCP/CLI interfaces because their documented plugin surfaces do not expose a persistent custom prompt band. Claude may still use an optional cached status line configured manually. Live host qualification remains separate from package tests.
 
 ## Savings and quality
 

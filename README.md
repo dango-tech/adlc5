@@ -29,7 +29,7 @@ cp config.example.yaml config.yaml
 ./scripts/verify-install.sh --platform codex
 ```
 
-To build and register the host-native **Codex, Claude Code, and Cursor plugins**, see
+To build and register the host-native **Codex, Claude Code, Cursor, and Hermes Agent plugins**, see
 [Build and install the ADLC5 agent plugins](docs/agent-plugins.md). Each plugin bundles
 the shared framework with host-specific metadata; the local package builder creates all
 four host packages from this checkout and includes registration and public marketplace
@@ -120,6 +120,16 @@ SOUL is the supporting reasoning discipline across all four stages.
 [Repository context and limits](core/guides/repository-context.md) explains the
 mechanics. Better code, fewer errors, or lower token costs require comparative measurements.
 
+## Requirements readiness
+
+Intent review, consequential questions, traceability and operational obligations
+are bound to current requirement sources. Changes invalidate earlier review;
+implementation conformance records actual reviewer sessions. See
+[requirements readiness](docs/requirements-readiness.md).
+
+[Download host plugin packages](https://adlc5.dev/downloads/) for Windows, macOS
+and Ubuntu; see that page for prerequisites and qualification limits.
+
 ## ADLC5 Pulse
 
 Use Pulse for an on-demand view of a feature's stage, recorded checks/review, local
@@ -180,8 +190,12 @@ see [telemetry and privacy boundaries](docs/telemetry.md).
 
 ## Host support
 
-The contract-test CI matrix covers Ubuntu and macOS; disposable installation smoke
-covers Claude skill links and kernel verification. See [cross-platform details](shared/docs/CROSS-PLATFORM.md)
+The full contract-test CI matrix covers Ubuntu and macOS, with focused Windows
+regressions. Package publication additionally requires the four-host archive and
+installer contracts on Ubuntu, macOS and Windows; these mock native host commands.
+Disposable installation smoke covers Claude skill links and kernel verification.
+[Bounded signed-in host qualification](docs/live-host-qualification.md) records
+exact scenarios and limits; it is not a full host/OS certification matrix. See [cross-platform details](shared/docs/CROSS-PLATFORM.md)
 and the [host plugin build/install guide](docs/agent-plugins.md) for package creation,
 registration, and host-specific qualification boundaries.
 Live delivery/resume qualification must be recorded per host before broader claims.

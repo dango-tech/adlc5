@@ -13,6 +13,10 @@ every agent host. Read the current
 [cross-platform support guide](https://github.com/dango-tech/adlc5/blob/main/shared/docs/CROSS-PLATFORM.md)
 for current version-specific details.
 
+Download the [host packages and checksums](downloads.md). Candidate releases are
+explicitly marked prerelease; package compatibility is distinct from live agent
+qualification.
+
 ## Upgrade
 
 Use the procedure for your installation type in the
