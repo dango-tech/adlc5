@@ -34,15 +34,16 @@ def plan(paths):
     return {**{name: name in selected for name in ('full', 'pulse', 'runner', 'platforms', 'packages', 'install', 'docs', 'telemetry')}, 'reasons': reasons}
 
 
-def check_results(jobs):
+def check_results(jobs, *, dependencies_only=False):
     flags = jobs['changes'].get('outputs', {})
     names = ('full', 'pulse', 'runner', 'platforms', 'packages', 'install', 'docs', 'telemetry')
     if any(flags.get(name) not in ('true', 'false') for name in names):
         raise ValueError('Missing or invalid test-selection outputs')
-    required = {'changes', 'privacy', 'windows'}
+    required = {'changes'} if dependencies_only else {'changes', 'privacy', 'windows'}
     if any(flags[name] == 'true' for name in ('full', 'platforms', 'install')):
-        required.add('test')
-    if flags['pulse'] == 'true' and 'test' not in required:
+        if not dependencies_only:
+            required.add('test')
+    if flags['pulse'] == 'true' and not any(flags[name] == 'true' for name in ('full', 'platforms', 'install')):
         required.add('pulse')
     if flags['full'] != 'true':
         for name in ('packages', 'runner'):
@@ -62,9 +63,10 @@ def main():
     parser.add_argument('--output')
     parser.add_argument('--full', action='store_true')
     parser.add_argument('--verify', action='store_true')
+    parser.add_argument('--verify-dependencies', action='store_true')
     args = parser.parse_args()
-    if args.verify:
-        check_results(json.loads(os.environ['RESULTS']))
+    if args.verify or args.verify_dependencies:
+        check_results(json.loads(os.environ['RESULTS']), dependencies_only=args.verify_dependencies)
         print('All selected validation completed successfully.')
         return
     if not args.base:

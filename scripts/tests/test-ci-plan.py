@@ -43,6 +43,15 @@ class PlanTests(unittest.TestCase):
         jobs['changes']['outputs'] = {}
         with self.assertRaises(ValueError): module.check_results(jobs)
 
+    def test_required_platform_join_preserves_docs_only_checks(self):
+        flags = {key: str(value).lower() for key, value in module.plan(['docs/pulse.md']).items() if key != 'reasons'}
+        jobs = {name: {'result': 'skipped'} for name in ('pulse', 'runner', 'packages', 'telemetry')}
+        jobs['changes'] = {'result': 'success', 'outputs': flags}
+        jobs['docs'] = {'result': 'success'}
+        module.check_results(jobs, dependencies_only=True)
+        jobs['docs']['result'] = 'skipped'
+        with self.assertRaises(ValueError): module.check_results(jobs, dependencies_only=True)
+
 
 if __name__ == '__main__':
     unittest.main()

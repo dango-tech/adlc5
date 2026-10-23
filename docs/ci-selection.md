@@ -18,10 +18,13 @@ validation. Unavailable diff information fails the plan; it never becomes a pass
 The Windows check stays present on every PR and runs Windows regressions when
 platform validation is selected. `CI required` always runs and verifies every
 selected dependency succeeded; required work being skipped or cancelled fails it.
-Repository protection should require this aggregate, privacy and the Windows check.
-Legacy Ubuntu/macOS check requirements must be replaced by the aggregate before
-using selection on documentation-only PRs, because their matrix may legitimately
-be omitted. Do not add workflow-level path filters to required workflows.
+Existing required Ubuntu/macOS checks remain present as lightweight validation
+join points even when their platform suites are unselected. They reject missing,
+failed or cancelled selected dependencies before running any selected platform
+tests. This preserves the current protection rules without requiring an unsafe
+ruleset migration before the new workflow is merged. Documentation-only changes
+still start these small jobs, but do not rerun their contract suites. Do not add
+workflow-level path filters to required workflows.
 
 Superseded PR runs are cancelled. Main pushes, weekly scheduled runs and manual
 CI dispatch use the full suite. Documentation builds run once through CI for PRs

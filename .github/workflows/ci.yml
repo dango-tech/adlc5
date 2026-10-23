@@ -58,8 +58,8 @@ jobs:
           python3 scripts/check-publication.py
 
   test:
-    needs: changes
-    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.platforms == 'true'
+    needs: [changes, pulse, runner, packages, telemetry, docs]
+    if: always()
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +75,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install jq
+        if: needs.changes.outputs.full == 'true' || needs.changes.outputs.platforms == 'true'
         run: |
           if ! command -v jq >/dev/null; then
             if [[ "$RUNNER_OS" == "macOS" ]]; then
@@ -85,12 +86,17 @@ jobs:
             fi
           fi
 
+      - name: Verify selected dependencies
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci-plan.py --verify-dependencies
+
       - name: Contract tests (system Bash)
         if: needs.changes.outputs.full == 'true'
         run: /bin/bash ./scripts/tests/run-all.sh
 
       - name: Focused Pulse and path compatibility
-        if: needs.changes.outputs.full != 'true'
+        if: needs.changes.outputs.full != 'true' && needs.changes.outputs.platforms == 'true'
         run: |
           python3 scripts/tests/test-pulse.py
           python3 scripts/tests/test-pulse-fleet.py
@@ -101,6 +107,7 @@ jobs:
         run: python3 scripts/tests/test-portable-install.py
 
       - name: Distribution exclusions and publication inputs
+        if: needs.changes.outputs.full == 'true' || needs.changes.outputs.platforms == 'true'
         run: python3 scripts/tests/test-distribution.py
 
   # Focused regressions for issue #20. The broader suites still assume symlinks
