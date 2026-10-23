@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build deterministic, self-contained ADLC5 packages for Codex, Claude Code, and Cursor.
+"""Build self-contained ADLC5 packages for Codex, Claude Code, Cursor and Hermes.
 
   scripts/package-plugin.py [--out DIR] [--host all|codex|claude|cursor] [--check]
 
@@ -18,12 +18,13 @@ Safety model:
     workspaces inside it.
 
 Determinism: sorted entries, fixed mtime, root:root, normalized modes (0755 if executable else 0644),
-gzip mtime 0. Same tree → byte-identical archives.
+gzip mtime 0. Same source revision and working-tree state → byte-identical archives.
 """
 from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -55,6 +56,7 @@ REQUIRED_BASE = (
     "scripts/adlc5", "scripts/adlc5-mcp.py", "scripts/init-workspace.sh", "scripts/plugin-setup.sh",
     "scripts/lib/requirements_readiness.py", "docs/requirements-readiness.md",
     "scripts/runner/questions.py", "core/guides/profile-routing.md",
+    "scripts/install-plugin.py",
     "core/pulse-snapshot.schema.json", "scripts/pulse.py", "scripts/pulse-statusline.py",
     "scripts/lib/pulse.py", "scripts/lib/pulse_fleet.py", "scripts/lib/pulse_settings.py", "scripts/shared-home.py", "scripts/lib/config_layers.py", "skills/pulse/SKILL.md", "shared/pulse/board.html",
     "shared/pulse/board.css", "shared/pulse/board.js", "assets/brand/icon.svg",
@@ -68,6 +70,7 @@ REQUIRED_BY_HOST = {
     ),
     "codex": ("plugin.json", ".codex-plugin/plugin.json", "mcp.json", ".mcp.json"),
     "cursor": (".cursor-plugin/plugin.json", ".cursor-plugin/mcp.json", ".cursor-plugin/run-mcp.sh"),
+    "hermes": ("plugin.json", "mcp.json"),
 }
 
 HOST_ONLY_PREFIXES = {
@@ -76,6 +79,7 @@ HOST_ONLY_PREFIXES = {
     "claude": (".claude-plugin/marketplace.json", ".codex-plugin/", ".cursor-plugin/", "platform/codex-plugin/", "mcp.json"),
     "codex": (".claude-plugin/", ".claude/", ".cursor-plugin/", "hooks/claude.json", "hooks/pulse-band.", "bin/", "platform/codex-plugin/"),
     "cursor": (".claude-plugin/", ".claude/", ".codex-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/", "mcp.json"),
+    "hermes": (".claude-plugin/", ".claude/", ".codex-plugin/", ".codex/", ".cursor-plugin/", "hooks/", ".mcp.json", "bin/", "platform/codex-plugin/"),
 }
 
 SECRET = re.compile(rb"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_\-]{30,}|\bAKIA[A-Z0-9]{16}\b")
@@ -205,6 +209,10 @@ def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> di
         }
         result[".mcp.json"] = (json.dumps(compatibility_mcp, indent=2).encode() + b"\n", 0o644)
     result[".adlc5-package.json"] = (build_manifest(version), 0o644)
+    revision = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+    dirty = bool(subprocess.check_output(['git', '-C', str(ROOT), 'status', '--porcelain', '--untracked-files=normal'], text=True))
+    result['INSTALL.json'] = (json.dumps({'host': host, 'version': version, 'source_revision': revision, 'source_dirty': dirty}, sort_keys=True).encode() + b'\n', 0o644)
+    result['install.py'] = (b'from pathlib import Path\nimport runpy\nrunpy.run_path(str(Path(__file__).parent / "scripts/install-plugin.py"), run_name="__main__")\n', 0o644)
     return dict(sorted(result.items()))
 
 
@@ -262,13 +270,13 @@ def write_zip(files: dict[str, tuple[bytes, int]], dest: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "adlc5-dist"))
-    parser.add_argument("--host", choices=("all", "codex", "claude", "cursor"), default="all")
+    parser.add_argument("--host", choices=("all", "codex", "claude", "cursor", "hermes"), default="all")
     parser.add_argument("--check", action="store_true", help="validate host package inputs only; write nothing")
     parser.add_argument("--claude-hosted", action="store_true", help="omit PATH executables for Claude Desktop upload/directory validation")
     ns = parser.parse_args()
     if ns.claude_hosted and ns.host != "claude":
         parser.error("--claude-hosted requires --host claude")
-    hosts = ("codex", "claude", "cursor") if ns.host == "all" else (ns.host,)
+    hosts = ("codex", "claude", "cursor", "hermes") if ns.host == "all" else (ns.host,)
     files_by_host = {host: for_host(collect(ROOT, host), host, (ROOT / "core/VERSION").read_text(encoding="utf-8").strip()) for host in hosts}
     if ns.claude_hosted:
         files_by_host["claude"] = {name: value for name, value in files_by_host["claude"].items() if not name.startswith("bin/")}
@@ -311,6 +319,10 @@ def main() -> int:
         else:
             outputs[host] = {"directory": str(package_dir), "zip": str(zip_path), "tar": str(tar_path)}
     result = {"status": "ok", "version": version, "packages": outputs}
+    archives = sorted(Path(values[key]) for values in outputs.values() for key in ('zip', 'tar'))
+    checksums = out / 'SHA256SUMS'
+    checksums.write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in archives))
+    result['checksums'] = str(checksums)
     if "claude" in outputs:
         # Retain the original Claude package keys for scripts that consumed the 4.x builder.
         result.update({"files": len(files_by_host["claude"]), "tar": outputs["claude"]["tar"], "zip": outputs["claude"]["zip"]})

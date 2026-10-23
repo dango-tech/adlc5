@@ -170,6 +170,7 @@ jobs:
       - run: |
           python3 scripts/package-plugin.py --out /tmp/adlc5-ci-packages
           python3 scripts/tests/test-distribution.py
+          python3 scripts/tests/test-plugin-install.py
 
   runner:
     needs: changes

@@ -3,6 +3,7 @@ name: Release host plugin packages
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,21 +14,40 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Build host packages
         run: python3 scripts/package-plugin.py --out /tmp/adlc5-release-packages
-      - name: Attach Codex, Claude Code, and Cursor archives
+      - name: Verify archive and installer contracts
+        run: python3 scripts/tests/test-plugin-install.py
+      - name: Upload downloadable packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: adlc5-agent-packages-${{ github.sha }}
+          path: |
+            /tmp/adlc5-release-packages/*.zip
+            /tmp/adlc5-release-packages/*.tar.gz
+            /tmp/adlc5-release-packages/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attach all four host packages and checksums to release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="$(tr -d '[:space:]' < core/VERSION)"
-          gh release upload "$GITHUB_REF_NAME" \
+          [[ "$RELEASE_TAG" == "$version" || "$RELEASE_TAG" == "v$version" ]] || { echo 'Release tag must match core/VERSION'; exit 1; }
+          gh release upload "$RELEASE_TAG" \
             "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.zip" \
             "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.tar.gz" \
             "/tmp/adlc5-release-packages/adlc5-claude-code-plugin-${version}.zip" \
             "/tmp/adlc5-release-packages/adlc5-claude-code-plugin-${version}.tar.gz" \
             "/tmp/adlc5-release-packages/adlc5-cursor-plugin-${version}.zip" \
-            "/tmp/adlc5-release-packages/adlc5-cursor-plugin-${version}.tar.gz"
+            "/tmp/adlc5-release-packages/adlc5-cursor-plugin-${version}.tar.gz" \
+            "/tmp/adlc5-release-packages/adlc5-hermes-plugin-${version}.zip" \
+            "/tmp/adlc5-release-packages/adlc5-hermes-plugin-${version}.tar.gz" \
+            "/tmp/adlc5-release-packages/SHA256SUMS"

@@ -1,6 +1,6 @@
 # Build and install the ADLC5 agent plugins
 
-ADLC5 supports developers using **Codex, Claude Code, or Cursor**. This repository is the source for all three packages: shared skills and runtime are packaged with each host's own manifest and integration files. `core/VERSION` is canonical; the build checks host manifest versions against it.
+ADLC5 provides packages for **Codex, Claude Code, Cursor and Hermes Agent**. Shared skills and runtime are packaged with each host's own manifest and integration files. `core/VERSION` is canonical; the build checks host manifest versions against it.
 
 ## Build the packages locally
 
@@ -18,10 +18,60 @@ The build creates host-specific package directories and `.zip` / `.tar.gz` archi
 | Codex | `/tmp/adlc5-dist/codex/adlc5/` and `adlc5-codex-plugin-<version>.zip` | `/tmp/adlc5-dist/codex-marketplace/` |
 | Claude Code | `/tmp/adlc5-dist/claude/adlc5/` and `adlc5-claude-code-plugin-<version>.zip` | `/tmp/adlc5-dist/claude-marketplace/` |
 | Cursor | `/tmp/adlc5-dist/cursor/adlc5/` and `adlc5-cursor-plugin-<version>.zip` | local plugin folder |
+| Hermes Agent | `/tmp/adlc5-dist/hermes/adlc5/` and `adlc5-hermes-plugin-<version>.zip` | native portable-plugin installer |
 
-Use `--host codex`, `--host claude`, or `--host cursor` to build just one package. The archive builder includes only tracked or non-ignored source files selected for distribution; it rejects symlinks, likely secrets, and personal absolute home paths. Do not edit the generated files; change the source and rebuild.
+Use `--host codex|claude|cursor|hermes` to build one package. The archive builder includes only tracked or non-ignored source files selected for distribution; it rejects symlinks, likely secrets, and personal absolute home paths. Do not edit generated files. `INSTALL.json` records host, version, source commit and whether the source was dirty; candidate archives with the same version are distinguishable by provenance and checksum.
 
-When a GitHub Release is published, `.github/workflows/release-plugin-packages.yml` builds and attaches the six host-specific archives. Developers can also build the same artifacts from any checkout with the command above.
+When a GitHub Release is published, `.github/workflows/release-plugin-packages.yml` builds and attaches all eight host archives and `SHA256SUMS`. Its release tag must match `core/VERSION` (optionally prefixed with `v`). Publishing a release is separate from building candidate packages.
+
+## Self-install from an archive
+
+Download the package for the intended host and `SHA256SUMS`. Verify its checksum
+before extracting (`shasum -a 256 FILE.zip`, or `Get-FileHash FILE.zip -Algorithm SHA256`
+on PowerShell; compare with the matching checksum entry). Extract into a new directory,
+then run:
+
+```bash
+python3 install.py --dry-run
+python3 install.py
+```
+
+On Windows, use `python` if `python3` is unavailable. No archive is executed during
+the build or download. The installer stages a content-addressed package source under
+`~/.adlc5/packages/` and follows the host's local installation flow:
+
+- **Codex:** registers a generated local marketplace. Finish installation/reinstallation
+  through Codex's Plugins UI; the current CLI has no `plugin install` subcommand.
+- **Claude Code:** registers the local marketplace and invokes native plugin installation.
+  Existing installations may need marketplace refresh and `claude plugin update adlc5@adlc5-local`.
+- **Cursor:** installs the local plugin folder. A managed prior package is retained
+  in a timestamped backup; an unknown destination is refused. Reload and enable in Cursor.
+- **Hermes:** creates a local Git source and invokes native `hermes plugins install`
+  with a `file://` URL and `--no-enable`. Native scanning/consent stays in force.
+  Review and explicitly enable it, then start a new session.
+
+Native CLI availability, trust and enablement remain host responsibilities.
+The installer does not edit native caches, bypass security scans, auto-enable Hermes,
+or claim that an already-running host loaded the new package. Its dry run writes nothing.
+
+## Build downloadable candidates or publish release assets
+
+In GitHub Actions, choose **Release host plugin packages → Run workflow**, select
+the desired branch/tag and run it. Download `adlc5-agent-packages-<commit>` from
+the run's Artifacts section. Candidate artifacts expire after 30 days; release
+assets persist with their release. This manual trigger becomes available after
+the workflow update is merged into the default branch.
+
+Equivalent CLI after that update:
+
+```bash
+gh workflow run release-plugin-packages.yml --ref YOUR_BRANCH_OR_TAG
+```
+
+To publish durable assets, create and publish a GitHub Release at an appropriately
+versioned, reviewed tag. The same workflow validates and attaches the four host
+ZIPs, four tarballs and checksums. This does not publish listings to each vendor's
+public plugin directory. Those submission/review processes remain separate below.
 
 ## Register and install
 
