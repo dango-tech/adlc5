@@ -20,12 +20,14 @@ def folder(workspace: Path, feature: str) -> Path:
     return safe_path(workspace, f'.adlc5/{feature}', directory=True)
 
 
-def safe_path(workspace: Path, name: str, *, directory=False) -> Path:
+def safe_path(workspace: Path, name: str, *, directory=False, allow_missing=False) -> Path:
     if not isinstance(name, str) or not name or Path(name).is_absolute() or '..' in Path(name).parts:
         raise ValueError('evidence path must be workspace-relative without traversal')
     path = workspace / name
     if not path.resolve().is_relative_to(workspace.resolve()):
         raise ValueError('evidence path escapes workspace')
+    if allow_missing and not directory and not path.exists():
+        return path
     if not (path.is_dir() if directory else path.is_file()):
         raise ValueError(f'missing evidence path: {name}')
     return path
@@ -35,9 +37,15 @@ def digest(value) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
-def source(workspace: Path, name: str) -> dict:
-    path = safe_path(workspace, name)
-    return {'path': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+def source(workspace: Path, name: str, *, allow_missing=False) -> dict:
+    path = safe_path(workspace, name, allow_missing=allow_missing)
+    try:
+        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        if not allow_missing:
+            raise
+        sha256 = None
+    return {'path': name, 'sha256': sha256}
 
 
 def context(workspace: Path, feature: str) -> tuple[dict, list[str]]:
@@ -58,12 +66,12 @@ def context(workspace: Path, feature: str) -> tuple[dict, list[str]]:
     return {'scope': state.get('scope'), 'scale_nfrs': state.get('scale_nfrs'), 'policies': policies}, sorted(names)
 
 
-def prepare(workspace: Path, feature: str, extra_sources=()) -> dict:
+def prepare(workspace: Path, feature: str, extra_sources=(), *, allow_missing=False) -> dict:
     inputs, names = context(workspace, feature)
     if any(not isinstance(name, str) for name in extra_sources):
         raise ValueError('additional intent sources must be file paths')
     names = sorted(set(names) | set(extra_sources))
-    sources = [source(workspace, name) for name in names]
+    sources = [source(workspace, name, allow_missing=allow_missing) for name in names]
     return {'schema_version': 1, 'feature': feature, 'sources': sources,
             'intent_sha256': digest({'sources': sources, 'context': inputs}),
             'requirements': [], 'decisions': [],
@@ -79,6 +87,12 @@ def object_keys(value, required, optional=()):
 def text(value, label):
     if not isinstance(value, str) or not value.strip() or PLACEHOLDER.search(value):
         raise ValueError(f'{label} must contain non-placeholder text')
+
+
+def session_identity(value, label='review session'):
+    text(value, label)
+    if value.strip().lower() in ('unknown', 'inherit', 'host default', 'host-default', 'agent', 'user'):
+        raise ValueError(label + ' requires an actual session identity')
 
 
 def items(value, label, *, nonempty=False):
@@ -185,9 +199,7 @@ def validate(workspace: Path, feature: str, value: dict):
     review = value['review']
     object_keys(review, ('author_session_id', 'reviewer_session_id', 'disposition', 'coverage', 'findings'))
     for key in ('author_session_id', 'reviewer_session_id'):
-        text(review[key], key)
-        if review[key].strip().lower() in ('unknown', 'inherit', 'host default', 'agent', 'user'):
-            raise ValueError('review requires actual session identities')
+        session_identity(review[key], key)
     coverage = items(review['coverage'], 'review coverage')
     if any(not isinstance(name, str) for name in coverage) or set(coverage) != COVERAGE or len(coverage) != len(COVERAGE):
         raise ValueError('review must cover behavior, contradictions, negative_cases, assumptions')
@@ -303,7 +315,7 @@ def validate_delivery(workspace: Path, feature: str, value: dict, *, phase: str)
     conformance = delivery['conformance']
     if conformance is not None:
         object_keys(conformance, ('reviewer_session_id', 'coverage', 'requirements', 'evidence'))
-        text(conformance['reviewer_session_id'], 'conformance reviewer session')
+        session_identity(conformance['reviewer_session_id'], 'conformance reviewer session')
         categories = items(conformance['coverage'], 'conformance coverage')
         if len(categories) != 5 or set(categories) != {'missing', 'partial', 'contradictory', 'unrequested', 'constraints'}:
             raise ValueError('conformance review must assess missing, partial, contradictory, unrequested behavior and constraints')
@@ -357,11 +369,12 @@ def delivery_draft(workspace: Path, feature: str) -> dict:
 
 def impact(workspace: Path, feature: str) -> dict:
     value = load_record(folder(workspace, feature) / NAME)
-    current = prepare(workspace, feature, [entry['path'] for entry in value['sources']])
+    current = prepare(workspace, feature, [entry['path'] for entry in value['sources']], allow_missing=True)
     changed = value['intent_sha256'] != current['intent_sha256']
     return {'status': 'stale' if changed else 'current', 'previous_intent': value['intent_sha256'],
             'current_intent': current['intent_sha256'], 'changed_sources': [entry['path'] for entry in current['sources']
                 if entry not in value['sources']],
+            'missing_sources': [entry['path'] for entry in current['sources'] if entry['sha256'] is None],
             'affected_requirements': [r['id'] for r in value['requirements']] if changed else [],
             'affected_stories': [s['id'] for s in (load_feature_state(workspace, feature).get('tasks') or {}).get('stories', [])] if changed else [],
             'action': 'Reassess risk, decisions, operational obligations and traceability; record a new review. Preserve code and anchors; rerun affected evidence.' if changed else 'No intent change detected.'}

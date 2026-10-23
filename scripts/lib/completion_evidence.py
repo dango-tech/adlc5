@@ -273,9 +273,17 @@ def review_failures(record, policies):
         failures.append('fresh passing diff review')
     persona = policies.get('persona_mode') or {}
     coder_sessions = record.get('coder_session_ids') or [record.get('coder_session_id')]
-    if (profile_name(policies) in ('standard', 'high_risk', 'full') or persona.get('fresh_subagent_per_persona')) and (
-            not all(coder_sessions) or not record.get('verifier_session_id') or record['verifier_session_id'] in coder_sessions):
-        failures.append('independent reviewer session')
+    if profile_name(policies) in ('standard', 'high_risk', 'full') or persona.get('fresh_subagent_per_persona'):
+        from lib.requirements_readiness import session_identity
+        try:
+            if not isinstance(coder_sessions, list) or not coder_sessions:
+                raise ValueError('coder sessions must be a nonempty list')
+            for session in [*coder_sessions, record.get('verifier_session_id')]:
+                session_identity(session)
+            if record['verifier_session_id'] in coder_sessions:
+                raise ValueError('reviewer must be independent')
+        except ValueError:
+            failures.append('independent reviewer session')
     coder_models = record.get('coder_model_ids') or [record.get('coder_model_id')]
     verifier_model = record.get('verifier_model_id')
     unknown = {'unknown', 'host default', 'host-default', 'inherit', ''}

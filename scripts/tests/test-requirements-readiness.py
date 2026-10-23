@@ -413,6 +413,69 @@ class Readiness(unittest.TestCase):
         implementation.write_text('def label(value): return value.title()\n')
         self.assertEqual(readiness.check(self.workspace, 'demo')['status'], 'fail')
 
+    def test_conformance_rejects_placeholder_session_identities(self):
+        value = self.delivery()
+        value['delivery']['conformance'] = {'reviewer_session_id': 'review-1',
+            'coverage': ['missing', 'partial', 'contradictory', 'unrequested', 'constraints'],
+            'requirements': ['FR-1'], 'evidence': [readiness.source(self.workspace, '.adlc5/demo/spec-handoff.md')]}
+        for identity in ('unknown', ' UNKNOWN ', 'inherit', 'host default', 'host-default', 'agent', 'user', '', 'TODO', None):
+            with self.subTest(identity=identity):
+                value['delivery']['conformance']['reviewer_session_id'] = identity
+                with self.assertRaises(ValueError): self.record(value)
+        value['delivery']['conformance']['reviewer_session_id'] = 'review-1'
+        self.record(value)
+
+    def test_completion_review_rejects_placeholder_coder_and_verifier_sessions(self):
+        from lib.completion_evidence import review_failures
+        for profile in ('standard', 'high_risk', 'full'):
+            policies = {'autopilot': {'profile': profile}}
+            for key in ('coder_session_id', 'verifier_session_id'):
+                for identity in ('unknown', ' UNKNOWN ', 'inherit', 'host default', 'host-default', 'agent', 'user', '', None):
+                    with self.subTest(profile=profile, key=key, identity=identity):
+                        record = {'disposition': 'pass', 'coder_session_id': 'coder-1', 'verifier_session_id': 'review-1'}
+                        record[key] = identity
+                        self.assertIn('independent reviewer session', review_failures(record, policies))
+            self.assertNotIn('independent reviewer session', review_failures(
+                {'disposition': 'pass', 'coder_session_ids': ['coder-1'], 'verifier_session_id': 'review-1'}, policies))
+
+    def test_deleted_or_renamed_intent_reports_stale_impact_without_writing(self):
+        for change in ('delete', 'rename'):
+            with self.subTest(change=change):
+                extra = self.base / 'additional-intent.md'
+                extra.write_text('# Extra intent\nPreserve input labels.\n')
+                name = extra.relative_to(self.workspace).as_posix()
+                value = self.candidate()
+                current = readiness.prepare(self.workspace, 'demo', [name])
+                value.update({key: current[key] for key in ('sources', 'intent_sha256')})
+                value['requirements'].append({'id': 'FR-2', 'source': name, 'acceptance': ['Input spelling remains unchanged.']})
+                self.state['tasks'] = {'stories': [{'id': 'US-1', 'type': 'story'}]}
+                self.save_state()
+                self.record(value)
+                before = (self.base / readiness.NAME).read_bytes()
+                if change == 'delete': extra.unlink()
+                else: extra.rename(self.base / 'renamed-intent.md')
+                report = readiness.impact(self.workspace, 'demo')
+                self.assertEqual(report['status'], 'stale')
+                self.assertIn(name, report['changed_sources'])
+                self.assertEqual(report['missing_sources'], [name])
+                self.assertEqual(report['affected_requirements'], ['FR-1', 'FR-2'])
+                self.assertEqual(report['affected_stories'], ['US-1'])
+                result = self.cli('readiness', 'impact')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)['status'], 'stale')
+                self.assertEqual((self.base / readiness.NAME).read_bytes(), before)
+                self.assertEqual(readiness.check(self.workspace, 'demo')['status'], 'fail')
+                with self.assertRaises(ValueError): readiness.prepare(self.workspace, 'demo', [name])
+
+    def test_impact_missing_source_handling_preserves_path_boundary(self):
+        self.record()
+        path = self.base / readiness.NAME
+        value = json.loads(path.read_text())
+        value['sources'].append({'path': '../outside.md', 'sha256': '0' * 64})
+        path.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, 'traversal'):
+            readiness.impact(self.workspace, 'demo')
+
 
 if __name__ == '__main__':
     unittest.main()
