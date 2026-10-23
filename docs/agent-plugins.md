@@ -217,3 +217,30 @@ Building an archive verifies packaging inputs, not successful installation or ru
 - [Publish a Claude Code plugin and submit to Anthropic's directory](https://code.claude.com/docs/en/plugins/publish#submit-to-anthropics-directory)
 - [Cursor plugins](https://docs.cursor.com/plugins)
 - [Submit a plugin to the Cursor Marketplace](https://cursor.com/marketplace/publish)
+
+## GitHub Packages registry
+
+Release ZIPs do not populate the repository's Packages tab. The release workflow
+also publishes the existing, checksum-verified release assets as four OCI archive
+packages linked to this repository:
+
+- `ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0`
+- `ghcr.io/dango-tech/adlc5-claude-code-plugin:5.1.0`
+- `ghcr.io/dango-tech/adlc5-cursor-plugin:5.1.0`
+- `ghcr.io/dango-tech/adlc5-hermes-plugin:5.1.0`
+
+These are archive bundles, not runnable Docker images. With [ORAS](https://oras.land/docs/installation),
+run `oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0` in an empty directory,
+verify SHA256SUMS, then extract and run `install.py` using the same OS prerequisites
+as the [download guide](https://adlc5.dev/downloads/). No Docker daemon is needed.
+Versioned registry artifacts retain the exact release bytes and source provenance;
+registry storage adds no native agent certification. Preview status follows the
+associated GitHub Release, not the numeric OCI tag.
+
+To backfill a published release, run **Release host plugin packages** with
+`publish_registry` enabled and `release_tag` set to that release. Normal manual
+candidate builds leave registry publication off. Publication uses job-scoped
+`packages: write`, checks all eight release archives and clean source provenance,
+then pulls each host package back and compares it with the original bytes.
+GitHub initially creates registry packages private; an organization maintainer
+must make each package public in Package settings for anonymous downloads.

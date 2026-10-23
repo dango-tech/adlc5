@@ -4,6 +4,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish_registry:
+        description: Also publish an existing release to GitHub Packages
+        type: boolean
+        default: false
+      release_tag:
+        description: Existing release tag to publish to GitHub Packages
+        type: string
+        default: v5.1.0
 
 permissions:
   contents: write
@@ -66,3 +75,63 @@ jobs:
             "/tmp/adlc5-release-packages/adlc5-hermes-plugin-${version}.zip" \
             "/tmp/adlc5-release-packages/adlc5-hermes-plugin-${version}.tar.gz" \
             "/tmp/adlc5-release-packages/SHA256SUMS"
+
+  registry:
+    needs: packages
+    if: github.event_name == 'release' || inputs.publish_registry
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+      REPOSITORY: ${{ github.repository }}
+      REGISTRY_USER: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        with:
+          version: 1.3.5
+      - name: Download and verify published release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected a version release tag'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/plugin-release"
+          cd "$RUNNER_TEMP/plugin-release"
+          gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'adlc5-*-plugin-*.zip' --pattern 'adlc5-*-plugin-*.tar.gz' --pattern SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+          python "$GITHUB_WORKSPACE/scripts/verify-plugin-release.py" . --version "${RELEASE_TAG#v}"
+      - name: Publish and verify each host package
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          trap 'oras logout ghcr.io' EXIT
+          cd "$RUNNER_TEMP/plugin-release"
+          version="${RELEASE_TAG#v}"
+          owner="${REPOSITORY%%/*}"
+          owner="${owner,,}"
+          for host in codex claude-code cursor hermes; do
+            name="adlc5-${host}-plugin"
+            zip="${name}-${version}.zip"
+            tar="${name}-${version}.tar.gz"
+            mkdir "$host"
+            cp "$zip" "$tar" "$host/"
+            sha256sum "$zip" "$tar" > "$host/SHA256SUMS"
+            ref="ghcr.io/${owner}/${name}:${version}"
+            (
+              cd "$host"
+              oras push --image-spec v1.0 --artifact-type application/vnd.adlc5.plugin.v1 \
+                --annotation "org.opencontainers.image.source=https://github.com/${REPOSITORY}" \
+                --annotation "org.opencontainers.image.version=${version}" \
+                --annotation "org.opencontainers.image.description=ADLC5 ${host} plugin archives. Extract and run install.py; this is not a runnable container. See the linked GitHub release for preview status and OS prerequisites." \
+                "$ref" "$zip:application/zip" "$tar:application/gzip" SHA256SUMS:text/plain
+              oras pull "$ref" --output verify
+              (cd verify && sha256sum --check --strict SHA256SUMS)
+              cmp "$zip" "verify/$zip"
+              cmp "$tar" "verify/$tar"
+            )
+            echo "- Published and pulled back verified package: \`$ref\`" >> "$GITHUB_STEP_SUMMARY"
+          done
