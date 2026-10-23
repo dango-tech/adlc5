@@ -2,6 +2,8 @@
 import hashlib
 import importlib.util
 import json
+import io
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,14 +21,23 @@ class ReleaseTests(unittest.TestCase):
         self.directory = Path(self.temp.name)
         for host in ('codex', 'claude-code', 'cursor', 'hermes'):
             self.archive(host)
-            (self.directory / f'adlc5-{host}-plugin-5.1.0.tar.gz').write_bytes(b'archive fixture')
+            self.archive(host, suffix='tar.gz')
         self.checksums()
 
-    def archive(self, label, **changes):
+    def archive(self, label, suffix='zip', **changes):
         metadata = dict(host='claude' if label == 'claude-code' else label, version='5.1.0', source_revision='a'*40, source_dirty=False)
         metadata.update(changes)
-        with zipfile.ZipFile(self.directory / f'adlc5-{label}-plugin-5.1.0.zip', 'w') as archive:
-            archive.writestr('INSTALL.json', json.dumps(metadata))
+        data = json.dumps(metadata).encode()
+        path = self.directory / f'adlc5-{label}-plugin-5.1.0.{suffix}'
+        if suffix == 'zip':
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('INSTALL.json', data)
+        else:
+            prefix = 'adlc5-5.1.0' if label == 'claude-code' else f'adlc5-{label}-5.1.0'
+            with tarfile.open(path, 'w:gz') as archive:
+                member = tarfile.TarInfo(prefix + '/INSTALL.json')
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
 
     def checksums(self):
         (self.directory / 'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(self.directory.glob('adlc5-*'))))
@@ -49,6 +60,16 @@ class ReleaseTests(unittest.TestCase):
         for changes in ({'version':'5.0.0'}, {'host':'hermes'}, {'source_dirty':True}, {'source_revision':'b'*40}):
             self.archive('codex', **changes); self.checksums()
             with self.assertRaises(ValueError): release.verify(self.directory, '5.1.0')
+
+    def test_invalid_tar_provenance(self):
+        for changes in ({'version':'5.0.0'}, {'host':'hermes'}, {'source_dirty':True}, {'source_revision':'b'*40}):
+            self.archive('codex', suffix='tar.gz', **changes); self.checksums()
+            with self.assertRaises(ValueError): release.verify(self.directory, '5.1.0')
+
+    def test_non_archive_tar_with_valid_checksum(self):
+        next(self.directory.glob('*.tar.gz')).write_bytes(b'not an archive')
+        self.checksums()
+        with self.assertRaises(tarfile.ReadError): release.verify(self.directory, '5.1.0')
 
     def test_unexpected_path(self):
         path = self.directory / 'SHA256SUMS'

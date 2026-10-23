@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import tarfile
 import zipfile
 
 
@@ -27,15 +28,24 @@ def verify(directory, version):
     for name, checksum in checksums.items():
         if hashlib.sha256((directory / name).read_bytes()).hexdigest() != checksum:
             raise ValueError('Archive checksum mismatch: ' + name)
-        if name.endswith('.zip'):
+        suffix = 'zip' if name.endswith('.zip') else 'tar.gz'
+        label = name.removeprefix('adlc5-').removesuffix(f'-plugin-{version}.{suffix}')
+        if suffix == 'zip':
             with zipfile.ZipFile(directory / name) as archive:
                 metadata = json.loads(archive.read('INSTALL.json'))
-            host = 'claude-code' if metadata['host'] == 'claude' else metadata['host']
-            if name != f'adlc5-{host}-plugin-{version}.zip' or metadata['version'] != version:
-                raise ValueError('Archive host/version does not match release')
-            if metadata.get('source_dirty') is not False or not re.fullmatch(r'[0-9a-f]{40}', metadata['source_revision']):
-                raise ValueError('Release requires clean source provenance')
-            revisions.add(metadata['source_revision'])
+        else:
+            prefix = f'adlc5-{version}' if label == 'claude-code' else f'adlc5-{label}-{version}'
+            with tarfile.open(directory / name, 'r:gz') as archive:
+                member = archive.getmember(prefix + '/INSTALL.json')
+                if not member.isfile():
+                    raise ValueError('Tar metadata must be a regular file')
+                metadata = json.load(archive.extractfile(member))
+        host = 'claude-code' if metadata['host'] == 'claude' else metadata['host']
+        if host != label or metadata['version'] != version:
+            raise ValueError('Archive host/version does not match release')
+        if metadata.get('source_dirty') is not False or not re.fullmatch(r'[0-9a-f]{40}', metadata['source_revision']):
+            raise ValueError('Release requires clean source provenance')
+        revisions.add(metadata['source_revision'])
     if len(revisions) != 1:
         raise ValueError('Host packages must share one source revision')
     return revisions.pop()
