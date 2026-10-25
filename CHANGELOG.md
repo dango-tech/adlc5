@@ -2,9 +2,23 @@
 
 ## [Unreleased]
 
+## [5.2.0] — Agent-product governance
+
 ### Added
 
 - **Agent-product governance:** state field `product_type` (`software` | `agent`). For agent products, `plan-complete` adds the `agent_governance` check, which requires `design/1d-agent-governance.md` with all eight sections filled (suitability and autonomy, tool inventory, trust boundaries, runtime limits, interruptibility, attribution and audit, monitoring, red-team and evals). Plan's STRIDE pass covers agentic threats, `@qa` Phase 1 adds an agent red-team step, Specify adds an Autonomy & agency NFR, and Discover asks whether an agent is the right tool. See [agent governance](core/guides/agent-governance.md).
+- **GitHub Packages:** each release also publishes the four host archives to `ghcr.io/dango-tech/adlc5-<host>-plugin:<version>`, pulled back and checksum-verified after upload. See [Downloads](website/docs/downloads.md).
+
+### Fixed
+
+- **Skill registry:** `core/skill-registry.yaml` lists all skills (13 were missing: design critic, TDD, complexity review, infra, deploy, autoresearch experimenter, and the seven PBE skills); a contract test now fails on drift.
+- **Pulse band after entering a worktree:** the band now shows the worktree's workspace instead of the main checkout's.
+- **Duplicate hooks in the ADLC5 repo:** the classic Claude hook template moved from `.claude/settings.json` to `templates/claude-settings.json`, so working in this repo with the plugin no longer runs the usage and engagement hooks twice. `init-workspace.sh --with-hooks --hooks-platform claude` installs the same `.claude/settings.json` as before, and now also works from a plugin package. `adlc5-setup` no longer reports a project `.mcp.json` server that Claude settings turn off with `disabledMcpjsonServers`.
+
+## [5.1.0] — Pulse, supervised runner and requirements readiness
+
+### Added
+
 - **ADLC5 Pulse (5.1.0):** on-demand CLI/MCP snapshots, cached terminal band and handoff, a self-contained offline board using the existing brand, read-only gate receipts bound to canonical inputs and mutable dependencies, and the `@adlc5-pulse` skill across all three plugin packages. Usage shows an attributable subtotal with unknown coverage preserved. See [Pulse](docs/pulse.md).
 - Claude Desktop Pulse qualification: use the host plugin-root API and awaited refresh, surface action failures, and support upload packages without top-level PATH executables.
 - Pulse card and board now show evidence-backed outcome success, observed cost savings for matched direct/candidate runs, escaped defects, and rework; unavailable metrics remain Not measured.
@@ -13,14 +27,12 @@
 
 ### Fixed
 
-- **Skill registry:** `core/skill-registry.yaml` lists all skills (13 were missing: design critic, TDD, complexity review, infra, deploy, autoresearch experimenter, and the seven PBE skills); a contract test now fails on drift.
 - **Runner adapters and recovery:** Cursor token usage is read from the CLI's actual camelCase counters; Claude Code's observed model is read from `modelUsage`; usage from failed attempts is kept in the ledger. The runner now reuses a host-created worktree that is on its own named branch, no longer resets uncommitted changes when resuming after a human question, hands off at PR review with exit code 10 instead of failing, reads the worker deadline from the feature's `wall_clock_cap_minutes`, requires an explicit host, passes `--trust` to headless Cursor, uses the QA brief for the QA step, and never moves a reasoning-tier step down a tier on retry. Worker prompts put the per-attempt id last so workers share a cacheable prefix.
 - **Verification could never pass:** closed attempt records did not carry the step or story, so the runner found no coder sessions for the review and the retry ladder never escalated. They now do.
 - **Rework loop:** failed checks or a rejected review route to a coder with the findings, then to a fresh review, capped by `verification_per_story`.
 - **Worktree for a dirty main checkout** is created at `.worktrees/FEATURE` and the feature state is moved, not copied; later runs from the main checkout are redirected.
 - **Cost:** Codex cached input is no longer double-counted; OpenAI list prices added to `core/model-prices.yaml`; `~/.adlc5/model-prices.yaml` layers user prices on top.
 - **Summary:** deviations are recorded and listed, including briefs over the per-tier pack budget.
-- **Duplicate hooks in the ADLC5 repo:** the classic Claude hook template moved from `.claude/settings.json` to `templates/claude-settings.json`, so working in this repo with the plugin no longer runs the usage and engagement hooks twice. `init-workspace.sh --with-hooks --hooks-platform claude` installs the same `.claude/settings.json` as before, and now also works from a plugin package. `adlc5-setup` no longer reports a project `.mcp.json` server that Claude settings turn off with `disabledMcpjsonServers`.
 
 ### Changed
 

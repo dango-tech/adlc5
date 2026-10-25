@@ -224,13 +224,13 @@ Release ZIPs do not populate the repository's Packages tab. The release workflow
 also publishes the existing, checksum-verified release assets as four OCI archive
 packages linked to this repository:
 
-- `ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0`
-- `ghcr.io/dango-tech/adlc5-claude-code-plugin:5.1.0`
-- `ghcr.io/dango-tech/adlc5-cursor-plugin:5.1.0`
-- `ghcr.io/dango-tech/adlc5-hermes-plugin:5.1.0`
+- `ghcr.io/dango-tech/adlc5-codex-plugin:5.2.0`
+- `ghcr.io/dango-tech/adlc5-claude-code-plugin:5.2.0`
+- `ghcr.io/dango-tech/adlc5-cursor-plugin:5.2.0`
+- `ghcr.io/dango-tech/adlc5-hermes-plugin:5.2.0`
 
 These are archive bundles, not runnable Docker images. With [ORAS](https://oras.land/docs/installation),
-run `oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0` in an empty directory,
+run `oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.2.0` in an empty directory,
 verify SHA256SUMS, then extract and run `install.py` using the same OS prerequisites
 as the [download guide](https://adlc5.dev/downloads/). No Docker daemon is needed.
 Versioned registry artifacts retain the exact release bytes and source provenance;

@@ -1,6 +1,6 @@
 # ADLC5 Pulse
 
-Pulse presents a local, on-demand view of ADLC5 feature progress, recorded evidence, usage coverage, and a suggested next action. It is available in ADLC5 5.1.0 through the shared CLI, a read-only MCP snapshot tool, and the Codex, Claude Code, and Cursor plugin packages.
+Pulse presents a local, on-demand view of ADLC5 feature progress, recorded evidence, usage coverage, and a suggested next action. It is available since ADLC5 5.1.0 through the shared CLI, a read-only MCP snapshot tool, and the Codex, Claude Code, and Cursor plugin packages.
 
 Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run consumer commands, change lifecycle state, write files, or make network requests. `board` is the explicit write operation: every invocation writes the shared offline page at `~/.adlc5/pulse/board.html`. Derived feature caches live under `~/.adlc5/pulse/workspaces/<workspace-hash>/`; no new Pulse files are written into consumer worktrees. `--open` opens that shared page.
 

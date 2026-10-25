@@ -4,20 +4,20 @@ description: "Download ADLC5 host plugin packages for Windows, macOS, and Ubuntu
 
 # Download ADLC5 plugins
 
-ADLC5 is public preview. These **5.1.0 candidate packages** are distributed through
-[GitHub Releases](https://github.com/dango-tech/adlc5/releases/tag/v5.1.0).
+ADLC5 is public preview. These **5.2.0 candidate packages** are distributed through
+[GitHub Releases](https://github.com/dango-tech/adlc5/releases/tag/v5.2.0).
 The same Python/source archives serve Windows, macOS and Ubuntu; choose your
 **agent host**, rather than a CPU architecture. They contain no bundled Python,
 Bash or agent executable. Native agent availability depends on the host vendor.
 
 | Agent | ZIP (all three operating systems) | tar.gz (macOS / Ubuntu) |
 | --- | --- | --- |
-| Codex | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-codex-plugin-5.1.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-codex-plugin-5.1.0.tar.gz) |
-| Claude Code | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-claude-code-plugin-5.1.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-claude-code-plugin-5.1.0.tar.gz) |
-| Cursor | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-cursor-plugin-5.1.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-cursor-plugin-5.1.0.tar.gz) |
-| Hermes Agent | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-hermes-plugin-5.1.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/adlc5-hermes-plugin-5.1.0.tar.gz) |
+| Codex | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-codex-plugin-5.2.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-codex-plugin-5.2.0.tar.gz) |
+| Claude Code | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-claude-code-plugin-5.2.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-claude-code-plugin-5.2.0.tar.gz) |
+| Cursor | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-cursor-plugin-5.2.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-cursor-plugin-5.2.0.tar.gz) |
+| Hermes Agent | [Download ZIP](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-hermes-plugin-5.2.0.zip) | [Download tar.gz](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/adlc5-hermes-plugin-5.2.0.tar.gz) |
 
-[Download SHA256SUMS](https://github.com/dango-tech/adlc5/releases/download/v5.1.0/SHA256SUMS).
+[Download SHA256SUMS](https://github.com/dango-tech/adlc5/releases/download/v5.2.0/SHA256SUMS).
 Each archive contains `INSTALL.json` with host, version and exact source commit.
 Use the release's validation link for OS test results. Checks cover archive
 integrity, extraction, installer plans and preservation; they do not establish
@@ -27,9 +27,9 @@ live end-to-end qualification for every host/OS combination.
 
 The [repository Packages tab](https://github.com/dango-tech/adlc5/packages)
 contains registry copies of the same archives. Each host uses
-`ghcr.io/dango-tech/adlc5-<host>-plugin:5.1.0`, where `<host>` is `codex`,
+`ghcr.io/dango-tech/adlc5-<host>-plugin:5.2.0`, where `<host>` is `codex`,
 `claude-code`, `cursor` or `hermes`. Use
-`oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.1.0` in an empty directory,
+`oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.2.0` in an empty directory,
 then verify and extract the downloaded archive. These are OCI archive bundles,
 not runnable containers; Docker is not required. See the
 [registry guide](https://github.com/dango-tech/adlc5/blob/main/docs/agent-plugins.md#github-packages-registry).
