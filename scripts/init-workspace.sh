@@ -488,8 +488,10 @@ install_platform_hooks() {
   local platform="$1" config_name="$2"
   local hooks_src="${ADLC5_ROOT}/.${platform}"
   local hooks_dst="${PROJECT}/.${platform}"
-  if [[ ! -f "${hooks_src}/${config_name}" ]]; then
-    echo "WARN: --with-hooks requested '${platform}' but ${hooks_src}/${config_name} not found" >&2
+  # Optional 3rd arg: config template kept outside .${platform}/ so it does not also load in this repo.
+  local config_src="${3:-${hooks_src}/${config_name}}"
+  if [[ ! -f "${config_src}" ]]; then
+    echo "WARN: --with-hooks requested '${platform}' but ${config_src} not found" >&2
     return 0
   fi
   echo "Installing ${platform} hooks"
@@ -498,7 +500,7 @@ install_platform_hooks() {
     return 0
   fi
   mkdir -p "${hooks_dst}/hooks"
-  cp "${hooks_src}/${config_name}" "${hooks_dst}/${config_name}"
+  cp "${config_src}" "${hooks_dst}/${config_name}"
   if [[ -d "${hooks_src}/hooks" ]]; then
     for hook_script in "${hooks_src}/hooks"/*; do
       [[ -f "$hook_script" ]] || continue
@@ -523,7 +525,7 @@ if [[ "$WITH_HOOKS" -eq 1 ]]; then
   for platform in "${selected_hook_platforms[@]}"; do
     case "$platform" in
       cursor) install_platform_hooks cursor hooks.json ;;
-      claude) install_platform_hooks claude settings.json ;;
+      claude) install_platform_hooks claude settings.json "${ADLC5_ROOT}/templates/claude-settings.json" ;;
       codex) install_platform_hooks codex hooks.json ;;
       *) echo "WARN: unknown --hooks-platform value: ${platform} (expected cursor, claude, codex, or all)" >&2 ;;
     esac

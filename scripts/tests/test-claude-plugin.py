@@ -418,6 +418,18 @@ class PluginTest(unittest.TestCase):
         self.assertIn("DUPLICATE (skills)", r.stdout)
         self.assertTrue(settings.exists() and (home / ".claude/skills/adlc5-specify").is_symlink())
 
+    def test_setup_ignores_project_mcp_server_disabled_in_settings(self):
+        repo = self.consumer("mcp-dup")
+        (repo / ".mcp.json").write_text(json.dumps({"mcpServers": {"adlc5": {"args": ["x/adlc5-mcp.py"]}}}))
+        home = self.tmp / "home-mcp"
+        home.mkdir()
+        r = self.setup_script(repo, "--check", env={"HOME": str(home)})
+        self.assertIn("DUPLICATE (mcp)", r.stdout)
+        (repo / ".claude").mkdir()
+        (repo / ".claude/settings.local.json").write_text(json.dumps({"disabledMcpjsonServers": ["adlc5"]}))
+        r = self.setup_script(repo, "--check", env={"HOME": str(home)})
+        self.assertNotIn("DUPLICATE (mcp)", r.stdout)
+
     def test_linked_worktree_shares_static_layer_but_not_feature_state(self):
         main = self.consumer("wt-main")
         (main / "f.txt").write_text("x")
