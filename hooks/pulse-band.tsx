@@ -28,7 +28,8 @@ async function refresh($: EngineInterface) {
   loading = true
   try {
     snapshotProblem = 'workspace lookup failed'
-    cwd = cwd || await $.session.cwd()
+    // Re-read every refresh: the session may move into a worktree after start.
+    cwd = await $.session.cwd()
     snapshotProblem = 'plugin runtime unavailable'
     pluginRoot = $.plugin.root
     snapshotProblem = 'feature selection failed'
