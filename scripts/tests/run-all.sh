@@ -2402,6 +2402,22 @@ for skill in ('adlc5', 'specify', 'plan', 'tasks', 'implement', 'adlc5-soul'):
 PY
 pass "release-coupled skill version coherence"
 
+# Release download docs and the registry workflow's default tag name the current release.
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+version = Path('core/VERSION').read_text(encoding='utf-8').strip()
+# Every X.Y.Z on these pages is the release; prerequisites are written as X.Y+.
+for doc in ('website/docs/downloads.md', 'docs/agent-plugins.md'):
+    found = set(re.findall(r'\b\d+\.\d+\.\d+\b', Path(doc).read_text(encoding='utf-8')))
+    assert found == {version}, f'{doc}: {sorted(found)} != {version}'
+workflow = Path('.github/workflows/release-plugin-packages.yml').read_text(encoding='utf-8')
+match = re.search(r'release_tag:.*?default:\s*v(\S+)', workflow, re.DOTALL)
+assert match and match.group(1) == version, f'release_tag default: {match.group(1) if match else "missing"} != {version}'
+PY
+pass "release download docs version coherence"
+
 # SOUL 4.0 must carry the graph/evidence reasoning lens on every host surface
 python3 - <<'PY'
 from pathlib import Path
