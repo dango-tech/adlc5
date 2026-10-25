@@ -102,6 +102,36 @@ Tiny work keeps decisions in one `change.md`. Standard work keeps a brief
 QA and human approval. Knowledge-base and craftsmanship material are pulled in
 when a concrete problem needs them.
 
+## Skills and capabilities
+
+Stage skills drive the lifecycle; supporting skills are invoked when a concrete
+need arises and never add stages. Host plugin namespaces may prefix these names.
+
+| Area | Skills |
+|---|---|
+| Lifecycle | `@adlc5` (navigator and autopilot), `@adlc5-specify`, `@adlc5-plan`, `@adlc5-tasks`, `@adlc5-implement`, `@adlc5-setup` |
+| Requirements discovery | `@discover` (LLM council exploration and risk challenge), `@prt` (product requirements, UX, epics) |
+| Design and craftsmanship | `@clean-architecture-review`, `@design-pattern-advisor`, `@algorithm-advisor`, `@adlc5-design-critic` |
+| Build and verification | `@build-implementer`, `@adlc5-tdd`, `@assure-verifier`, `@adlc5-assure-reworker`, `@complexity-review`, `@craftsmanship-code-review` |
+| Quality, PR and release | `@qa` (security, quality gate, deployment clearance), `@pr-reviewer`, `@infra`, `@deploy` (always HITL for production) |
+| Patterns (PBE) | `@pbe-pattern-opportunity`, `@pbe-select-patterns`, `@pbe-review-with-patterns`, and catalog skills for ROI, exemplar analysis, pattern description and MVP delivery |
+| Experimentation | `@autoresearch` (budgeted accept/reject iteration loop) |
+| Visibility and memory | `@adlc5-pulse`, `@adlc5-project-wiki`, `@adlc5-soul` (reasoning discipline) |
+
+The [skill map](shared/docs/SKILL-MAP.md) is the full catalog; the
+machine-readable list is [core/skill-registry.yaml](core/skill-registry.yaml).
+
+### Building AI agent products
+
+When the feature ships an AI agent (tool calls, internal data, actions for users),
+set `product_type: agent` in feature state. `plan-complete` then requires a filled
+`design/1d-agent-governance.md`: suitability and autonomy level, a tool inventory
+with reversibility and approval gates, trust boundaries against prompt injection,
+enforced cost/step/time limits, interruptibility, attribution and audit, monitoring,
+and red-team evals that `@qa` runs before clearance. See
+[agent governance](core/guides/agent-governance.md) and
+[agent orchestration](core/guides/agent-orchestration.md).
+
 ## Intelligence — the fifth pillar
 
 ADLC5 gathers repository knowledge, gives agents relevant context, and uses

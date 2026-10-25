@@ -22,6 +22,7 @@ gates:
       - design_contracts
       - design_operations
       - design_critique   # design/design-critique.md — blocking fails; missing fails in autonomous, warns in HITL
+      - agent_governance  # only when state.product_type == agent — design/1d-agent-governance.md, all sections, no TODO
 
   tasks-1-stories-complete:
     stage: tasks

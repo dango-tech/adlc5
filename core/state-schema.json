@@ -61,6 +61,10 @@
         }
       }
     },
+    "product_type": {
+      "enum": ["software", "agent"],
+      "description": "agent = the feature ships an AI agent product; plan-complete then requires design/1d-agent-governance.md"
+    },
     "scale_nfrs": {
       "type": "object",
       "properties": {

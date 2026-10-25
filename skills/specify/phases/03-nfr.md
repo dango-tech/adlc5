@@ -20,6 +20,11 @@ Walk each category with the user (AskQuestion, batch related items). Record ever
 | **Data** | Retention/deletion policy, migration/backfill needs, backwards compatibility of schemas and APIs, versioning/deprecation policy |
 | **Operability** | Observability expectations (logs/metrics/traces), alerting thresholds, feature flags, rollout/rollback strategy |
 | **UX quality** | Accessibility target (e.g. WCAG 2.1 AA), i18n/l10n, supported platforms/browsers |
+| **Autonomy & agency** (agent products) | Why an agent vs a workflow; autonomy level (suggest / act-with-approval / act-and-audit); worst plausible action; on-behalf-of identity; data it may read and send out; cost/step/time ceilings; default when uncertain. See [agent-governance.md](../../../core/guides/agent-governance.md) |
+
+## Product type (state)
+
+If the feature ships an AI agent that calls tools or acts for users, record it: `./scripts/adlc5 state set --feature "{feature}" --patch '{"product_type":"agent"}'`. This makes `plan-complete` require `design/1d-agent-governance.md`. Otherwise leave it unset or `"software"`.
 
 Downstream consumers:
 

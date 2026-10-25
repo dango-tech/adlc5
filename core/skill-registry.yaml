@@ -1,4 +1,4 @@
-# ADLC5 invokable skill registry (~12 core + aux)
+# ADLC5 invokable skill registry — every skills/*/SKILL.md is listed
 schema_version: "3.0"
 framework_version: "5.1.0"
 
@@ -121,3 +121,77 @@ craftsmanship:
     invoke: "@craftsmanship-code-review"
     path: skills/craftsmanship-code-review/SKILL.md
     stage: implement
+
+  - id: complexity-review
+    invoke: "@complexity-review"
+    path: skills/complexity-review/SKILL.md
+    stage: implement
+
+  - id: adlc5-tdd
+    invoke: "@adlc5-tdd"
+    path: skills/adlc5-tdd/SKILL.md
+    stage: implement
+    role: FIRST tests, red-green-refactor discipline for build workers
+
+design:
+  - id: adlc5-design-critic
+    invoke: "@adlc5-design-critic"
+    path: skills/adlc5-design-critic/SKILL.md
+    stage: plan
+    subagent: true
+    role: Read-only design coherence check (plan-7-design-critique)
+
+delivery:
+  - id: infra
+    invoke: "@infra"
+    path: skills/infra/SKILL.md
+    stage: plan
+    role: IaC authoring and validation (never applies)
+
+  - id: deploy
+    invoke: "@deploy"
+    path: skills/deploy/SKILL.md
+    stage: post-pr
+    role: Clearance-gated deployment orchestration, always HITL for production
+
+  - id: autoresearch-experimenter
+    invoke: "@autoresearch-experimenter"
+    path: skills/autoresearch-experimenter/SKILL.md
+    subagent: true
+    role: Runs one autoresearch trial
+
+pbe:
+  - id: pbe-pattern-opportunity
+    invoke: "@pbe-pattern-opportunity"
+    path: skills/pbe-pattern-opportunity/SKILL.md
+    stage: plan
+
+  - id: pbe-select-patterns
+    invoke: "@pbe-select-patterns"
+    path: skills/pbe-select-patterns/SKILL.md
+    stage: plan
+
+  - id: pbe-review-with-patterns
+    invoke: "@pbe-review-with-patterns"
+    path: skills/pbe-review-with-patterns/SKILL.md
+    stage: implement
+
+  - id: pbe-determine-business-impact
+    invoke: "@pbe-determine-business-impact"
+    path: skills/pbe-determine-business-impact/SKILL.md
+    role: Catalog ROI gate
+
+  - id: pbe-exemplar-analysis
+    invoke: "@pbe-exemplar-analysis"
+    path: skills/pbe-exemplar-analysis/SKILL.md
+    role: Catalog — derive pattern structure from reference code
+
+  - id: pbe-pattern-description
+    invoke: "@pbe-pattern-description"
+    path: skills/pbe-pattern-description/SKILL.md
+    role: Catalog — write org pattern specification
+
+  - id: pbe-piecemeal-skill
+    invoke: "@pbe-piecemeal-skill"
+    path: skills/pbe-piecemeal-skill/SKILL.md
+    role: Catalog — MVP pattern implementation as skill/rule/hook

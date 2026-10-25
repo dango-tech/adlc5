@@ -19,6 +19,8 @@
 | Memory scope | |
 | Max steps / budget | |
 
+**Governance:** tool inventory, trust boundaries, limits, interruptibility, audit, and red-team live in [agent-governance.md](agent-governance.md) → `design/1d-agent-governance.md` (gated by `plan-complete`).
+
 ## Human-in-the-loop
 
 | Gate | Trigger | Action |

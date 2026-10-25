@@ -927,13 +927,44 @@ def check_design_critique(workspace: Path, feature: str, policies: dict) -> list
     ]
 
 
+AGENT_GOVERNANCE_SECTIONS = (
+    "Suitability & autonomy",
+    "Tool inventory",
+    "Trust boundaries",
+    "Runtime limits",
+    "Interruptibility",
+    "Attribution & audit",
+    "Monitoring",
+    "Red-team & evals",
+)
+
+
+def check_agent_governance(workspace: Path, feature: str, state: dict) -> list[dict]:
+    """Agent products need design/1d-agent-governance.md with every section filled (no TODO left)."""
+    if state.get("product_type") != "agent":
+        return []
+    rel = "design/1d-agent-governance.md"
+    path = workspace / ".adlc5" / feature / rel
+    if not path.is_file():
+        return [{"id": "agent_governance", "status": "fail", "message": f"product_type is agent but {rel} is missing — copy templates/agent-product/agent-governance.md"}]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    headings = {h.strip().lower() for h in re.findall(r"(?m)^##\s+(.+?)\s*$", text)}
+    missing = [s for s in AGENT_GOVERNANCE_SECTIONS if s.lower() not in headings]
+    if missing:
+        return [{"id": "agent_governance", "status": "fail", "message": f"{rel} missing sections: {', '.join(missing)}"}]
+    todos = len(re.findall(r"\bTODO\b", text))
+    if todos:
+        return [{"id": "agent_governance", "status": "fail", "message": f"{rel} has {todos} unfilled TODO marker(s); write a decision or 'N/A — reason'"}]
+    return [{"id": "agent_governance", "status": "pass", "message": f"{rel} complete"}]
+
+
 def check_v2_plan_complete(
     workspace: Path, feature: str, state: dict, policies: dict | None = None
 ) -> list[dict]:
     checks: list[dict] = []
     if profile_name(policies or {}) == "standard":
         path = workspace / ".adlc5" / feature / "design/plan.md"
-        return [{"id": "compact_plan", "status": "pass" if path.is_file() and path.read_text().strip() else "fail", "message": "standard requires nonempty design/plan.md"}]
+        return [{"id": "compact_plan", "status": "pass" if path.is_file() and path.read_text().strip() else "fail", "message": "standard requires nonempty design/plan.md"}] + check_agent_governance(workspace, feature, state)
     craft = state.get("craftsmanship") or {}
     for key, cid in (
         ("architecture_review", "craftsmanship_architecture"),
@@ -970,6 +1001,7 @@ def check_v2_plan_complete(
             }
         )
     checks.extend(check_design_critique(workspace, feature, policies or {}))
+    checks.extend(check_agent_governance(workspace, feature, state))
     return checks
 
 

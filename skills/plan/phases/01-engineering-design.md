@@ -33,9 +33,11 @@ Write `design/1c-operations.md` — security, performance, observability, deploy
 Required sections:
 
 1. **Threat model** — for each trust boundary and external input from `design/1b-contracts.md`, walk STRIDE (spoofing, tampering, repudiation, information disclosure, denial of service, elevation of privilege). Record: threat → affected asset → mitigation (design decision, not "scan later") → residual risk. Cover the authn/authz model, data classification, and secrets handling captured in spec-handoff **NFRs & compliance**. Mitigations become code-spec tasks in `tasks-2-code-spec`; `@qa` Phase 1 verifies them, it does not replace them.
+   **Agentic threats** (when `state.product_type` is `agent`) — add these to the STRIDE pass for every LLM input and tool boundary: direct prompt injection/jailbreak; indirect injection via RAG, MCP/tool output, email, web, or files; tool and argument hijacking; unauthorized irreversible actions; excessive agency (more tools or scope than the task needs); data exfiltration through over-provisioned credentials or outputs; system prompt and secret leakage; runaway loops and cost exhaustion; in multi-agent designs, agents trusting each other's messages unverified. Mitigations go in `design/1d-agent-governance.md`.
 2. **Performance** — budgets against `state.scale_nfrs`; hot paths flagged for `@complexity-review`.
 3. **Observability** — logs/metrics/traces per the operability NFRs; alert conditions with thresholds.
 4. **Deployment & rollback** — rollout strategy, feature flags, migration/backfill ordering, rollback plan for each irreversible step.
+5. **Agent governance** (when `state.product_type` is `agent`) — copy [templates/agent-product/agent-governance.md](../../../templates/agent-product/agent-governance.md) to `design/1d-agent-governance.md` and fill every section per [agent-governance.md](../../../core/guides/agent-governance.md). The `plan-complete` check `agent_governance` fails while a section is missing or a placeholder remains.
 
 ### plan-7-design-critique
 

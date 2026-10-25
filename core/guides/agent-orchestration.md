@@ -73,6 +73,8 @@ Copy into `.adlc5/{feature}/design/` or PRD when `product_type: agent`:
 
 Template: [templates/agent-product/spec-checklist.md](../../templates/agent-product/spec-checklist.md)
 
+**Governance (gated):** set `product_type: agent` in state during Specify; `plan-complete` then requires `design/1d-agent-governance.md` — see [agent-governance.md](agent-governance.md).
+
 ---
 
 ## Scripts over prompts
