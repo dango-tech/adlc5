@@ -32,14 +32,14 @@ not an estimate. `scripts/claude-usage.py` just reads that file.
   --with-hooks --hooks-platform claude
 ```
 
-This copies `.claude/settings.json` (wiring `UserPromptSubmit` and `Stop`
+This copies `templates/claude-settings.json` to `.claude/settings.json` (wiring `UserPromptSubmit` and `Stop`
 hooks to `.claude/hooks/claude-usage.sh`) and the wrapper script itself into
 the target project. No `~/.adlc5/*.env` file, no secret, no LaunchAgent.
 
 If the project already has its own `.claude/settings.json` with hooks you
 care about, don't run `--with-hooks --hooks-platform claude` blindly — it
 overwrites the whole file. Merge the `UserPromptSubmit`/`Stop` entries from
-`.claude/settings.json` in this repo into yours by hand instead.
+`templates/claude-settings.json` in this repo into yours by hand instead.
 
 ## How binding works
 

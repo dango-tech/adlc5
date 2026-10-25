@@ -20,6 +20,7 @@
 - **Worktree for a dirty main checkout** is created at `.worktrees/FEATURE` and the feature state is moved, not copied; later runs from the main checkout are redirected.
 - **Cost:** Codex cached input is no longer double-counted; OpenAI list prices added to `core/model-prices.yaml`; `~/.adlc5/model-prices.yaml` layers user prices on top.
 - **Summary:** deviations are recorded and listed, including briefs over the per-tier pack budget.
+- **Duplicate hooks in the ADLC5 repo:** the classic Claude hook template moved from `.claude/settings.json` to `templates/claude-settings.json`, so working in this repo with the plugin no longer runs the usage and engagement hooks twice. `init-workspace.sh --with-hooks --hooks-platform claude` installs the same `.claude/settings.json` as before, and now also works from a plugin package. `adlc5-setup` no longer reports a project `.mcp.json` server that Claude settings turn off with `disabledMcpjsonServers`.
 
 ### Changed
 

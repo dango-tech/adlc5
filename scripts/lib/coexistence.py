@@ -16,6 +16,18 @@ def _hook_commands(settings: Path) -> bool:
     return any(marker in text for marker in HOOK_MARKERS)
 
 
+def _mcp_disabled(project: Path) -> bool:
+    """True when project Claude settings turn the .mcp.json adlc5 server off (disabledMcpjsonServers)."""
+    for name in ("settings.json", "settings.local.json"):
+        try:
+            data = json.loads((project / ".claude" / name).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict) and "adlc5" in (data.get("disabledMcpjsonServers") or []):
+            return True
+    return False
+
+
 def _adlc5_skill_entries(directory: Path) -> list[str]:
     if not directory.is_dir():
         return []
@@ -51,7 +63,8 @@ def find_duplicates(project: Path, home: Path | None = None) -> list[dict[str, s
             })
 
     project_mcp = project / ".mcp.json"
-    if project_mcp.is_file() and "adlc5-mcp" in project_mcp.read_text(encoding="utf-8", errors="replace"):
+    if (project_mcp.is_file() and "adlc5-mcp" in project_mcp.read_text(encoding="utf-8", errors="replace")
+            and not _mcp_disabled(project)):
         found.append({
             "kind": "mcp",
             "path": str(project_mcp),
