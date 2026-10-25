@@ -31,7 +31,7 @@ progression; see [requirements readiness](../../docs/requirements-readiness.md).
 | `plan-3-engineering-algorithms` | `@algorithm-advisor` (if scale NFRs) | `craftsmanship.algorithm_review` |
 | `plan-4-design-discovery` | — | `design/1a-discovery.md` |
 | `plan-5-design-contracts` | — | `design/1b-contracts.md` |
-| `plan-6-design-operations` | Threat model (STRIDE) | `design/1c-operations.md` |
+| `plan-6-design-operations` | Threat model (STRIDE + agentic threats) | `design/1c-operations.md`; `design/1d-agent-governance.md` when `product_type: agent` ([guide](../../core/guides/agent-governance.md)) |
 | `plan-7-design-critique` | `@adlc5-design-critic` | `design/design-critique.md` |
 
 Phase docs: [phases/](phases/)

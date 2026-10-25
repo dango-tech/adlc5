@@ -368,6 +368,32 @@ set -e
 [[ "$EC" -eq 0 ]] || fail "plan-complete with none critique expected pass, got $EC"
 pass "check-gates plan critique none passes"
 
+# agent_governance: product_type agent requires a filled design/1d-agent-governance.md
+PLAN_STATE="${TMP}/.adlc5/${PLAN_FEATURE}/state.json"
+GOV="${TMP}/.adlc5/${PLAN_FEATURE}/design/1d-agent-governance.md"
+jq '.product_type = "agent"' "$PLAN_STATE" >"${PLAN_STATE}.tmp" && mv "${PLAN_STATE}.tmp" "$PLAN_STATE"
+set +e
+./scripts/check-gates.py --feature "$PLAN_FEATURE" --workspace "$TMP" --gate plan-complete >/tmp/plan-gov.json
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] && jq -e '.checks[] | select(.id == "agent_governance" and .status == "fail")' /tmp/plan-gov.json >/dev/null \
+  || fail "agent product without governance doc must fail plan-complete, got $EC"
+cp templates/agent-product/agent-governance.md "$GOV"
+set +e
+./scripts/check-gates.py --feature "$PLAN_FEATURE" --workspace "$TMP" --gate plan-complete >/tmp/plan-gov.json
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] && jq -e '.checks[] | select(.id == "agent_governance" and (.message | test("TODO")))' /tmp/plan-gov.json >/dev/null \
+  || fail "unfilled governance template must fail plan-complete, got $EC"
+sed 's/TODO/decided/g' templates/agent-product/agent-governance.md >"$GOV"
+set +e
+./scripts/check-gates.py --feature "$PLAN_FEATURE" --workspace "$TMP" --gate plan-complete >/dev/null
+EC=$?
+set -e
+[[ "$EC" -eq 0 ]] || fail "filled governance doc expected pass, got $EC"
+jq 'del(.product_type)' "$PLAN_STATE" >"${PLAN_STATE}.tmp" && mv "${PLAN_STATE}.tmp" "$PLAN_STATE"
+pass "check-gates agent_governance gates agent products"
+
 # deploy-ready: fails without deploy_approval, passes with clearance + pr + approval
 set +e
 ./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate deploy-ready >/tmp/deploy-out.json

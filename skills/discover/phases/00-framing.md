@@ -101,6 +101,8 @@ Skip anything that doesn't apply."
 
 Store as `framing.constraints`.
 
+**If the idea is an AI agent** (it calls tools, reads internal data, or acts for users), also ask: "Why an agent rather than a fixed workflow? What is the worst action it could take, and can it be undone? Should it suggest, act after approval, or act on its own with an audit trail?" Store under `framing.constraints` as the agent suitability note; the council treats it as a constraint. See [agent-governance.md](../../../core/guides/agent-governance.md).
+
 ### Step 6: Prior Art
 
 ```
