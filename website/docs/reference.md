@@ -26,6 +26,8 @@ and current evidence connect all four stages.
 | [Skill map](https://github.com/dango-tech/adlc5/blob/main/shared/docs/SKILL-MAP.md) | Lifecycle and auxiliary invokes |
 | [Repository context](https://github.com/dango-tech/adlc5/blob/main/core/guides/repository-context.md) | Constitution and generated intelligence |
 | [Model routing](https://github.com/dango-tech/adlc5/blob/main/core/guides/model-matrix.md) | Host tiers and execution policy |
+| [Agent governance](https://github.com/dango-tech/adlc5/blob/main/core/guides/agent-governance.md) | `product_type: agent`, the `agent_governance` Plan check, guardrail controls and agent red-team |
+| [Agent orchestration](https://github.com/dango-tech/adlc5/blob/main/core/guides/agent-orchestration.md) | Building AI agent products: patterns, evals, release and observability |
 | [Knowledge base](https://github.com/dango-tech/adlc5/blob/main/shared/docs/knowledge-base/README.md) | On-demand craftsmanship material |
 | [Public project overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview) | Public preview, brownfield context, and current qualification limits |
 
@@ -48,9 +50,13 @@ Framework version lives in `core/VERSION`; persisted state uses schema `3.0`.
 | Intent | Invoke |
 | --- | --- |
 | Requirements discovery | `@discover`, `@prt` |
-| Architecture and patterns | `@clean-architecture-review`, `@design-pattern-advisor` |
-| Story implementation and verification | `@build-implementer`, `@assure-verifier` |
+| Architecture and design review | `@clean-architecture-review`, `@design-pattern-advisor`, `@algorithm-advisor`, `@adlc5-design-critic` |
+| Story implementation and verification | `@build-implementer`, `@adlc5-tdd`, `@assure-verifier`, `@adlc5-assure-reworker` |
+| Code quality review | `@craftsmanship-code-review`, `@complexity-review` |
 | Quality and PR review | `@qa`, `@pr-reviewer` |
+| Pattern-based engineering | `@pbe-pattern-opportunity`, `@pbe-select-patterns`, `@pbe-review-with-patterns`, `@pbe-determine-business-impact`, `@pbe-exemplar-analysis`, `@pbe-pattern-description`, `@pbe-piecemeal-skill` |
+| Budgeted experimentation | `@autoresearch` |
+| Delivery snapshot and reasoning discipline | `@adlc5-pulse`, `@adlc5-soul` |
 | Team-shared repository memory | `@adlc5-project-wiki` |
 | Infrastructure and authorized deployment | `@infra`, `@deploy` |
 

@@ -394,6 +394,15 @@ set -e
 jq 'del(.product_type)' "$PLAN_STATE" >"${PLAN_STATE}.tmp" && mv "${PLAN_STATE}.tmp" "$PLAN_STATE"
 pass "check-gates agent_governance gates agent products"
 
+python3 - <<'PY'
+import re
+from pathlib import Path
+registered = set(re.findall(r'path:\s*(skills/[^/]+)/SKILL\.md', Path('core/skill-registry.yaml').read_text()))
+on_disk = {str(p.parent) for p in Path('skills').glob('*/SKILL.md')}
+assert registered == on_disk, f"skill-registry drift: unregistered={sorted(on_disk - registered)} missing={sorted(registered - on_disk)}"
+PY
+pass "skill registry lists every skill"
+
 # deploy-ready: fails without deploy_approval, passes with clearance + pr + approval
 set +e
 ./scripts/check-gates.py --feature "$FEATURE" --workspace "$TMP" --gate deploy-ready >/tmp/deploy-out.json
