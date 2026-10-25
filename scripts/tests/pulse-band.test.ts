@@ -10,8 +10,9 @@ test('refresh completes before rendering; card actions work on desktop and termi
   const calls: string[][] = []
   const commands: string[] = []
   let measured = true
+  let sessionCwd = '/fixture'
   mock.env(on, {})
-  on('session.cwd', () => ({ value: '/fixture' }))
+  on('session.cwd', () => ({ value: sessionCwd }))
   on('session.start', () => ({ cwd: '/fixture' }))
   on('turn.complete', () => ({ text: '' }))
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['Other mod remains'] }))
@@ -46,7 +47,9 @@ test('refresh completes before rendering; card actions work on desktop and termi
   }
   expect(commands).toEqual(['adlc5:craftsmanship-code-review', 'adlc5:qa', 'adlc5:craftsmanship-code-review', 'adlc5:qa'])
   measured = false
+  sessionCwd = '/fixture/.claude/worktrees/moved'
   await $.turn.complete({ turnId: 'refresh', answer: 'done', durationMs: 1, isAborted: false, usage: null })
+  expect(calls[calls.length - 1]).toContain('/fixture/.claude/worktrees/moved')
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /Projected savings Not measured · outcome success Not measured/ })).toBeDefined()
   await ui.unmount()
