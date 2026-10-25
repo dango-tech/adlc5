@@ -1,6 +1,6 @@
 # ADLC5 invokable skill registry — every skills/*/SKILL.md is listed
 schema_version: "3.0"
-framework_version: "5.1.0"
+framework_version: "5.2.0"
 
 personas_registry: "core/personas.yaml"
 

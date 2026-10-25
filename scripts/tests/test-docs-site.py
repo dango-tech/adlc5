@@ -81,10 +81,10 @@ class DocsSiteTests(unittest.TestCase):
     def test_downloads_cover_four_hosts_and_checksums(self):
         doc = self.documents['downloads/index.html']
         links = set(doc.links)
-        base = 'https://github.com/dango-tech/adlc5/releases/download/v5.1.0/'
+        base = 'https://github.com/dango-tech/adlc5/releases/download/v5.2.0/'
         for host in ('codex', 'claude-code', 'cursor', 'hermes'):
             for suffix in ('zip', 'tar.gz'):
-                self.assertIn(base + f'adlc5-{host}-plugin-5.1.0.{suffix}', links)
+                self.assertIn(base + f'adlc5-{host}-plugin-5.2.0.{suffix}', links)
         self.assertIn(base + 'SHA256SUMS', links)
 
     def test_search(self):
