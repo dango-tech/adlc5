@@ -34,3 +34,12 @@ PUBLIC-LAUNCH-PLAN.md
 site/
 .venv-docs/
 .vercel/
+
+# ADLC5 shared lifecycle artifacts
+!.adlc5/
+.adlc5/*
+!.adlc5/governance/
+.discover/
+.prt/
+.qa/
+.worktrees/
