@@ -1,7 +1,7 @@
 ---
 name: adlc5-pulse
 description: Inspect an on-demand ADLC5 delivery snapshot, local board, or handoff summary.
-version: 5.2.0
+version: 5.3.0
 ---
 
 # ADLC5 Pulse

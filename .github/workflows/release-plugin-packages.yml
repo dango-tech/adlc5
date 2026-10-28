@@ -12,7 +12,7 @@ on:
       release_tag:
         description: Existing release tag to publish to GitHub Packages
         type: string
-        default: v5.2.0
+        default: v5.3.0
 
 permissions:
   contents: write
