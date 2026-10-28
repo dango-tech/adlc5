@@ -45,17 +45,17 @@ def parse_scalar(raw: str) -> Any:
     return s
 
 
-def _clean_lines(text: str) -> list[tuple[int, str]]:
-    """(indent, stripped_content) pairs, comments and blank lines dropped."""
-    out: list[tuple[int, str]] = []
-    for raw in text.splitlines():
+def _clean_lines(text: str) -> list[tuple[int, str, int]]:
+    """(indent, stripped_content, source_line) triples, comments and blank lines dropped."""
+    out: list[tuple[int, str, int]] = []
+    for number, raw in enumerate(text.splitlines(), 1):
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
         indent = len(line) - len(line.lstrip(" "))
-        out.append((indent, line.strip()))
+        out.append((indent, line.strip(), number))
     return out
 
 
@@ -64,8 +64,9 @@ def parse(text: str) -> dict:
     lines = _clean_lines(text)
     root: dict[str, Any] = {}
     stack: list[tuple[int, Any]] = [(-1, root)]
+    first_line: dict[tuple[int, str], int] = {}
 
-    for i, (indent, content) in enumerate(lines):
+    for i, (indent, content, number) in enumerate(lines):
         while len(stack) > 1 and indent <= stack[-1][0]:
             stack.pop()
         parent = stack[-1][1]
@@ -103,7 +104,8 @@ def parse(text: str) -> dict:
         if not isinstance(parent, dict):
             continue
         if key in parent:
-            raise ValueError(f"duplicate YAML key: {key}")
+            raise ValueError(f"duplicate YAML key '{key}' (lines {first_line[id(parent), key]} and {number}); keep one")
+        first_line[id(parent), key] = number
         if val == "":
             child_container = _next_container(lines, i, indent)
             parent[key] = child_container
@@ -122,7 +124,7 @@ def _next_container(lines: list[tuple[int, str]], i: int, indent: int) -> list |
     no children at all (an empty section).
     """
     for j in range(i + 1, len(lines)):
-        next_indent, next_content = lines[j]
+        next_indent, next_content, _ = lines[j]
         if next_indent <= indent:
             break
         return [] if next_content.startswith("- ") or next_content == "-" else {}
