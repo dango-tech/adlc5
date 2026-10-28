@@ -1445,6 +1445,21 @@ set -e
 [[ "$EC" -eq 1 ]] || fail "duplicate acceptance IDs must fail anchor locking"
 jq -e '.checks[] | select(.reason == "duplicate_id" and .status == "fail")' \
   /tmp/anchor-duplicate-id.json >/dev/null || fail "duplicate acceptance ID details"
+./scripts/init-feature.sh --feature anchor-high-risk-commands --workspace "$ANCHOR_WS" \
+  --mode brownfield --interaction autonomous >/dev/null
+cp templates/policies-high-risk.yaml.example "${ANCHOR_WS}/.adlc5/anchor-high-risk-commands/policies.yaml"
+fixture_state_patch --feature anchor-high-risk-commands --workspace "$ANCHOR_WS" --patch \
+  '{"tasks":{"stories":[{"id":"US-1","batch":1,"files":[],"depends_on":[],"acceptance":[{"id":"AC-1","owner":"qa","evidence":{"type":"command","value":"./scripts/test.sh"}}]}]}}' >/dev/null
+set +e
+./scripts/tasks/check-anchors.py lock --feature anchor-high-risk-commands --workspace "$ANCHOR_WS" \
+  >/tmp/anchor-high-risk-commands.json
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] || fail "high_risk lock without a file anchor must fail before Implement"
+jq -e '.checks[] | select(.reason == "file_anchor_required" and .status == "fail")' \
+  /tmp/anchor-high-risk-commands.json >/dev/null || fail "missing file anchor details"
+[[ ! -f "${ANCHOR_WS}/.adlc5/anchor-high-risk-commands/acceptance-lock.json" ]] \
+  || fail "failed high_risk lock must not write a manifest"
 pass "acceptance anchor anti-bypass checks"
 
 printf '%s\n' 'changed behavior' >"${ANCHOR_WS}/tests/acceptance.txt"

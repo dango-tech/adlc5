@@ -80,7 +80,9 @@ entire cache in a story pack.
 ./scripts/memory/compact-stage.sh --feature "{feature}" --stage tasks
 ```
 
-Do not transition to Implement unless `anchors lock` passes. It atomically applies
+Do not transition to Implement unless `anchors lock` passes. A `high_risk` profile
+(or `autopilot.require_anchors: true`) needs at least one `evidence.type: file`
+criterion, or the lock fails. It atomically applies
 file digests to schema-validated state and seals every acceptance definition,
 including command text, in `.adlc5/{feature}/acceptance-lock.json`. A Git-backed
 worktree-tamper reference is retained at
