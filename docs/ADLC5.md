@@ -65,7 +65,7 @@ Autonomous: `init-feature.sh --interaction autonomous` · navigator: `scripts/pi
 
 Gates: `./scripts/check-gates.py --feature NAME --gate pr-ready` · registry: [skill-registry.yaml](../core/skill-registry.yaml)
 
-Before Implement, freeze acceptance definitions with `./scripts/adlc5 anchors lock --feature NAME`; the command atomically binds state and the local manifest to `refs/adlc5/anchors/NAME`. Verify and `pr-ready` detect ordinary worktree changes to the manifest, command definition, or file digest. Command execution remains runtime evidence—the manifest content-addresses its text, not its output.
+Before Implement, freeze acceptance definitions with `./scripts/adlc5 anchors lock --feature NAME`; the command atomically binds state and the local manifest to `refs/adlc5/anchors/NAME`. Verify and `pr-ready` detect ordinary worktree changes to the manifest, command definition, or file digest. Command execution remains runtime evidence—the manifest content-addresses its text, not its output. The `high_risk` profile (or `autopilot.require_anchors: true`) needs at least one `evidence.type: file` criterion; without one, `anchors lock` fails with `file_anchor_required` instead of letting the gap surface at `pr-ready`.
 
 **Trust boundary:** this is worktree-tamper detection, not protection from an actor with arbitrary Git-ref write access. These refs are local and are not transferred by ordinary clone/fetch/push. Use an external human signature or permission-separated approval system when the repository writer itself is adversarial.
 

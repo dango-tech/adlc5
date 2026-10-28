@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **High-risk features without a file anchor:** `anchors lock` now fails with `file_anchor_required` when the `high_risk` profile (or `autopilot.require_anchors: true`) has no `evidence.type: file` acceptance criterion. Before, the lock passed and the feature only failed at `pr-ready`, after Implement, when a file anchor can no longer be added (#31).
+
 ## [5.2.0] — Agent-product governance
 
 ### Added
