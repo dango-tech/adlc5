@@ -60,6 +60,11 @@ spawning; `host default`, `inherit`, and `unknown` cannot establish separation.
 
 Terminal: `./scripts/adlc5 gate --feature "{feature}" --gate pr-ready`
 
+Run each story's Build in a **fresh** `@build-implementer` subagent (per-host mechanism:
+[platform-tooling.md](../../core/guides/platform-tooling.md)); never implement stories inline
+in the orchestrator thread — every model call resends its whole context, so one thread
+building a full plan multiplies token spend. Hosts without subagents: one new session per story.
+
 If implementation changes system architecture, dependency/trust boundaries, or
 canonical commands, include the corresponding tracked `.agents/` update for human
 review. Never regenerate or self-approve constitution changes from cache observations.

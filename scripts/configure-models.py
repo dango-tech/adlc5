@@ -169,9 +169,40 @@ def setup(workspace: Path, repo: bool, accept_defaults: bool, host: str) -> int:
     return 0
 
 
+SETTABLE = ("default_host", "model_routing", "platform_profiles", "platform_modes", "persona_mode", "defaults", "git_branch_prefix")
+
+
+def set_value(workspace: Path, scope: str, key: str, raw: str) -> int:
+    """Write one dotted setting into the machine, project or worktree layer (the Pulse Settings page builds this command)."""
+    parts = key.split(".")
+    if parts[0] not in SETTABLE or not all(parts):
+        raise ValueError(f"unsupported setting: {key}")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        value = raw
+    path = next(path for name, path in config_paths(None if scope == "machine" else workspace) if name == {"machine": "master"}.get(scope, scope))
+    if path.is_symlink():
+        raise ValueError("refusing to write through a symlinked configuration file")
+    current = load_yaml_file(path) if path.exists() else {}
+    node = current
+    for part in parts[:-1]:
+        node = node.setdefault(part, {}) if isinstance(node.get(part), dict) or part not in node else None
+        if node is None:
+            raise ValueError(f"{key} is nested under a non-mapping value")
+    node[parts[-1]] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"status": "ok", "path": str(path), "key": key, "value": value}))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("show", "setup"))
+    parser.add_argument("action", choices=("show", "setup", "set"))
+    parser.add_argument("key", nargs="?", help="set: dotted setting key, e.g. defaults.summary")
+    parser.add_argument("value", nargs="?", help="set: JSON value or plain string")
+    parser.add_argument("--scope", choices=("machine", "project", "worktree"), default="machine", help="set: layer to write")
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--repo", action="store_true", help="write repository layer instead of master")
     parser.add_argument("--host", choices=tuple(HOSTS), default="codex", help="host profile to configure")
@@ -179,6 +210,10 @@ def main() -> int:
     args = parser.parse_args()
     workspace = Path(args.workspace).resolve()
     try:
+        if args.action == "set":
+            if args.key is None or args.value is None:
+                parser.error("set requires KEY and VALUE")
+            return set_value(workspace, args.scope, args.key, args.value)
         return show(workspace) if args.action == "show" else setup(workspace, args.repo, args.accept_defaults, args.host)
     except (OSError, RuntimeError, ValueError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}), file=sys.stderr)

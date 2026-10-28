@@ -30,6 +30,8 @@ Core spec: [core/sdd-model.md](../../core/sdd-model.md)
    ```bash
    ./scripts/init-feature.sh --feature "{feature}"
    ```
+
+   Governance refresh (no feature): `ADLC5_ROOT=/path/to/adlc5 bash scripts/adlc5/init-workspace.sh --force` copies governance templates and runs repo-spec reconcile. `--force` rewrites `workspace.json`/config and reconcile may delete legacy council-agent files and `_archived_docs/company_roles/` — review `git diff` before commit.
    Uses `scripts/profile-repo.py` (`--mode auto` default) and `scripts/wiki/ensure-wiki.sh` when brownfield size warrants it.
 3. **Repository context** — `init-feature.sh` creates missing constitution files and
    refreshes generated intelligence. Read `AGENTS.md` and `.agents/{architecture,boundaries,commands}.yaml`;
@@ -59,6 +61,8 @@ scope and interaction choices on resume. Reuse an existing reviewed plan after
 reconciling it with current source; generate only missing artifacts.
 
 When `policies.yaml` → `persona_mode.forbid_orchestrator_implement: true`, **route only** — spawn stage skills/subagents; never edit product source from the orchestrator session.
+
+**Token cost:** start the lifecycle in a fresh thread, and wait on subagents and long commands with one long blocking wait, never short polling — every poll resends the whole context. See [platform-tooling.md § Waiting](../../core/guides/platform-tooling.md#waiting-on-subagents-and-long-commands-all-hosts).
 
 ## AskQuestion (mandatory on start)
 

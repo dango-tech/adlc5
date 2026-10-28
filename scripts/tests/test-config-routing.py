@@ -35,6 +35,22 @@ def main() -> None:
             assert ignored["model_id"] == "host default"  # legacy flat IDs never become executable defaults
 
 
+def check_config_set() -> None:
+    import json, subprocess, sys
+    with tempfile.TemporaryDirectory() as temp:
+        home, workspace = Path(temp) / "home", Path(temp) / "repo"
+        workspace.mkdir()
+        subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        run = lambda *args: subprocess.run([sys.executable, str(ROOT / "scripts/adlc5"), "config", "set", *args], env=env, capture_output=True, text=True)
+        assert run("defaults.summary", "detailed").returncode == 0
+        assert run("persona_mode.verifier_different_model", "true", "--scope", "worktree", "--workspace", str(workspace)).returncode == 0
+        assert run("secrets.token", "x").returncode == 2
+        assert json.loads((home / ".adlc5/config.yaml").read_text()) == {"defaults": {"summary": "detailed"}}
+        assert json.loads((workspace / ".adlc5/overrides.yaml").read_text()) == {"persona_mode": {"verifier_different_model": True}}
+
+
 if __name__ == "__main__":
     main()
+    check_config_set()
     print("config routing checks passed")

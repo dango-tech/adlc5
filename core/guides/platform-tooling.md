@@ -41,6 +41,18 @@ Always map the user’s answer to the same `option.id` values documented in [ask
 3. `spawn_agent(agent_type="worker", message="Your task is… <agent-instructions>…</agent-instructions>")`.
 4. Max 4 parallel workers when `policies.yaml` `defaults.execution_mode: parallel` (same as Cursor).
 
+### Waiting on subagents and long commands (all hosts)
+
+Every wait or poll is a full model call that resends the orchestrator's whole context, so
+short polling at a large context is the most expensive thing ADLC5 can do.
+
+- Codex: block in one `wait_agent` with the longest timeout the tool allows (minutes,
+  not 10s), not repeated short waits, `list_agents` checks or `send_message` nudges.
+- Long commands (e2e, Docker, builds): one long `yield_time_ms`, or run them in a
+  subagent; never poll `write_stdin` every second.
+- Start a lifecycle (`@adlc5` / Specify) in a **fresh** thread; never reuse a thread
+  that already carries unrelated history as the orchestrator.
+
 ### Codex: discover LLM Council
 
 Map `discover-council-claude`, `discover-council-gpt`, `discover-council-gemini` to three parallel `spawn_agent` calls with identical briefs (see [discover/phases/01-exploration.md](../../skills/discover/phases/01-exploration.md)).

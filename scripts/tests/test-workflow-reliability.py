@@ -77,7 +77,7 @@ class Reliability(unittest.TestCase):
 
     def test_duplicate_policy_keys_fail_with_both_parsers(self):
         self.policy.write_text('autopilot:\n  require_human_pr_approval: true\n  require_human_pr_approval: false\n')
-        with self.assertRaisesRegex(ValueError, 'duplicate YAML key'):
+        with self.assertRaisesRegex(ValueError, "duplicate YAML key 'require_human_pr_approval'.*lines 2 and 3"):
             load_policies_file(self.policy)
         real_import = builtins.__import__
         def without_yaml(name, *args, **kwargs):
@@ -85,7 +85,7 @@ class Reliability(unittest.TestCase):
                 raise ImportError('fixture: no PyYAML')
             return real_import(name, *args, **kwargs)
         with patch('builtins.__import__', side_effect=without_yaml):
-            with self.assertRaisesRegex(ValueError, 'duplicate YAML key'):
+            with self.assertRaisesRegex(ValueError, "duplicate YAML key 'require_human_pr_approval'.*lines 2 and 3"):
                 load_policies_file(self.policy)
             self.policy.write_text('autopilot:\n  profile: standard\ncustom_gates: {}\n')
             self.assertEqual(load_policies_file(self.policy)['custom_gates'], {})
