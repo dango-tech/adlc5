@@ -5,14 +5,18 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      attach_draft:
+        description: Attach packages to the draft release named by release_tag
+        type: boolean
+        default: false
       publish_registry:
         description: Also publish an existing release to GitHub Packages
         type: boolean
         default: false
       release_tag:
-        description: Existing release tag to publish to GitHub Packages
+        description: Draft release tag to attach to, or published release tag to publish to GitHub Packages
         type: string
-        default: v5.3.0
+        default: v5.3.1
 
 permissions:
   contents: write
@@ -57,14 +61,20 @@ jobs:
             /tmp/adlc5-release-packages/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
-      - name: Attach all four host packages and checksums to release
-        if: github.event_name == 'release'
+      # Immutable releases refuse new assets once published, so packages go onto the draft first.
+      - name: Attach all four host packages and checksums to the draft release
+        if: inputs.attach_draft
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           version="$(tr -d '[:space:]' < core/VERSION)"
           [[ "$RELEASE_TAG" == "$version" || "$RELEASE_TAG" == "v$version" ]] || { echo 'Release tag must match core/VERSION'; exit 1; }
+          [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == true ]] || { echo 'Release must still be a draft'; exit 1; }
+          # Compare with the checkout, not GITHUB_SHA: a branch checkout can move past the triggering commit.
+          built="$(git rev-parse HEAD)"
+          target="$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)"
+          [[ "$target" == "$built" ]] || { echo "Draft targets $target but this run built $built"; exit 1; }
           gh release upload "$RELEASE_TAG" \
             "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.zip" \
             "/tmp/adlc5-release-packages/adlc5-codex-plugin-${version}.tar.gz" \

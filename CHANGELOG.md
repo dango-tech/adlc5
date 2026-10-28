@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [5.3.1] — Release packages on immutable releases
+
+5.3.1 ships the 5.3.0 changes below; the v5.3.0 release has no packages.
+
+### Fixed
+
+- **Release packages:** with immutable releases on, GitHub refuses assets added after a release is published, so the v5.3.0 package upload failed. `release-plugin-packages.yml` now attaches packages to a draft release (`attach_draft` with `release_tag`), checking that it is still a draft and targets the commit it built; publishing the release then pushes the attached archives to GitHub Packages. See [agent plugins](docs/agent-plugins.md).
+
 ## [5.3.0] — Pulse token use and late file anchors
 
 ### Added
