@@ -117,6 +117,29 @@ Edits invalidate affected records; rerun checks/review after relevant changes.
 Outputs and summaries are excluded so recording results does not invalidate itself.
 Check limits and file exclusions in `scripts/lib/completion_evidence.py`.
 
+### Adding a file anchor after Implement starts
+
+A `high_risk` feature (or `require_anchors: true`) needs at least one locked file
+anchor; command-only acceptance fails `anchor_integrity` at `pr-ready`. Once
+Implement has started, `anchors lock` refuses a new file criterion
+(`unlocked_during_implementation` / `manifest_mismatch`) unless the user approves
+that exact criterion and file digest:
+
+1. Point the new criterion at a file already in the reviewed tree (an existing
+   test or fixture). Creating or committing a new file changes the patch, so
+   checks and review must be rerun anyway.
+2. Add the criterion to `tasks.stories[].acceptance` with `evidence.type: file`.
+3. Ask the user, then submit their answer via `evidence approve --file approval.json`:
+   `{"type":"anchor_addition_approval","acceptance_id":"AC-9","sha256":"<sha256 of the file>","approved_by":"user","reason":"..."}`.
+4. Run `anchors lock`, then `anchors check`.
+
+The approval is recorded in the completion ledger and `clarity.history`, binds
+the acceptance ID to the file's digest, and only adds an ID that is not already in
+the sealed manifest; changing a locked criterion still needs `anchor_relock_approval`.
+The approved criterion is excluded from the completion fingerprint, so existing
+checks, review and PR approval records stay fresh. The lock still enforces the
+file's content after that.
+
 For recovery, `state repair --patch JSON --reason TEXT` writes an audit record.
 It may reopen/reset progress; it cannot manufacture verified/completed results or
 human approval. Reverification is required. Resume a new session with state, the
@@ -132,7 +155,7 @@ unknown overhead; this is not a hard whole-session token cap.
 
 Approval records accept an explicit `decision: approve | reject`; the latest
 record for the current inputs governs readiness. Negative/unknown payload fields
-cannot silently become approval. Scoped `deploy_approval`, `anchor_relock_approval`
-and `verifier_waiver` records use the same operation, with their required environment,
+cannot silently become approval. Scoped `deploy_approval`, `anchor_relock_approval`,
+`anchor_addition_approval` and `verifier_waiver` records use the same operation, with their required environment,
 digest/reason fields. Deployment still requires completed delivery and an actual
 published PR; a verifier waiver does not replace mandatory current checks/review.

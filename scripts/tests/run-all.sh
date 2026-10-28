@@ -1391,6 +1391,72 @@ jq -e '.tasks.stories[0].acceptance[0].evidence.sha256 | test("^[0-9a-f]{64}$")'
   || fail "adlc5 anchors lock should persist manifest"
 pass "adlc5 anchor façade applies lock"
 
+# late file anchor: adding one after Implement starts needs a digest-bound human approval
+LATE_WS="${TMP}/anchor-late"
+LATE_FEATURE="anchor-late"
+mkdir -p "$LATE_WS/tests"
+git -C "$LATE_WS" init -q
+printf '%s\n' 'late behavior' >"${LATE_WS}/tests/late.txt"
+git -C "$LATE_WS" add tests/late.txt
+git -C "$LATE_WS" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
+./scripts/init-feature.sh --feature "$LATE_FEATURE" --workspace "$LATE_WS" \
+  --mode brownfield --interaction autonomous >/dev/null
+LATE_COMMAND='{"id":"AC-L1","owner":"qa","evidence":{"type":"command","value":"./scripts/test.sh"}}'
+fixture_state_patch --feature "$LATE_FEATURE" --workspace "$LATE_WS" --patch \
+  "{\"tasks\":{\"stories\":[{\"id\":\"US-L\",\"batch\":1,\"files\":[],\"depends_on\":[],\"acceptance\":[${LATE_COMMAND}]}]}}" >/dev/null
+./scripts/adlc5 anchors lock --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/dev/null \
+  || fail "command-only anchor lock should apply"
+fixture_state_patch --feature "$LATE_FEATURE" --workspace "$LATE_WS" --patch \
+  '{"current_stage":"implement","current_step":"implement-5-pr","stage_status":{"tasks":"completed","implement":"in_progress"}}' >/dev/null
+late_fingerprint() {
+  python3 - "$LATE_WS" "$LATE_FEATURE" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, "scripts")
+from lib.completion_evidence import fingerprint
+print(fingerprint(Path(sys.argv[1]), sys.argv[2]))
+PY
+}
+LATE_BEFORE=$(late_fingerprint)
+fixture_state_patch --feature "$LATE_FEATURE" --workspace "$LATE_WS" --patch \
+  "{\"tasks\":{\"stories\":[{\"id\":\"US-L\",\"batch\":1,\"files\":[],\"depends_on\":[],\"acceptance\":[${LATE_COMMAND},{\"id\":\"AC-L2\",\"owner\":\"product\",\"evidence\":{\"type\":\"file\",\"value\":\"tests/late.txt\"}}]}]}}" >/dev/null
+set +e
+./scripts/adlc5 anchors lock --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/tmp/anchor-late-unapproved.json
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] && jq -e '.checks[] | select(.id == "AC-L2" and .reason == "unlocked_during_implementation")' \
+  /tmp/anchor-late-unapproved.json >/dev/null || fail "late anchor must not lock without approval"
+LATE_DIGEST=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${LATE_WS}/tests/late.txt")
+printf '%s\n' "{\"type\":\"anchor_addition_approval\",\"acceptance_id\":\"AC-L2\",\"sha256\":\"${LATE_DIGEST}\",\"approved_by\":\"agent\"}" >"${TMP}/late-agent.json"
+./scripts/adlc5 evidence approve --feature "$LATE_FEATURE" --workspace "$LATE_WS" --file "${TMP}/late-agent.json" >/dev/null 2>&1 \
+  && fail "late anchor approval must require human provenance"
+printf '%s\n' "{\"type\":\"anchor_addition_approval\",\"acceptance_id\":\"AC-L2\",\"sha256\":\"$(printf '0%.0s' {1..64})\",\"approved_by\":\"user\"}" >"${TMP}/late-wrong.json"
+./scripts/adlc5 evidence approve --feature "$LATE_FEATURE" --workspace "$LATE_WS" --file "${TMP}/late-wrong.json" >/dev/null \
+  || fail "well-formed late anchor approval should record"
+set +e
+./scripts/adlc5 anchors lock --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/dev/null
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] || fail "late anchor approval must be bound to the evidence digest"
+printf '%s\n' "{\"type\":\"anchor_addition_approval\",\"acceptance_id\":\"AC-L2\",\"sha256\":\"${LATE_DIGEST}\",\"approved_by\":\"user\",\"reason\":\"issue 31 late anchor\"}" >"${TMP}/late-approval.json"
+./scripts/adlc5 evidence approve --feature "$LATE_FEATURE" --workspace "$LATE_WS" --file "${TMP}/late-approval.json" >/dev/null \
+  || fail "late anchor approval should record"
+jq -e '[.clarity.history[] | select(.type == "anchor_addition_approval" and .acceptance_id == "AC-L2")] | length == 2' \
+  "${LATE_WS}/.adlc5/${LATE_FEATURE}/state.json" >/dev/null || fail "late anchor approvals should be audited in history"
+grep -q '"anchor_addition_approval"' "${LATE_WS}/.adlc5/${LATE_FEATURE}/evidence/completion.jsonl" \
+  || fail "late anchor approval should be audited in the completion ledger"
+./scripts/adlc5 anchors lock --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/tmp/anchor-late-lock.json \
+  || fail "approved late anchor should lock"
+./scripts/tasks/check-anchors.py check --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/tmp/anchor-late-check.json \
+  || fail "approved late anchor should verify"
+jq -e '.status == "pass" and .locked == 1' /tmp/anchor-late-check.json >/dev/null || fail "late anchor counts as locked"
+[[ "$(late_fingerprint)" == "$LATE_BEFORE" ]] || fail "approved late anchor must not invalidate unrelated completion evidence"
+printf '%s\n' 'tampered' >"${LATE_WS}/tests/late.txt"
+./scripts/tasks/check-anchors.py check --feature "$LATE_FEATURE" --workspace "$LATE_WS" >/dev/null \
+  && fail "late anchor must stay content-locked"
+git -C "$LATE_WS" checkout -q tests/late.txt
+pass "approved late file anchor"
+
 python3 - "$ANCHOR_WS" <<'PY'
 import importlib.machinery, importlib.util, io, json, sys
 from contextlib import redirect_stdout

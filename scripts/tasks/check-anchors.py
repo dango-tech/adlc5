@@ -45,6 +45,17 @@ def relock_approved(state: dict, acceptance_id: str, old_digest: str, new_digest
     return bool(latest.get("approved_by")) and latest.get("decision", "approve") == "approve"
 
 
+def addition_approved(state: dict, acceptance_id: str, new_digest: str) -> bool:
+    """Human approval to add a file criterion after Implement starts, bound to its digest."""
+    history = ((state.get("clarity") or {}).get("history") or [])
+    matching = [item for item in history if isinstance(item, dict)
+                and item.get("type") == "anchor_addition_approval"
+                and item.get("acceptance_id") == acceptance_id]
+    latest = matching[-1] if matching else {}
+    return (bool(latest.get("approved_by")) and latest.get("decision", "approve") == "approve"
+            and latest.get("sha256") == new_digest)
+
+
 def manifest_entries(stories: list[dict]) -> list[dict]:
     entries = []
     for story in stories:
@@ -170,7 +181,12 @@ def check_manifest(
         if actual == expected:
             continue
         approved_digest_change = False
-        if allow_relock and actual and expected:
+        if allow_relock and actual and not expected:
+            evidence = actual.get("evidence") or {}
+            approved_digest_change = evidence.get("type") == "file" and addition_approved(
+                state, str(criterion_id), evidence.get("sha256")
+            )
+        elif allow_relock and actual and expected:
             actual_copy = copy.deepcopy(actual)
             expected_copy = copy.deepcopy(expected)
             actual_digest = (actual_copy.get("evidence") or {}).pop("sha256", None)
@@ -263,13 +279,15 @@ def process(state: dict, workspace: Path, *, lock: bool) -> tuple[list[dict], li
             actual = digest(path)
             expected = evidence.get("sha256")
             if lock:
-                if not expected and implementation_started:
+                if not expected and implementation_started and not addition_approved(
+                    state, criterion_id, actual
+                ):
                     checks.append(
                         {
                             "id": criterion_id,
                             "status": "fail",
                             "reason": "unlocked_during_implementation",
-                            "message": "file evidence must be locked before Implement starts",
+                            "message": "file evidence must be locked before Implement starts or carry anchor_addition_approval",
                         }
                     )
                     continue

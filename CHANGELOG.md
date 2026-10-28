@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Approved late file anchor:** a `high_risk` feature that reached Implement with only command anchors can now add a file-backed acceptance criterion. Record the user's `anchor_addition_approval` (acceptance ID and file sha256) with `evidence approve`, then run `anchors lock`. The approval is audited in the completion ledger and `clarity.history`, and existing checks, review and PR approval stay fresh. See [evidence-backed completion](docs/evidence-completion.md#adding-a-file-anchor-after-implement-starts). Fixes [#31](https://github.com/dango-tech/adlc5/issues/31).
+
 ## [5.2.0] — Agent-product governance
 
 ### Added
