@@ -30,6 +30,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from lib.adlc5_paths import delivery_state_path, load_delivery_state  # noqa: E402
 from lib.simple_yaml import load_frontmatter  # noqa: E402
 from lib.policies_load import (  # noqa: E402
+    anchors_required,
     load_policies,
     normalize_custom_gates,
     profile_name,
@@ -505,10 +506,7 @@ def check_anchor_integrity(workspace: Path, feature: str, policies: dict) -> lis
         report = json.loads(proc.stdout)
     except json.JSONDecodeError:
         report = {"status": "error", "error": proc.stderr.strip() or "invalid anchor checker output"}
-    anchors_required = profile_name(policies) == "high_risk" or bool(
-        (policies.get("autopilot") or {}).get("require_anchors")
-    )
-    missing_required = anchors_required and int(report.get("locked", 0) or 0) == 0
+    missing_required = anchors_required(policies) and int(report.get("locked", 0) or 0) == 0
     ok = proc.returncode == 0 and report.get("status") == "pass" and not missing_required
     return [
         {
