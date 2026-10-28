@@ -97,6 +97,43 @@ def gate_evaluator_id(root: Path) -> str:
     return 'adlc5-gate-v1:' + digest.hexdigest()
 
 
+def approved_anchor_additions(state: dict) -> dict:
+    """Latest approved anchor_addition_approval digest per acceptance ID."""
+    latest = {}
+    for item in (state.get('clarity') or {}).get('history') or []:
+        if isinstance(item, dict) and item.get('type') == 'anchor_addition_approval':
+            latest[item.get('acceptance_id')] = item
+    return {key: item.get('sha256') for key, item in latest.items()
+            if item.get('approved_by') and item.get('decision', 'approve') == 'approve'}
+
+
+def is_approved_addition(criterion, additions: dict) -> bool:
+    evidence = criterion.get('evidence') if isinstance(criterion, dict) else None
+    return (isinstance(evidence, dict) and evidence.get('type') == 'file' and criterion.get('id') in additions
+            and evidence.get('sha256') in (None, additions[criterion.get('id')]))
+
+
+def without_approved_additions(stories: list, additions: dict) -> list:
+    """Approved late anchors add evidence, not reviewed scope, so they leave the fingerprint unchanged."""
+    if not additions:
+        return stories
+    return [{**story, 'acceptance': [c for c in story.get('acceptance') or [] if not is_approved_addition(c, additions)]}
+            if isinstance(story, dict) and 'acceptance' in story else story for story in stories]
+
+
+def manifest_without_approved_additions(data: bytes, additions: dict) -> bytes:
+    """Rebuild acceptance-lock.json as check-anchors.py wrote it before the approved additions."""
+    try:
+        entries = json.loads(data)['acceptance']
+        kept = [e for e in entries if not is_approved_addition(e, additions)]
+    except (ValueError, KeyError, TypeError):
+        return data
+    if len(kept) == len(entries):
+        return data
+    seal = hashlib.sha256(json.dumps(kept, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return (json.dumps({'schema_version': '1.0', 'acceptance': kept, 'sha256': seal}, indent=2) + '\n').encode()
+
+
 def fingerprint(workspace: Path, feature: str, *, safe_reader=None, state_override=None) -> str:
     """Hash canonical inputs; safe_reader enables prevalidated bounded reads for Pulse."""
     if safe_reader is not None:
@@ -130,7 +167,9 @@ def fingerprint(workspace: Path, feature: str, *, safe_reader=None, state_overri
     h.update(head)
     h.update(index)
     state = state_override if state_override is not None else load_feature_state(workspace, feature) or {}
-    contract = {"tasks": [{k: v for k, v in story.items() if k != "status"} for story in (state.get("tasks") or {}).get("stories", [])], "scope": state.get("scope"), "git": state.get("git"), "acceptance_anchor": state.get("acceptance_anchor")}
+    additions = approved_anchor_additions(state)
+    manifest_name = f'.adlc5/{feature}/acceptance-lock.json'
+    contract = {"tasks": [{k: v for k, v in story.items() if k != "status"} for story in without_approved_additions((state.get("tasks") or {}).get("stories", []), additions)], "scope": state.get("scope"), "git": state.get("git"), "acceptance_anchor": state.get("acceptance_anchor")}
     h.update(json.dumps(contract, sort_keys=True).encode())
     names = set(listing.decode().split('\0')) - {''}
     for story in (state.get('tasks') or {}).get('stories', []):
@@ -182,14 +221,15 @@ def fingerprint(workspace: Path, feature: str, *, safe_reader=None, state_overri
             if data is None:
                 h.update(b'<deleted>')
             else:
-                h.update(data)
+                h.update(manifest_without_approved_additions(data, additions) if name == manifest_name else data)
                 h.update(str(path.lstat().st_mode & 0o777).encode())
         elif path.is_symlink():
             h.update(str(path.readlink()).encode())
             if path.is_file():
                 h.update(path.read_bytes())
         elif path.is_file():
-            h.update(path.read_bytes())
+            data = path.read_bytes()
+            h.update(manifest_without_approved_additions(data, additions) if name == manifest_name else data)
             h.update(str(path.stat().st_mode & 0o777).encode())
         else:
             h.update(b'<deleted>')

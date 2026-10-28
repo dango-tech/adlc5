@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Approved late file anchor:** a `high_risk` feature that reached Implement with only command anchors can now add a file-backed acceptance criterion. Record the user's `anchor_addition_approval` (acceptance ID and file sha256) with `evidence approve`, then run `anchors lock`. The approval is audited in the completion ledger and `clarity.history`, and existing checks, review and PR approval stay fresh. See [evidence-backed completion](docs/evidence-completion.md#adding-a-file-anchor-after-implement-starts). Fixes [#31](https://github.com/dango-tech/adlc5/issues/31).
+
 ### Fixed
 
 - **High-risk features without a file anchor:** `anchors lock` now fails with `file_anchor_required` when the `high_risk` profile (or `autopilot.require_anchors: true`) has no `evidence.type: file` acceptance criterion. Before, the lock passed and the feature only failed at `pr-ready`, after Implement, when a file anchor can no longer be added (#31).

@@ -52,6 +52,13 @@ rejects jumps and requires the relevant gates. Generic `state set` is for metada
 not completion. Standard work needs machine-checkable story specs; tiny work keeps
 its decisions in `change.md`.
 
+High-risk work needs at least one file-backed anchor. If Implement has already
+started without one, add a file criterion that points at a file already in the
+reviewed tree, record the user's `anchor_addition_approval` for that acceptance ID
+and file digest with `evidence approve`, then run `anchors lock`. Existing checks,
+review and PR approval stay fresh. See
+[Evidence-backed completion](https://github.com/dango-tech/adlc5/blob/main/docs/evidence-completion.md#adding-a-file-anchor-after-implement-starts).
+
 ## Build, check, and review
 
 At `implement-1-build`, record implemented story IDs with `evidence build`.

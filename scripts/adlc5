@@ -796,15 +796,17 @@ def cmd_completion(args, *, evidence=False):
                     allowed.add("environment")
                 if approval_type == "anchor_relock_approval":
                     allowed.update(("acceptance_id", "from_sha256", "to_sha256"))
+                if approval_type == "anchor_addition_approval":
+                    allowed.update(("acceptance_id", "sha256"))
                 if set(result) - allowed:
                     raise ValueError("unknown approval fields: " + ", ".join(sorted(set(result) - allowed)))
                 decision = result.get("decision", "approve")
                 if decision not in ("approve", "reject"):
                     raise ValueError("approval decision must be approve or reject")
                 result["decision"] = decision
-                if approval_type not in ("pr_approval", "deploy_approval", "anchor_relock_approval", "verifier_waiver") or not is_human_approver(result.get("approved_by")):
+                if approval_type not in ("pr_approval", "deploy_approval", "anchor_relock_approval", "anchor_addition_approval", "verifier_waiver") or not is_human_approver(result.get("approved_by")):
                     raise ValueError("scoped approval type and human provenance label required; local unauthenticated attestation")
-                allowed_stages = ("tasks", "implement") if approval_type == "anchor_relock_approval" else ("implement",)
+                allowed_stages = ("tasks", "implement") if approval_type in ("anchor_relock_approval", "anchor_addition_approval") else ("implement",)
                 if not state or state.get("current_stage") not in allowed_stages:
                     raise ValueError("approval incompatible with current stage")
                 if approval_type == "anchor_relock_approval":
@@ -813,6 +815,12 @@ def cmd_completion(args, *, evidence=False):
                         raise ValueError("anchor relock requires acceptance_id")
                     if any(not isinstance(result.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", result[key]) for key in ("from_sha256", "to_sha256")):
                         raise ValueError("anchor relock requires from_sha256 and to_sha256")
+                if approval_type == "anchor_addition_approval":
+                    import re
+                    if not isinstance(result.get("acceptance_id"), str) or not result["acceptance_id"]:
+                        raise ValueError("anchor addition requires acceptance_id")
+                    if not isinstance(result.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", result["sha256"]):
+                        raise ValueError("anchor addition requires sha256")
                 if approval_type == "verifier_waiver" and not result.get("reason"):
                     raise ValueError("verifier waiver requires reason; mandatory fresh completion review still applies")
                 if approval_type == "deploy_approval":
