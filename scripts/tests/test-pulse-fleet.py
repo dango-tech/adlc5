@@ -66,6 +66,31 @@ class FleetTests(unittest.TestCase):
         self.assertNotIn('SECRET-PROMPT', json.dumps(rows))
         self.assertEqual(rows[0]['outcome'], 'Not established from transcript')
 
+    def test_sessions_carry_title_adlc5_actions_and_named_features(self):
+        path = self.root / 'claude' / 'session.jsonl'
+        path.parent.mkdir()
+        path.write_text('\n'.join(json.dumps(row) for row in [
+            {'type': 'ai-title', 'aiTitle': 'Generated title', 'sessionId': 's'},
+            {'type': 'custom-title', 'customTitle': 'Ship reminders', 'sessionId': 's'},
+            {'type': 'ai-title', 'aiTitle': 'Later generated title', 'sessionId': 's'},
+            {'type': 'assistant', 'sessionId': 's', 'cwd': '/example/project', 'timestamp': '2026-10-23T01:00:00Z', 'message': {'content': [
+                {'type': 'tool_use', 'name': 'Skill', 'input': {'skill': 'adlc5:implement'}},
+                {'type': 'tool_use', 'name': 'mcp__plugin_adlc5_adlc5__adlc5_gate', 'input': {'feature': 'reminders', 'gate': 'pr-ready'}},
+                {'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'scripts/adlc5 transition implement-2-verify --feature=undo'}}]}},
+        ]) + '\n')
+        codex = self.root / 'codex' / 'sessions'
+        codex.mkdir(parents=True)
+        (codex.parent / 'session_index.jsonl').write_text(json.dumps({'id': 'c1', 'thread_name': 'Codex thread'}) + '\n')
+        (codex / 'c1.jsonl').write_text('\n'.join(json.dumps(row) for row in [
+            {'type': 'session_meta', 'payload': {'id': 'c1', 'cwd': '/example/repo'}},
+            {'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'exec_command', 'arguments': '{"cmd":"scripts/adlc5 gate pr-ready --feature export"}'}},
+        ]) + '\n')
+        rows = {row['host']: row for row in sessions([('claude', path.parent), ('codex', codex)], [])[0]}
+        self.assertEqual(rows['claude']['title'], 'Ship reminders')
+        self.assertEqual(rows['claude']['actions'], ['adlc5:implement', 'gate', 'transition'])
+        self.assertEqual(rows['claude']['features'], ['reminders', 'undo'])
+        self.assertEqual((rows['codex']['title'], rows['codex']['features']), ('Codex thread', ['export']))
+
     def test_claude_streaming_chunks_are_not_added_as_extra_usage(self):
         path = self.root / 'session.jsonl'
         rows = []

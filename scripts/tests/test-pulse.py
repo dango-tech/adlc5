@@ -77,6 +77,12 @@ class PulseTests(unittest.TestCase):
         self.assertIsNone(metrics["savings_pct"])
         self.assertIsNone(metrics["success_rate_pct"])
         self.assertIn("savings Not measured", band(snapshot))
+        self.assertIn("cost unavailable", band(snapshot, sessions=[{"features": ["other"], "tokens": 5}]))
+        sessions = [{"features": ["sample-feature"], "tokens": 2_000_000, "cost_usd": 1.5}, {"features": ["sample-feature"], "tokens": 500_000}]
+        self.assertIn("2.5M tokens in 2 sessions ($1.50 for 1/2 priced, transcripts)", band(snapshot, sessions=sessions))
+        elsewhere = {"features": ["sample-feature"], "tokens": 9_000_000, "local": False}
+        self.assertIn("9.0M tokens in 1 session (unpriced", band(snapshot, sessions=[elsewhere]))
+        self.assertIn("2.5M tokens in 2 sessions", band(snapshot, sessions=[*sessions, elsewhere]))
         self.assertIn("Projected savings: Not measured", handoff(snapshot, "sample-feature"))
         board = board_document(snapshot)
         self.assertIn("Projected cost savings", board)
@@ -249,6 +255,29 @@ class PulseTests(unittest.TestCase):
                 checks = project_workspace(self.workspace)["features"][0]["evidence"]["checks"]
                 self.assertEqual(checks["recorded_passed"], passed)
                 self.assertEqual(checks["required"], required)
+
+    def test_summary_carries_spec_stories_checks_review_and_delivery(self):
+        base = self.feature(state={
+            "schema_version": "3.0", "feature": "sample-feature", "current_stage": "implement", "current_step": "implement-2-verify",
+            "git": {"branch_name": "feat/sample", "base_branch": "main"},
+            "implement": {"verification": {"status": "pending"}, "pr": {"status": "open", "url": "javascript:alert(1)"}},
+            "tasks": {"stories": [{"id": "S-1", "title": "Read API", "status": "implementation_complete"}, {"id": "S-2", "title": "Undo", "status": "pending"}]},
+        })
+        (base / "spec-handoff.md").write_text("# Sample feature — specification handoff\n\nStatus: accepted.\n\n## Problem\n\nCaregivers need **shared** [history](x.md).\n\nSecond paragraph.\n")
+        (base / "evidence" / "completion.jsonl").write_text(
+            json.dumps({"kind": "checks", "fingerprint": "old", "time": "2026-10-13T07:47:00Z", "results": [{"id": "lint", "status": "fail", "exit_code": 1, "output": "logs/lint.log"}]}) + "\n"
+            + json.dumps({"kind": "review", "fingerprint": "old", "disposition": "fail", "blocking_findings": ["Missing auth check"], "review_notes": ["Looks fine otherwise"]}) + "\n")
+        summary = project_workspace(self.workspace)["features"][0]["summary"]
+        self.assertEqual(summary["spec"]["title"], "Sample feature")
+        self.assertEqual(summary["spec"]["summary"], "Caregivers need shared history.")
+        self.assertEqual([s["done"] for s in summary["stories"]], [True, False])
+        self.assertEqual(summary["stories_done"], 1)
+        self.assertEqual(summary["delivery"]["branch"], "feat/sample")
+        self.assertIsNone(summary["delivery"]["pr_url"])
+        self.assertEqual(summary["delivery"]["substeps"], {"verification": "pending", "pr": "open"})
+        self.assertEqual(summary["checks"]["results"][0], {"id": "lint", "status": "fail", "required": True, "exit_code": 1, "log": "logs/lint.log"})
+        self.assertEqual(summary["review"]["blocking_findings"], ["Missing auth check"])
+        self.assertEqual(summary["review"]["notes"], ["Looks fine otherwise"])
 
     def test_unavailable_state_preserves_capture_schema(self):
         base = self.feature()

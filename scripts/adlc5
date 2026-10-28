@@ -68,7 +68,7 @@ COMMANDS = {
     "repo-index": "Build/refresh/check generated repository intelligence",
     "resolve-model": "Resolve tier → host model ID (→ resolve-model.sh)",
     "setup": "Ask for model tiers and summary preferences",
-    "config": "Show effective settings and their source",
+    "config": "Show or set effective settings and their source",
     "answer": "Record a human answer to a pending runner question",
     "cleanup-features": "Dry-run/archive/delete aged .adlc5/{feature}/ (default: dry-run archive → _archive/)",
     "feature": "Feature helpers (summarize → OKF FEATURE.md)",
@@ -311,11 +311,11 @@ def cmd_resolve_model(args: list[str]) -> int:
 
 
 def cmd_config(args: list[str]) -> int:
-    if not args or args[0] != "show":
-        print("Usage: ./scripts/adlc5 config show [--workspace DIR]", file=sys.stderr)
+    if not args or args[0] not in ("show", "set"):
+        print("Usage: ./scripts/adlc5 config show [--workspace DIR]\n       ./scripts/adlc5 config set KEY VALUE [--scope machine|project|worktree] [--workspace DIR]", file=sys.stderr)
         return 2
     script = SCRIPTS / "configure-models.py"
-    return run([sys.executable, str(script), "show", *args[1:]])
+    return run([sys.executable, str(script), *args])
 
 
 def cmd_setup(args: list[str]) -> int:

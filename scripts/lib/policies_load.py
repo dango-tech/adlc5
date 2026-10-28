@@ -258,9 +258,14 @@ def load_policies_file(path: Path) -> dict:
 
     class UniqueLoader(yaml.SafeLoader):
         def construct_mapping(self, node, deep=False):
-            keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
-            if len(keys) != len(set(keys)):
-                raise ValueError(f"duplicate YAML key in {path}")
+            seen = {}
+            for key_node, _ in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                line = key_node.start_mark.line + 1
+                if key in seen:
+                    # Name key and lines so an agent can merge the duplicate instead of retrying the gate.
+                    raise ValueError(f"duplicate YAML key '{key}' in {path} (lines {seen[key]} and {line}); keep one")
+                seen[key] = line
             return super().construct_mapping(node, deep=deep)
 
     try:

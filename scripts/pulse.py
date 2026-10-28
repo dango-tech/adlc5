@@ -82,6 +82,24 @@ def _load_cache(workspace: Path, feature: str) -> dict:
         return {}
 
 
+def _board_sessions(workspace):
+    """Sessions in this worktree's project from the last all-projects board (~/.adlc5/pulse/fleet.json), each
+    tagged local=True when it ran in this worktree; [] if the cache is absent or unreadable."""
+    from lib.pulse_fleet import workspace_key
+    home = Path.home()
+    try:
+        raw = Reader(home).read(home / '.adlc5/pulse/fleet.json')
+        fleet = json.loads(raw).get('fleet', {}) if raw else {}
+        sessions, inventory = fleet.get('sessions', []), fleet.get('workspace_inventory', [])
+    except (OSError, ValueError, AttributeError):  # the band must never fail over a missing or stale cache
+        return []
+    key = workspace_key(workspace)
+    project = next((w.get('project_id') for w in inventory if isinstance(w, dict) and w.get('key') == key), None)
+    keys = {w.get('key') for w in inventory if isinstance(w, dict) and project and w.get('project_id') == project} | {key}
+    return [{**s, 'local': key in s['workspace_keys']} for s in sessions
+            if isinstance(s, dict) and isinstance(s.get('workspace_keys'), list) and keys & set(s['workspace_keys'])]
+
+
 def _fleet_board(args, workspace=None, snapshot=None):
     from lib.pulse_fleet import collect, workspace_key, workspace_label
     home = Path.home()
@@ -128,6 +146,8 @@ def _fleet_board(args, workspace=None, snapshot=None):
     data['settings'] = {'scopes': settings, 'integrations': integrations(ROOT),
                         'shared_runtime': shared_runtime(),
                         'scan_roots': [str(path).replace(str(home), '~') for path in roots]}
+    # Local-only board: lets "~/" labels become file:// links. Never added to shareable snapshots or handoffs.
+    data['home_uri'] = home.as_uri()
     if workspace:
         key = workspace_key(workspace)
         selected = next((f['identity'] for f in data['features'] if f['workspace_key'] == key
@@ -187,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             if not data:
                 print("ADLC5 Pulse · cached snapshot unavailable")
                 return 0
-            line = band(data, args.feature)
+            line = band(data, args.feature, _board_sessions(workspace))
             print(line + " · present freshness unverified")
             return 0
         data = project_workspace(workspace, args.feature, args.active_only)
@@ -195,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(data, ensure_ascii=True, indent=2))
             return 0
         if args.action == "band":
-            print(band(data, args.feature))
+            print(band(data, args.feature, _board_sessions(workspace)))
             return 0
         if args.action == "handoff":
             if not args.feature:

@@ -14,6 +14,8 @@ from lib.config_layers import project_identity
 PRUNE = {'.git', '.agent-cache', 'node_modules', '.venv', 'venv', '__pycache__',
          'Pods', '.build', 'DerivedData', 'dist', 'build', '.next', '.terraform'}
 KERNEL = re.compile(r'(?:scripts/adlc5|\badlc5)\s+(?:transition|gate|pilot|evidence|state|anchors|readiness|run)\b|(?:init-feature\.sh|pilot-autopilot\.sh)')
+FEATURE_ARG = re.compile(r'--feature[= ]+([A-Za-z0-9][A-Za-z0-9_.-]{0,80})|"feature"\s*:\s*"([A-Za-z0-9][A-Za-z0-9_.-]{0,80})"')
+KERNEL_VERB = re.compile(r'(?:scripts/adlc5|\badlc5)\s+(transition|gate|pilot|evidence|state|anchors|readiness|run|pulse)\b')
 REQUEST = re.compile(r'(?:@|\$|/)adlc5(?:[:\s-]|$)|\b(?:using|use|run|invoke|follow)\s+(?:the\s+)?adlc5\b', re.I)
 
 
@@ -62,6 +64,15 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
     counters = {}
     files = 0
     for host, root in roots:
+        if host == 'codex':
+            # Codex keeps generated thread names beside its session folders.
+            for line in (root.parent / 'session_index.jsonl').read_text(encoding='utf-8', errors='replace').splitlines() if (root.parent / 'session_index.jsonl').is_file() else []:
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict) and entry.get('id') and entry.get('thread_name'):
+                    counters.setdefault('codex:' + str(entry['id']), {'messages': {}, 'snapshot': None})['title'] = _safe_text(entry['thread_name'], 160)
         for path in sorted(root.rglob('*.jsonl')) if root.is_dir() else []:
             if path.is_symlink() or not path.is_file():
                 continue
@@ -93,6 +104,10 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
                         elif host == 'claude':
                             sid, cwd = event.get('sessionId') or sid, event.get('cwd') or cwd
                         stats = counters.setdefault(host + ':' + str(sid), {'messages': {}, 'snapshot': None})
+                        if event.get('type') in ('custom-title', 'ai-title'):
+                            title = event.get('customTitle') or event.get('aiTitle')
+                            if isinstance(title, str) and (event['type'] == 'custom-title' or not stats.get('custom')):
+                                stats['title'], stats['custom'] = _safe_text(title, 160), event['type'] == 'custom-title'
                         if host == 'codex' and event.get('type') == 'event_msg' and payload.get('type') == 'token_count':
                             native = (payload.get('info') or {}).get('total_token_usage')
                             if isinstance(native, dict):
@@ -138,6 +153,16 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
                         row['last'] = max(row['last'] or when or '', when or row['last'] or '') or None
                         if observed:
                             row['evidence'] = 'kernel/skill reference in tool call'
+                        actions, features = stats.setdefault('actions', set()), stats.setdefault('features', set())
+                        for name, args in tools:
+                            text_args = args if isinstance(args, str) else json.dumps(args, default=str)
+                            if name == 'Skill' and isinstance(args, dict) and 'adlc5' in str(args.get('skill', '')).lower():
+                                actions.add(_safe_text(str(args['skill']), 60))
+                            elif 'adlc5_' in name:
+                                actions.add(name.rsplit('adlc5_', 1)[1][:40])
+                            actions.update(KERNEL_VERB.findall(text_args))
+                            if 'adlc5' in name.lower() or 'adlc5' in text_args:
+                                features.update(a or b for a, b in FEATURE_ARG.findall(text_args))
                 row = rows.get(host + ':' + str(sid))
                 if row:
                     row['sources'] += 1
@@ -150,6 +175,9 @@ def sessions(roots: list[tuple[str, Path]], warnings: list[str]) -> tuple[list[d
         if not values and stats.get('snapshot'):
             values = [stats['snapshot']]
         fields = ('input_tokens', 'output_tokens') if row['host'] == 'codex' else ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens')
+        row['title'] = stats.get('title')
+        row['actions'] = sorted(stats.get('actions', ()))[:12]
+        row['features'] = sorted(stats.get('features', ()))[:10]
         if values:
             row['tokens'] = sum(value.get(name, 0) for value in values for name in fields
                                 if type(value.get(name)) is int and value[name] >= 0)

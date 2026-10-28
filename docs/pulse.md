@@ -9,11 +9,24 @@ Pulse reads consumer files. Snapshot, band, handoff, and MCP calls do not run co
 The shared board opens on **Projects**, one application card per Git repository
 identity. Linked worktrees share a project; unrelated repositories with the same
 folder name do not. Project detail lists its workflows with active/archive filters,
-worktrees, agent badges and settings links. Workflow links open one delivery path
-with its evidence and next action, without the global inventories above it.
-**Activity** provides separate session/attempt views, search and 25-row pagination.
-**Settings** provides read-only machine/project/worktree configuration with source
-and override history. See [shared home and settings](shared-home.md).
+worktrees, agent badges and settings links. Workflow links open one feature's
+status page: the spec title and problem summary, branch and pull request, the
+lifecycle stage and Implement substeps, the suggested next action, a plain-language
+"What needs attention" list (failing or out-of-date checks, review findings, the last
+PR-ready gate result, unfinished stories), story progress, each required check's
+result, and the latest review notes. Metrics without data are listed on one
+"Not measured yet" line instead of as tiles. File paths, receipts, recorded events
+and the input fingerprint sit in a collapsed "Source records and provenance" panel.
+**Activity** lists agent sessions that used ADLC5 with the host's session title,
+worktree, the ADLC5 skills and kernel commands used, and each feature the session
+named, linked to that feature's page with its current status. Projects without
+workflows say so and still show their recent sessions. Search and 25-row
+pagination remain. **Settings** shows machine/project/worktree configuration with
+source and override history; each row's **Change** builds the
+`adlc5 config set KEY VALUE --scope machine|project|worktree [--workspace DIR]`
+command that writes that layer (the board itself stays a read-only file). Agent
+badges use the published Claude, Codex, Cursor and Nous Research (Hermes Agent)
+marks from `@lobehub/icons-static-svg` (MIT). See [shared home and settings](shared-home.md).
 
 Hash routes support direct links and browser Back/Forward while remaining offline:
 `#projects`, `#project/<id>`, `#workflow/<id>`, `#activity`, `#settings`.
@@ -108,7 +121,7 @@ Cost is an estimate from explicit host-reported amounts or the existing dated mo
 
 ### Savings and quality on the card and board
 
-Pulse now displays **outcome success**, **projected cost savings**, **escaped defects**, and **rework**. Without complete evidence the card and board say **Not measured**. Outcome success is the evaluator's quality floor, not an AI accuracy score or a count of passing unit tests. The board includes the observed successful/total run count and a 95% Wilson interval for that recorded proportion; the interval assumes independent observations and does not establish general coding accuracy.
+Pulse now displays **outcome success**, **projected cost savings**, **escaped defects**, and **rework**. Without complete evidence the card says **Not measured** and the board lists the metric under **Not measured yet**. Outcome success is the evaluator's quality floor, not an AI accuracy score or a count of passing unit tests. The board includes the observed successful/total run count and a 95% Wilson interval for that recorded proportion; the interval assumes independent observations and does not establish general coding accuracy.
 
 Pulse reads the existing evaluator's three JSONL exports from `.adlc5/<feature>/evaluation/telemetry.jsonl`, `usage.jsonl`, and `outcomes.jsonl`. Copy actual collected records there from `scripts/evaluation/run-case.py collect`, preserving distinct run IDs. Several runs can be concatenated in each corresponding file. These local files are optional, remain ignored with the feature tree, and are never uploaded by Pulse. The regular usage ledger alone cannot establish quality or savings.
 

@@ -77,7 +77,7 @@ class Reliability(unittest.TestCase):
 
     def test_duplicate_policy_keys_fail_with_both_parsers(self):
         self.policy.write_text('autopilot:\n  require_human_pr_approval: true\n  require_human_pr_approval: false\n')
-        with self.assertRaisesRegex(ValueError, 'duplicate YAML key'):
+        with self.assertRaisesRegex(ValueError, "duplicate YAML key 'require_human_pr_approval'.*lines 2 and 3"):
             load_policies_file(self.policy)
         real_import = builtins.__import__
         def without_yaml(name, *args, **kwargs):

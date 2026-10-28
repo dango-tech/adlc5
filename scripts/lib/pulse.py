@@ -284,6 +284,66 @@ def _receipt_sources(directory: Path, workspace: Path, reader: Reader) -> tuple[
     return checks, gates, usage
 
 
+DONE_STORY = {"implementation_complete", "completed", "complete", "done", "verified", "merged"}
+
+
+def _plain(markdown: str, limit: int) -> str:
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", markdown)
+    return _safe_text(re.sub(r"\s+", " ", text.replace("**", "").replace("`", "")).strip(), limit)
+
+
+def _spec(directory: Path, reader: Reader) -> dict[str, Any]:
+    try:
+        raw = reader.read(directory / "spec-handoff.md")
+    except UnsafeInput:
+        reader.warnings.append("unsafe_source:spec-handoff.md")
+        raw = None
+    if not raw:
+        return {}
+    text = raw.decode("utf-8", errors="replace")
+    title = next((line[2:] for line in text.splitlines() if line.startswith("# ")), "")
+    sections = re.split(r"^## +", text, flags=re.M)
+    problem = next((s.split("\n", 1)[1] for s in sections[1:] if s.lower().startswith(("problem", "summary", "overview")) and "\n" in s), "")
+    paragraph = next((p for p in re.split(r"\n\s*\n", problem or (sections[0].split("\n", 1)[1] if "\n" in sections[0] else "")) if p.strip() and not p.lstrip().startswith(("#", "|", "```"))), "")
+    title = re.sub(r"\s*[—–-]\s*spec(ification)?[ -]handoff\s*$", "", title, flags=re.I)
+    return {"title": _plain(title, 160), "summary": _plain(paragraph, 600), "source": (directory / "spec-handoff.md").relative_to(reader.workspace).as_posix()}
+
+
+def _summary(directory: Path, reader: Reader, state: dict, latest_checks: dict | None, latest_review: dict | None, latest_gate: dict | None) -> dict[str, Any]:
+    """Readable content for the board: what the feature is, its stories and why evidence passed or failed."""
+    tasks = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    stories = [{"id": _safe_text(s.get("id"), 40), "title": _safe_text(s.get("title"), 160), "status": _safe_text(s.get("status"), 40) or "pending",
+                "done": s.get("status") in DONE_STORY} for s in (tasks.get("stories") or [])[:200] if isinstance(s, dict)]
+    git = state.get("git") if isinstance(state.get("git"), dict) else {}
+    implement = state.get("implement") if isinstance(state.get("implement"), dict) else {}
+    pr = implement.get("pr") if isinstance(implement.get("pr"), dict) else {}
+    pr_url = _safe_text(pr.get("url"), 300)
+    substeps = {name: _safe_text((implement.get(name) or {}).get("status"), 30) for name in ("verification", "integration", "qa", "pr") if isinstance(implement.get(name), dict)}
+    checks = None
+    if latest_checks:
+        checks = {"time": _safe_text(latest_checks.get("time"), 80) or None, "results": [
+            {"id": _safe_text(r.get("id"), 60), "status": _safe_text(r.get("status"), 30), "required": r.get("required", True) is not False,
+             "exit_code": r.get("exit_code") if isinstance(r.get("exit_code"), int) else None, "log": _safe_text(r.get("output"), 300) or None}
+            for r in latest_checks.get("results", [])[:50] if isinstance(r, dict)]}
+    review = None
+    if latest_review:
+        review = {"time": _safe_text(latest_review.get("time"), 80) or None, "disposition": _safe_text(latest_review.get("disposition"), 30),
+                  "blocking_findings": [_safe_text(f if isinstance(f, str) else json.dumps(f), 400) for f in (latest_review.get("blocking_findings") or [])[:20]],
+                  "notes": [_safe_text(n, 400) for n in (latest_review.get("review_notes") or [])[:10] if isinstance(n, str)]}
+    pending = state.get("questions")
+    if isinstance(pending, dict):
+        pending = pending.get("pending")
+    return {
+        "spec": _spec(directory, reader),
+        "stories": stories, "stories_done": sum(1 for s in stories if s["done"]),
+        "delivery": {"branch": _safe_text(git.get("branch_name"), 200) or None, "base": _safe_text(git.get("base_branch"), 200) or None,
+                     "pr_url": pr_url if pr_url.startswith(("https://", "http://")) else None, "pr_status": _safe_text(pr.get("status"), 30) or None, "substeps": substeps},
+        "checks": checks, "review": review,
+        "gate": {"last_result": _safe_text(latest_gate.get("status"), 30), "step": _safe_text(latest_gate.get("step"), 80) or None} if latest_gate else None,
+        "pending_questions": len(pending) if isinstance(pending, (list, dict)) else int(bool(pending)),
+    }
+
+
 def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
     if not rows:
         return {"status": "unavailable", "currency": "USD", "known_cost_usd": None, "complete_total_usd": None, "observed_records": 0, "accounted_records": 0, "token_records": 0, "tokens": {}, "unpriced_models": []}
@@ -522,6 +582,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         else:
             gate_status = "stale"
     usage = _usage(usage_rows, ROOT)
+    summary = _summary(directory, reader, state, latest_checks, latest_review, latest_gate)
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
     warnings.extend(reader.warnings[evaluation_warning_start:])
@@ -574,7 +635,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "review": {"status": review_status},
             "pr_ready": {"status": gate_status, "reason": None if gate_status != "unavailable" else "no sufficiently bound local gate receipt"},
         },
-        "usage": usage, "evaluation": evaluation, "next_action": next_action,
+        "usage": usage, "evaluation": evaluation, "next_action": next_action, "summary": summary,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }
@@ -611,7 +672,20 @@ def project_workspace(workspace: Path, feature: str | None = None, active_only: 
     return result
 
 
-def band(snapshot: dict[str, Any], feature: str | None = None) -> str:
+def transcript_usage(sessions: list[dict[str, Any]], feature: str) -> str | None:
+    """Band text from board-cached transcript sessions that named the feature; None when none counted.
+    Sessions in this worktree win; otherwise any worktree of the same project (agents often run elsewhere)."""
+    named = [s for s in sessions if feature in (s.get("features") or []) and isinstance(s.get("tokens"), int)]
+    counted = [s for s in named if s.get("local", True)] or named
+    if not counted:
+        return None
+    priced = [s["cost_usd"] for s in counted if isinstance(s.get("cost_usd"), (int, float))]
+    tokens = sum(s["tokens"] for s in counted) / 1e6
+    cost = f"${sum(priced):.2f} for {len(priced)}/{len(counted)} priced" if priced else "unpriced"
+    return f"{tokens:.1f}M tokens in {len(counted)} session{'s' if len(counted) != 1 else ''} ({cost}, transcripts)"
+
+
+def band(snapshot: dict[str, Any], feature: str | None = None, sessions: list[dict[str, Any]] | None = None) -> str:
     rows = snapshot.get("features") or []
     if not feature and len(rows) > 1:
         return f"ADLC5 Pulse · {len(rows)} features · choose --feature"
@@ -624,7 +698,7 @@ def band(snapshot: dict[str, Any], feature: str | None = None) -> str:
     savings = evaluation.get("savings_pct")
     rate = evaluation.get("success_rate_pct")
     metrics = (f"savings {savings:.1f}% observed" if savings is not None else "savings Not measured") + " · " + (f"outcome success {rate:.1f}% (n={evaluation.get('runs', 0)})" if rate is not None else "outcome success Not measured")
-    money = f"${cost:.2f}" if isinstance(cost, (int, float)) else "cost unavailable"
+    money = f"${cost:.2f}" if isinstance(cost, (int, float)) else transcript_usage(sessions or [], item.get("id")) or "cost unavailable"
     return f"ADLC5 Pulse · {item.get('id')} · {item.get('lifecycle', {}).get('stage') or 'stage unknown'} · {item.get('evidence', {}).get('checks', {}).get('status')} · {money} · {metrics} · snapshot {snapshot.get('generated_at')} · {item.get('next_action', {}).get('label')}"
 
 
