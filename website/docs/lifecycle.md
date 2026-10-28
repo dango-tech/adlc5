@@ -40,7 +40,7 @@ risk require the high-risk profile and its mandatory human PR approval.
 Initialize consumer-owned acceptance, then lock its definitions. The high-risk
 profile (or `autopilot.require_anchors: true`) needs at least one acceptance
 criterion with `evidence.type: file`; otherwise `anchors lock` fails with
-`file_anchor_required`, because a file anchor cannot be added once Implement starts.
+`file_anchor_required`, because adding one after Implement starts needs a human approval.
 
 ```bash
 /path/to/adlc5/scripts/adlc5 anchors lock --feature my-feature --workspace .
