@@ -1,7 +1,7 @@
 ---
 name: adlc5-tasks
 description: ADLC5 Stage 3 Tasks — user stories, parallel batches, TDD code specs. Invoke via @adlc5-tasks.
-version: 5.3.0
+version: 5.3.1
 ---
 
 # ADLC5 — Tasks

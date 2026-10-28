@@ -22,7 +22,7 @@ The build creates host-specific package directories and `.zip` / `.tar.gz` archi
 
 Use `--host codex|claude|cursor|hermes` to build one package. The archive builder includes only tracked or non-ignored source files selected for distribution; it rejects symlinks, likely secrets, and personal absolute home paths. Do not edit generated files. `INSTALL.json` records host, version, source commit and whether the source was dirty; candidate archives with the same version are distinguishable by provenance and checksum.
 
-When a GitHub Release is published, `.github/workflows/release-plugin-packages.yml` builds and attaches all eight host archives and `SHA256SUMS`. Its release tag must match `core/VERSION` (optionally prefixed with `v`). Publishing a release is separate from building candidate packages.
+`.github/workflows/release-plugin-packages.yml` attaches all eight host archives and `SHA256SUMS` to a draft GitHub Release; publishing that release then pushes them to GitHub Packages. Its release tag must match `core/VERSION` (optionally prefixed with `v`). Publishing a release is separate from building candidate packages.
 
 ## Self-install from an archive
 
@@ -68,9 +68,20 @@ Equivalent CLI after that update:
 gh workflow run release-plugin-packages.yml --ref YOUR_BRANCH_OR_TAG
 ```
 
-To publish durable assets, create and publish a GitHub Release at an appropriately
-versioned, reviewed tag. The same workflow validates and attaches the four host
-ZIPs, four tarballs and checksums. This does not publish listings to each vendor's
+This repository uses immutable releases, which refuse new assets once a release
+is published. To publish durable assets, attach them while the release is still a
+draft, then publish it:
+
+```bash
+gh release create vX.Y.Z --draft --prerelease --target "$(git rev-parse origin/main)"
+gh workflow run release-plugin-packages.yml --ref main -f attach_draft=true -f release_tag=vX.Y.Z
+# after the run attaches the four ZIPs, four tarballs and SHA256SUMS:
+gh release edit vX.Y.Z --draft=false
+```
+
+The run refuses a published release, a tag that differs from `core/VERSION`, or a
+draft whose target commit differs from the commit it built. Publishing the release
+triggers the same workflow again to push the attached archives to GitHub Packages. This does not publish listings to each vendor's
 public plugin directory. Those submission/review processes remain separate below.
 
 ## Register and install
@@ -224,13 +235,13 @@ Release ZIPs do not populate the repository's Packages tab. The release workflow
 also publishes the existing, checksum-verified release assets as four OCI archive
 packages linked to this repository:
 
-- `ghcr.io/dango-tech/adlc5-codex-plugin:5.3.0`
-- `ghcr.io/dango-tech/adlc5-claude-code-plugin:5.3.0`
-- `ghcr.io/dango-tech/adlc5-cursor-plugin:5.3.0`
-- `ghcr.io/dango-tech/adlc5-hermes-plugin:5.3.0`
+- `ghcr.io/dango-tech/adlc5-codex-plugin:5.3.1`
+- `ghcr.io/dango-tech/adlc5-claude-code-plugin:5.3.1`
+- `ghcr.io/dango-tech/adlc5-cursor-plugin:5.3.1`
+- `ghcr.io/dango-tech/adlc5-hermes-plugin:5.3.1`
 
 These are archive bundles, not runnable Docker images. With [ORAS](https://oras.land/docs/installation),
-run `oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.3.0` in an empty directory,
+run `oras pull ghcr.io/dango-tech/adlc5-codex-plugin:5.3.1` in an empty directory,
 verify SHA256SUMS, then extract and run `install.py` using the same OS prerequisites
 as the [download guide](https://adlc5.dev/downloads/). No Docker daemon is needed.
 Versioned registry artifacts retain the exact release bytes and source provenance;

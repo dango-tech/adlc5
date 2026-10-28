@@ -1,7 +1,7 @@
 ---
 name: adlc5-plan
 description: ADLC5 Stage 2 Plan — engineering gates + design discovery/contracts/ops. Invoke via @adlc5-plan.
-version: 5.3.0
+version: 5.3.1
 ---
 
 # ADLC5 — Plan
