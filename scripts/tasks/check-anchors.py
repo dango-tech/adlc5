@@ -12,6 +12,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.policies_load import anchors_required, load_policies  # noqa: E402
+
 MANIFEST_NAME = "acceptance-lock.json"
 TRUST_REF_PREFIX = "refs/adlc5/anchors"
 FEATURE_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -360,6 +363,23 @@ def main() -> int:
         return 2
 
     stories, checks, locked, unlocked_commands = process(state, workspace, lock=args.action == "lock")
+    if args.action == "lock":
+        # Catch a missing file anchor here; after Implement starts one can no longer be added.
+        try:
+            policies = load_policies(workspace, args.feature)
+        except ValueError as exc:
+            checks.append({"id": "policies", "status": "fail", "reason": "policies_invalid", "message": str(exc)})
+        else:
+            if anchors_required(policies) and locked == 0:
+                checks.append(
+                    {
+                        "id": "file_anchor",
+                        "status": "fail",
+                        "reason": "file_anchor_required",
+                        "message": "profile requires at least one file-backed acceptance criterion "
+                        "(evidence.type: file); add one before locking",
+                    }
+                )
     entries = manifest_entries(stories)
     local_entries, local_error = load_manifest(manifest_path)
     sealed_entries, trust_error, _ = read_trusted_manifest(workspace, args.feature)

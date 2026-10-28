@@ -22,7 +22,9 @@ automatic risk detection. Reassess when scope changes.
 Tiny work writes `change.md` (reuse, boundary, acceptance, risks; declared file lists) and a minimal
 spec handoff. Standard work writes `design/plan.md` and machine-checkable story
 specs. High-risk/full work keeps detailed design and independent critique.
-Initialize canonical acceptance entries before locking anchors.
+Initialize canonical acceptance entries before locking anchors. A `high_risk`
+profile (or `autopilot.require_anchors: true`) needs at least one
+`evidence.type: file` criterion, or `anchors lock` fails.
 
 ```bash
 /path/to/adlc5/scripts/adlc5 anchors lock --feature FEATURE

@@ -63,6 +63,10 @@ def profile_name(policies: dict) -> str:
     return str((policies.get("autopilot") or {}).get("profile") or "full")
 
 
+def anchors_required(policies: dict) -> bool:
+    return profile_name(policies) == "high_risk" or bool((policies.get("autopilot") or {}).get("require_anchors"))
+
+
 def step_enabled(policies: dict, step: str) -> bool:
     return step not in PROFILE_SKIPS.get(profile_name(policies), set())
 
