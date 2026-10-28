@@ -2,12 +2,23 @@
 
 ## [Unreleased]
 
+## [5.3.0] — Pulse token use and late file anchors
+
 ### Added
 
+- **Pulse workflow summary:** the board shows each feature's spec, stories, delivery, check results and review notes. Snapshots gain an optional `summary`.
+- **Pulse usage without hooks:** when a feature has no hook ledger, Pulse falls back to transcript token totals from matched sessions, on the board and the terminal band, labeled as transcript-based. Transcript sessions show as unpriced.
+- **Pulse links:** project cards are fully clickable, Codex session IDs open `codex://threads/<id>`, and on the local all-projects board, worktree, spec, receipt and event paths link to their files (never in shared snapshots).
+- **`adlc5 config set KEY VALUE --scope machine|project|worktree`.** It rewrites the target file as JSON, so comments in it are lost.
 - **Approved late file anchor:** a `high_risk` feature that reached Implement with only command anchors can now add a file-backed acceptance criterion. Record the user's `anchor_addition_approval` (acceptance ID and file sha256) with `evidence approve`, then run `anchors lock`. The approval is audited in the completion ledger and `clarity.history`, and existing checks, review and PR approval stay fresh. See [evidence-backed completion](docs/evidence-completion.md#adding-a-file-anchor-after-implement-starts). Fixes [#31](https://github.com/dango-tech/adlc5/issues/31).
+
+### Changed
+
+- **Token burn guidance:** Implement builds each story in a fresh `build-implementer` subagent, never inline; each lifecycle starts in a fresh thread; orchestrators wait with one long blocking wait instead of short polls. This is guidance, not enforced at runtime.
 
 ### Fixed
 
+- **Duplicate policy keys:** the error now names the key and both lines, including in the fallback YAML parser, instead of a bare "duplicate YAML key".
 - **High-risk features without a file anchor:** `anchors lock` now fails with `file_anchor_required` when the `high_risk` profile (or `autopilot.require_anchors: true`) has no `evidence.type: file` acceptance criterion. Before, the lock passed and the feature only failed at `pr-ready`, after Implement, when a file anchor can no longer be added (#31).
 
 ## [5.2.0] — Agent-product governance
