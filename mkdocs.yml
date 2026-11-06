@@ -49,5 +49,8 @@ nav:
   - Troubleshooting: support.md
   - Releases: releases.md
   - Pulse: pulse.md
+  - Benchmarks: benchmarks.md
+  - Host qualification cycles: host-qualification-cycles.md
+  - Brownfield at scale: brownfield-scale.md
   - Telemetry and feedback: telemetry.md
   - Reference: reference.md
