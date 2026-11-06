@@ -22,7 +22,7 @@ Implement applied to AI-assisted delivery: agent judgment for reasoning,
 a deterministic kernel for progression and checks, repository intelligence
 for grounded context, and evidence for completion. It is the whole picture —
 lifecycle, knowledge, context, and verification — working together. See
-[Intelligence](intelligence.md) and the [kernel](../docs/ADLC5-kernel.md).
+[Intelligence](intelligence.md) and the [kernel](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5-kernel.md).
 
 Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
