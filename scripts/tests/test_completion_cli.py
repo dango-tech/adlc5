@@ -141,6 +141,7 @@ def exercise(profile, transport="cli", *, no_story=False):
         verify()
         if profile == "high_risk":
             invoke("transition", "implement-3-integrate", success=False)
+        if profile in ("standard", "high_risk"):
             checks_path = feature / "evidence/checks.json"
             checks = json.loads(checks_path.read_text())
             checks.append({"id": "security", "command": "python3 -B test_security.py"})

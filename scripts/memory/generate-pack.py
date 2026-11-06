@@ -42,17 +42,26 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
     if not handoff.is_file():
         raise ValueError("required spec-handoff.md missing")
 
+    budget = int((state.get("memory") or {}).get("context_budget_tokens") or 8000)
     parts = [f"# Context pack — {story_id}\n\nFeature: {feature}\nPersona: {persona}",
              "## Story and acceptance\n\n```json\n" + json.dumps(story, indent=2) + "\n```"]
     sources: list[str] = []
+    included_tokens = sum(len(part) // 4 for part in parts)
 
-    def include(path: Path, title: str) -> None:
+    def include(path: Path, title: str, *, required: bool = True) -> None:
+        nonlocal included_tokens
         resolved = path.resolve()
         if not resolved.is_relative_to(workspace):
             raise ValueError(f"context source escapes workspace: {path}")
+        content = path.read_text(encoding="utf-8")
+        estimated = max(1, len(content) // 4)
+        if not required and included_tokens + estimated > budget:
+            parts.append(f"## {title}\n\nOmitted automatically: context budget reached; retrieve `{path.relative_to(workspace).as_posix()}` only if needed.")
+            return
         rel = path.relative_to(workspace).as_posix()
         sources.append(rel)
-        parts.append(f"## {title}\n\nSource: `{rel}`\n\n" + path.read_text(encoding="utf-8"))
+        parts.append(f"## {title}\n\nSource: `{rel}`\n\n" + content)
+        included_tokens += estimated
 
     include(spec, "Code spec" if spec.name != "change.md" else "Bounded change")
     include(handoff, "Locked requirements")
@@ -66,7 +75,7 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
     for rel in ("AGENTS.md", ".agents/architecture.yaml", ".agents/boundaries.yaml", ".agents/commands.yaml"):
         path = workspace / rel
         if path.is_file():
-            include(path, f"Repository rules: {rel}")
+            include(path, f"Repository rules: {rel}", required=False)
     fm, _ = load_frontmatter(spec.read_text(encoding="utf-8"))
     if spec.name != "change.md" and (not fm or fm.get("story_id") != story_id):
         raise ValueError("code spec needs valid frontmatter matching the story id")
@@ -81,7 +90,7 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
         for rel in ("design/plan.md", "design/1a-discovery.md", "design/1b-contracts.md", "design/1c-operations.md"):
             path = directory / rel
             if path.is_file():
-                include(path, rel)
+                include(path, rel, required=False)
     else:
         parts.append("## Design pointers\n\nOmitted for coder persona — use the code spec.")
     if persona_mode_enabled(load_policies(workspace, feature)):
