@@ -351,9 +351,9 @@ def completion_checks(workspace, feature, policies=None, *, approval=True, revie
         if delivery['status'] != 'pass':
             failures.append(delivery['message'])
         policies = policies or load_policies(workspace, feature)
-        if review and profile_name(policies) == 'high_risk' and not any(c['id'] == 'security' and c.get('required', True) for c in required):
+        if review and profile_name(policies) in ('standard', 'high_risk') and not any(c['id'] == 'security' and c.get('required', True) for c in required):
             failures.append('required security command')
-        if review and step_enabled(policies, 'implement-3-integrate') and not any(c['id'] == 'integration' and c.get('required', True) for c in required):
+        if review and profile_name(policies) in ('standard', 'high_risk') and not any(c['id'] == 'integration' and c.get('required', True) for c in required):
             failures.append('required integration command')
         if review:
             review_record = next((r for r in reversed(fresh) if r.get('kind') == 'review'), {})
