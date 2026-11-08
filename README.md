@@ -14,6 +14,16 @@ in current evidence. Agent skills handle judgment; one deterministic kernel owns
 progression and checks. It aims for repeatable acceptance and failure handling,
 not identical generated code.
 
+**Provenance.** ADLC5 is the accumulated practice of Specify → Plan → Tasks →
+Implement applied to AI-assisted delivery: agent judgment for reasoning,
+a deterministic kernel for progression and checks, repository intelligence
+for grounded context, and evidence for completion. It is not a single
+technique but the whole picture — lifecycle, knowledge, context, and
+verification — working together. See the [kernel](docs/ADLC5-kernel.md) and
+[repository context](core/guides/repository-context.md).
+
+**Quality.** Claims are gated on measured results — see [benchmarks](docs/benchmarks.md), [host qualification cycles](docs/host-qualification-cycles.md), and [brownfield at scale](docs/brownfield-scale.md).
+
 Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
 ## Quickstart

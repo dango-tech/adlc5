@@ -17,6 +17,13 @@ in current evidence. Agent skills handle judgment; one deterministic kernel owns
 progression and checks. It aims for repeatable acceptance and failure handling,
 not identical generated code.
 
+**Provenance.** ADLC5 is the accumulated practice of Specify → Plan → Tasks →
+Implement applied to AI-assisted delivery: agent judgment for reasoning,
+a deterministic kernel for progression and checks, repository intelligence
+for grounded context, and evidence for completion. It is the whole picture —
+lifecycle, knowledge, context, and verification — working together. See
+[Intelligence](intelligence.md) and the [kernel](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5-kernel.md).
+
 Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
 
 Use ADLC5 in your application repository. This repository distributes the
@@ -42,6 +49,12 @@ SOUL supports this pillar as the reasoning discipline across the four stages.
 [Download host plugin packages](downloads.md) for Codex, Claude Code, Cursor,
 and Hermes Agent. See [configuration](configuration.md) for shared storage and
 worktree overrides.
+
+## Prove and qualify
+
+- [Benchmarks](benchmarks.md) — suites and publication rules; claims cite measured runs only.
+- [Host qualification cycles](host-qualification-cycles.md) — per-host matrix status.
+- [Brownfield at scale](brownfield-scale.md) — OpenViking as durable store for derived repo state.
 
 ## Choose your next step
 
