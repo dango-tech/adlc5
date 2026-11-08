@@ -2,16 +2,6 @@
 
 ## [Unreleased]
 
-## [5.3.2] — Quality governance and bounded context
-
-### Added
-
-- Benchmark, host qualification, brownfield-scale, feature dependency, ownership, SAST/dependency-gate, release-evidence, and context-budget improvements.
-
-### Changed
-
-- Standard and high-risk profiles require integration and security evidence.
-
 ## [5.3.1] — Release packages on immutable releases
 
 5.3.1 ships the 5.3.0 changes below; the v5.3.0 release has no packages.
