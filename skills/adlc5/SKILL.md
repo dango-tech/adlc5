@@ -1,7 +1,7 @@
 ---
 name: adlc5
 description: ADLC5 — 4-stage SDD orchestrator (Specify → Plan → Tasks → Implement) with integrated autopilot. Invoke via @adlc5 for [feature].
-version: 5.3.1
+version: 5.3.2
 ---
 
 # ADLC5 — Orchestrator
