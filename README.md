@@ -256,6 +256,9 @@ describes larger changes.
 Further reference: [kernel](docs/ADLC5-kernel.md), [skill map](shared/docs/SKILL-MAP.md),
 [repository context](core/guides/repository-context.md), [on-demand KB](shared/docs/knowledge-base/README.md),
 [current technology sources](core/guides/current-information.md), [license](LICENSE).
+Benchmark suites: [docs/benchmarks.md](docs/benchmarks.md) ·
+Host qualification cycles: [docs/host-qualification-cycles.md](docs/host-qualification-cycles.md) ·
+Brownfield at scale: [docs/brownfield-scale.md](docs/brownfield-scale.md).
 
 Framework version: [core/VERSION](core/VERSION). Persisted state retains schema `3.0`.
 
