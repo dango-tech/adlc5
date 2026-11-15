@@ -88,6 +88,9 @@ The [reference](reference.md) links to canonical repository documentation,
 kernel commands, skill map, and [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview).
 The [README](https://github.com/dango-tech/adlc5#readme) remains the install-oriented
 project entry point; repository documents define the technical contracts.
+Benchmarks: [benchmarks.md](benchmarks.md) ·
+Host qualification: [host-qualification-cycles.md](host-qualification-cycles.md) ·
+Brownfield scale: [brownfield-scale.md](brownfield-scale.md).
 
 ## Get help and contribute
 
