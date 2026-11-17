@@ -36,9 +36,14 @@ if ! python3 - "$ROOT" "$WORKSPACE" "$FEATURE" <<'PY'
 import json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+from lib.git_bootstrap import BootstrapBlocked, feature_path
 from lib.policies_load import load_policies
 try:
+    feature_path(Path(sys.argv[2]).resolve(), sys.argv[3])
     load_policies(Path(sys.argv[2]), sys.argv[3])
+except BootstrapBlocked as exc:
+    print(json.dumps({"action": "halt", "stop_reason": exc.diagnostic["condition"], "bootstrap": exc.diagnostic}))
+    sys.exit(2)
 except (ValueError, OSError) as exc:
     print(json.dumps({"action": "halt", "stop_reason": "invalid_policy", "error": str(exc)}))
     sys.exit(2)
@@ -130,6 +135,34 @@ export ADLC5_NODE_ID="$CURRENT_STEP"
 export ADLC5_ATTEMPT="$(jq -r '(.consecutive_failure_counter // 0) + 1' "$PILOT_META")"
 PERSONA_JSON=$(persona_meta "$CURRENT_STEP" "$ACTIVE_PERSONA")
 telemetry_emit "$FEATURE" "checkpoint" "pilot-autopilot.sh" "ok" "$CURRENT_STEP" '{"step":"gate_eval"}'
+
+if [[ "$CURRENT_STEP" == "specify-0-git" ]]; then
+  python3 - "$ROOT" "$WORKSPACE" "$FEATURE" "$PERSONA_JSON" <<'PY_BOOTSTRAP'
+import json, sys
+from pathlib import Path
+
+root, path, feature, persona = sys.argv[1:]
+sys.path.insert(0, str(Path(root) / "scripts"))
+from lib import git_bootstrap
+from lib.policies_load import load_policies, next_step_for_profile
+
+workspace = Path(path).resolve()
+result = git_bootstrap.evaluate(workspace, feature)
+try:
+    git_bootstrap.record(workspace, feature, result)
+except git_bootstrap.BootstrapBlocked as exc:
+    result = exc.diagnostic
+out = {**json.loads(persona), "gate": git_bootstrap.STEP, "phase": git_bootstrap.STEP,
+       "skill": None, "bootstrap": result}
+if result["status"] == "pass":
+    target = next_step_for_profile(load_policies(workspace, feature), git_bootstrap.STEP)
+    out.update(action="advance", suggested_next=target, transition_target=target)
+else:
+    out.update(action="halt", stop_reason=result["condition"])
+print(json.dumps(out))
+PY_BOOTSTRAP
+  exit 0
+fi
 
 GATE_ID=""
 SKILL=""

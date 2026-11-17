@@ -63,6 +63,16 @@ def prepare(args):
     for field, value in [('observation', case.get('observation_window_hours')), ('wall_clock', (case.get('budget') or {}).get('wall_clock_minutes')), ('cost', (case.get('budget') or {}).get('cost_usd'))]:
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0 or field != 'cost' and value == 0:
             raise ValueError('case budgets/window must be finite nonnegative numbers; time limits must be positive')
+    if args.baseline_revision is not None:
+        if args.arm != 'baseline':
+            raise ValueError('--baseline-revision requires the baseline arm')
+        revision = args.baseline_revision
+        if len(revision) != 40 or any(char not in '0123456789abcdef' for char in revision):
+            raise ValueError('baseline revision must be a full lowercase commit SHA')
+        if command(['git', 'rev-parse', revision + '^{commit}'], ROOT) != revision:
+            raise ValueError('baseline revision must identify an exact commit')
+    if args.candidate_routing is not None and args.arm != 'candidate':
+        raise ValueError('--candidate-routing requires the candidate arm')
     run = Path(args.directory).resolve()
     run.mkdir(parents=True, exist_ok=False)
     repo = run / 'consumer'
@@ -79,7 +89,7 @@ def prepare(args):
     command(['git', '-c', 'user.name=ADLC5 fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Frozen consumer starting point'], repo)
     revision = command(['git', 'rev-parse', 'HEAD'], repo)
     framework = ROOT
-    frozen_revision = bank['baseline_framework_revision']
+    frozen_revision = args.baseline_revision or bank['baseline_framework_revision']
     if args.arm in ('baseline', 'speckit'):
         framework = run / 'framework'
         framework.mkdir()
@@ -106,13 +116,18 @@ def prepare(args):
                     frozen_files={name: digest(run / name) for name in ('acceptance.py', 'regression.py')},
                     acceptance_command=[sys.executable, str(run / 'acceptance.py'), str(repo), args.case],
                     regression_command=[sys.executable, str(run / 'regression.py')])
+    if args.candidate_routing is not None:
+        manifest['candidate_routing'] = args.candidate_routing
     write(run / 'manifest.json', manifest)
     write(run / 'manifest-lock.json', {'sha256': digest(run / 'manifest.json')})
     write(run / 'observations.json', dict(rework=None, human_rejected=None, escaped_defects=None,
         observation_completed_at=None, interventions=None, reviewer_findings=[], quality_gates_passed=None,
         question_review=None, active_seconds=None, human_wait_seconds=None, usage=[], telemetry=[]))
     handoff = f'''# Fresh host session handoff\n\nCase: {args.case}; arm: {args.arm}; profile: {case['profile']}\nHost/model: {args.host} / {args.model}\nConsumer: {repo}\nFramework: {framework}\n\n{case['task']}\n\nFrozen acceptance: `{shlex.join(manifest['acceptance_command'])}`\nFrozen regression: `PYTHONPATH={shlex.quote(str(repo))} {shlex.join(manifest['regression_command'])}`. If using a different Python runtime, prepare all arms with that same runtime.\nDo not change the frozen scripts or task. Do not commit consumer implementation.\nFor framework arms invoke @adlc5 for {args.case}, initialize canonical acceptance entries before locking anchors, and use the selected profile. Use this framework path, not your global installation. Follow host-native sessions; record actual calls, interventions and accounting with run_id {run.name} and node_id host-delivery (or matching finer-grained node IDs).\nDirect arm performs the same consumer tests and independent diff review.\nHigh-risk runs require genuine human approval; leave readiness unknown until it occurs.\nResume in a fresh session from manifest.json, feature artifacts/state and kernel pilot/state get output. Never reconstruct progress from chat or assert completion via state set.\nPopulate observations.json from actual telemetry/usage and review; escaped_defects stays null until the {case['observation_window_hours']}-hour observation window finishes. Cost/token source belongs on every usage record. Collection measures elapsed wall time from preparation, including human idle time.\n'''
-    (run / 'HANDOFF.md').write_text(handoff)
+    if args.candidate_routing == 'same-model':
+        handoff += f'\nUse {args.model} for every model tier. Record the observed model for every worker.\n'
+    elif args.candidate_routing == 'tiered':
+        handoff += '\nUse the campaign-pinned tier configuration. Record the requested tier and observed model for every worker.\n'
     if args.arm in ('direct', 'speckit'):
         handoff = handoff.replace('For framework arms invoke @adlc5', 'For ADLC5 baseline/candidate arms only, invoke @adlc5')
         handoff += '\nUse direct coding for the direct arm. For Spec Kit, inspect this pinned checkout and use its actual documented workflow; do not apply ADLC5 internal gates.\n'
@@ -162,7 +177,10 @@ def collect(args):
     if framework_digest(framework) != manifest['framework_sha256']:
         raise ValueError('framework changed while collecting checks')
     started = datetime.fromisoformat(manifest['created_at'])
-    outcome = dict(run_id=manifest['run_id'], profile=manifest['arm'] + ':' + manifest['profile'], case_id=manifest['case_id'],
+    arm_label = manifest['arm']
+    if manifest.get('candidate_routing'):
+        arm_label += '-' + manifest['candidate_routing']
+    outcome = dict(run_id=manifest['run_id'], profile=arm_label + ':' + manifest['profile'], case_id=manifest['case_id'],
         anchors_passed=results['acceptance']['exit_code'] == 0 and not changed, regression_passed=results['regression']['exit_code'] == 0,
         anchor_changed=changed, elapsed_seconds=(datetime.now(timezone.utc) - started).total_seconds(),
         **{k: observations.get(k) for k in ('rework', 'human_rejected', 'escaped_defects', 'interventions', 'reviewer_findings')})
@@ -218,6 +236,8 @@ def main():
     p.add_argument('--case', required=True)
     p.add_argument('--suite', choices=['pilot', 'extended'], default='pilot')
     p.add_argument('--arm', choices=['direct', 'baseline', 'candidate', 'speckit'], required=True)
+    p.add_argument('--baseline-revision', help='Full commit SHA for a campaign-specific ADLC5 baseline')
+    p.add_argument('--candidate-routing', choices=['same-model', 'tiered'])
     p.add_argument('--speckit-path')
     p.add_argument('--speckit-revision')
     p.add_argument('--host', required=True)

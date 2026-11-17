@@ -22,6 +22,7 @@ SCRIPTS = ROOT / "scripts"
 # A bare "bash" on Windows resolves to the WSL launcher in System32 before PATH.
 BASH = shutil.which("bash") or "bash"
 sys.path.insert(0, str(SCRIPTS))
+from lib import git_bootstrap  # noqa: E402
 from runner import hosts  # noqa: E402
 from runner.questions import pending as pending_question, check_current as check_question, current_answers, StaleQuestion  # noqa: E402
 from lib.completion_evidence import fingerprint, records as evidence_records  # noqa: E402
@@ -105,7 +106,11 @@ def append(path: Path, item: dict[str, Any]) -> None:
 
 
 def journal(path: Path) -> list[dict[str, Any]]:
-    return [item for line in path.read_text(encoding="utf-8").splitlines() if (item := read_json_line(line))]
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    return [item for line in lines if (item := read_json_line(line))]
 
 
 def read_json_line(line: str) -> dict[str, Any] | None:
@@ -139,14 +144,19 @@ def isolate_in_worktree(workspace: Path, feature: str, feature_dir: Path, branch
     """Create the feature's one worktree under .worktrees/ and move its state there."""
     base = git(workspace, "rev-parse", "HEAD")
     target = workspace / ".worktrees" / feature
-    if target.exists():
-        raise RuntimeError(f"ADLC5 worktree target already exists: {target}")
+    if target.resolve() != target or target.exists():
+        raise git_bootstrap.BootstrapBlocked("worktree_target_unavailable", target,
+            "Choose an unused local worktree path and resume.")
     if subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0:
-        raise RuntimeError(f"feature branch {branch} already exists; attach a worktree for that branch and resume there")
+        raise git_bootstrap.BootstrapBlocked("feature_branch_exists", workspace,
+            "Open a worktree for the existing feature branch and resume there.", branch=branch)
     # Excluded locally, so the tracked .gitignore is never edited.
     exclude = Path(git(workspace, "rev-parse", "--git-path", "info/exclude"))
     if not exclude.is_absolute():
         exclude = workspace / exclude
+    if exclude.is_symlink():
+        raise git_bootstrap.BootstrapBlocked("redirected_git_exclude", exclude,
+            "Restore the Git exclude file within the repository metadata.")
     if ".worktrees/" not in (exclude.read_text(encoding="utf-8").splitlines() if exclude.is_file() else []):
         exclude.parent.mkdir(parents=True, exist_ok=True)
         with exclude.open("a", encoding="utf-8") as stream:
@@ -159,7 +169,8 @@ def isolate_in_worktree(workspace: Path, feature: str, feature_dir: Path, branch
     patch_file = target_feature / "pilot/runner-isolation.json"
     patch_file.parent.mkdir(parents=True, exist_ok=True)
     patch_file.write_text(json.dumps({"git": {"isolation": "worktree", "branch_name": branch,
-        "base_branch": base, "worktree_path": str(target)}}), encoding="utf-8")
+        "base_branch": base, "worktree_path": str(target), "repository_root": str(target),
+        "start_commit": base}}), encoding="utf-8")
     saved = call(target, "state", "set", "--feature", feature, "--file", str(patch_file), check=False)
     patch_file.unlink(missing_ok=True)
     if saved.returncode:
@@ -208,17 +219,26 @@ def acquire_lock(path: Path) -> None:
             raise RuntimeError(f"feature is locked by pid {owner['pid']}, started {owner.get('started_at', 'unknown')}")
 
 
+def checkout_dirty(workspace: Path, feature: str) -> bool:
+    status = git(workspace, "status", "--porcelain", "--untracked-files=all")
+    runtime_prefix = f"?? .adlc5/{feature}/"
+    return any(not line.startswith(runtime_prefix) for line in status.splitlines())
+
+
 def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: argparse.Namespace) -> tuple[str, str] | int:
     branch_prefix = "feat"
     # git_branch_prefix is retained in repository config independently of model setup.
     branch_prefix = effective_config(workspace)[0].get('git_branch_prefix') or branch_prefix
-    branch = f"{branch_prefix}/{feature}"
-    dirty = bool(git(workspace, "status", "--porcelain", "--untracked-files=all"))
+    state = load_feature_state(workspace, feature) or {}
+    recorded_git = state.get("git") or {}
+    recorded_isolation = recorded_git.get("isolation")
+    branch = recorded_git.get("branch_name") if recorded_isolation in {"branch", "worktree", "current"} else None
+    branch = branch or f"{branch_prefix}/{feature}"
+    dirty = checkout_dirty(workspace, feature)
     if dirty:
-        state = load_feature_state(workspace, feature) or {}
-        recorded_path = ((state.get("git") or {}).get("worktree_path"))
+        recorded_path = recorded_git.get("worktree_path")
         events_path = feature_dir / "pilot/attempts.jsonl"
-        events = journal(events_path) if events_path.is_file() else []
+        events = journal(events_path)
         resumable_attempt = None
         if recorded_path and Path(recorded_path).resolve() == workspace:
             for candidate in reversed(events):
@@ -233,7 +253,8 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
         runner_owned = bool(resumable_attempt and git(workspace, "rev-parse", "HEAD") == resumable_attempt.get("start_commit"))
         if not runner_owned:
             if git(workspace, "branch", "--show-current") not in ("main", "master"):
-                raise RuntimeError("runner requires a clean feature branch; preserve or commit existing changes before running")
+                raise git_bootstrap.BootstrapBlocked("dirty_checkout", workspace,
+                    "Preserve or commit existing changes before running on this feature branch.")
             target = isolate_in_worktree(workspace, feature, feature_dir, branch)
             return run(argparse.Namespace(**{**vars(args), "workspace": str(target)}))
     common = Path(git(workspace, "rev-parse", "--git-common-dir"))
@@ -245,19 +266,31 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
     if current != branch:
         # A host-created worktree is reused as is: only the branch changes, in place.
         if not linked and current and current not in ("main", "master"):
-            raise RuntimeError(f"runner is on branch {current}; use a host-created worktree for {branch}")
+            raise git_bootstrap.BootstrapBlocked("different_branch", workspace,
+                "Open a worktree for the feature branch and resume.", current_branch=current, expected_branch=branch)
         exists = subprocess.run(["git", "-C", str(workspace), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]).returncode == 0
-        subprocess.run(["git", "-C", str(workspace), "switch", branch] if exists else
-                       ["git", "-C", str(workspace), "switch", "-c", branch], check=True)
-    state = load_feature_state(workspace, feature) or {}
+        switch = subprocess.run(["git", "-C", str(workspace), "switch", "--", branch] if exists else
+                                ["git", "-C", str(workspace), "switch", "-c", branch],
+                                capture_output=True, text=True, check=False)
+        if switch.returncode:
+            content = switch.stderr
+            if "already used by worktree" in content or "already checked out" in content:
+                raise git_bootstrap.BootstrapBlocked("branch_checked_out", workspace,
+                    "Open the worktree that already checks out the feature branch.", branch=branch)
+            raise git_bootstrap.BootstrapBlocked("git_switch_failed", workspace,
+                "Check Git metadata and checkout permissions, then resume.", branch=branch,
+                command="git switch", exit_code=switch.returncode)
+    isolation = "current" if recorded_isolation == "current" else "worktree" if linked else "branch"
     saved = call(workspace, "state", "set", "--feature", feature, "--patch", json.dumps({"git": {
-        "isolation": "worktree" if linked else "branch", "branch_name": branch,
-        "base_branch": state.get("git", {}).get("base_branch") or git(workspace, "rev-parse", "HEAD"),
+        "isolation": isolation, "branch_name": branch,
+        "base_branch": recorded_git.get("base_branch") or git(workspace, "rev-parse", "HEAD"),
         "worktree_path": str(workspace),
+        "repository_root": str(workspace),
+        "start_commit": recorded_git.get("start_commit") or git(workspace, "rev-parse", "HEAD"),
     }}), check=False)
     if saved.returncode:
         raise RuntimeError(saved.stderr.strip() or saved.stdout.strip() or "failed to record git isolation")
-    return branch, "worktree" if linked else "branch"
+    return branch, isolation
 
 
 def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: str | None = None) -> tuple[str, str | None]:
@@ -690,21 +723,43 @@ def finish_summary(workspace: Path, feature: str, status: str, branch: str, mode
            (f" ({len(deviations)} deviations)" if deviations else "")) if mode == "off" else json.dumps(summary, indent=2))
 
 
+def report_bootstrap_block(workspace: Path, feature: str, result: dict[str, Any]) -> int:
+    try:
+        git_bootstrap.record(workspace, feature, result)
+    except git_bootstrap.BootstrapBlocked as exc:
+        result = exc.diagnostic
+    print(json.dumps(result))
+    return 1
+
+
 def run(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).resolve()
-    feature_dir = workspace / ".adlc5" / args.feature
+    try:
+        feature_dir = git_bootstrap.feature_path(workspace, args.feature)
+    except git_bootstrap.BootstrapBlocked as exc:
+        print(json.dumps(exc.diagnostic))
+        return 1
     if not (feature_dir / "state.json").is_file():
         peer = feature_worktree(workspace, args.feature)
         if peer:
             print(json.dumps({"status": "redirected", "worktree": str(peer)}), file=sys.stderr)
             return run(argparse.Namespace(**{**vars(args), "workspace": str(peer)}))
-        raise RuntimeError("state.json missing; initialize the ADLC5 feature first")
+        exc = git_bootstrap.BootstrapBlocked("feature_state_missing", feature_dir / "state.json",
+                                             "Initialize this ADLC5 feature in the consumer workspace.")
+        print(json.dumps(exc.diagnostic))
+        return 1
     policies = load_policies(workspace, args.feature)
     lock = feature_dir / "pilot/runner.lock"
-    acquire_lock(lock)
+    try:
+        acquire_lock(lock)
+    except PermissionError:
+        exc = git_bootstrap.BootstrapBlocked("state_unwritable", lock.parent,
+                                             "Grant write access to the feature state directory and resume.")
+        print(json.dumps(exc.diagnostic))
+        return 1
     try:
         journal_path = feature_dir / "pilot/attempts.jsonl"
-        events = journal(journal_path) if journal_path.exists() else []
+        events = journal(journal_path)
         config = merge_model_config(ROOT, workspace)
         profiles = config.get("platform_profiles") if isinstance(config.get("platform_profiles"), dict) else {}
         host = str(args.host or config.get("default_host") or "")
@@ -736,15 +791,35 @@ def run(args: argparse.Namespace) -> int:
             raise RuntimeError("Hermes unattended mode requires .adlc5/external-sandbox.json declared by the user as a container")
         if mode not in hosts.AVAILABLE_MODES[host]:
             raise RuntimeError(f"{host} does not support {mode} mode")
-        isolated = ensure_isolation(workspace, args.feature, feature_dir, args)
-        if isinstance(isolated, int):
-            return isolated
-        branch, isolation = isolated
+        state = load_feature_state(workspace, args.feature) or {}
+        opening = state.get("current_step") == git_bootstrap.STEP
+        recorded = state.get("git") or {}
+        try:
+            if opening and recorded.get("isolation") in {"branch", "worktree", "current", "skip", "skipped", "waived"}:
+                result = git_bootstrap.evaluate(workspace, args.feature)
+                if result["status"] == "blocked":
+                    return report_bootstrap_block(workspace, args.feature, result)
+                if result["evidence"].get("isolation") == "waived":
+                    raise git_bootstrap.BootstrapBlocked("git_required_by_runner", workspace,
+                        "Continue with in-agent Specify after opting out of Git isolation.")
+                if checkout_dirty(workspace, args.feature):
+                    raise git_bootstrap.BootstrapBlocked("dirty_checkout", workspace,
+                        "Preserve or commit existing changes before running on this feature branch.")
+                branch, isolation = recorded.get("branch_name"), recorded["isolation"]
+            else:
+                if opening:
+                    binding = git_bootstrap.git_binding(workspace)
+                    git_bootstrap.check_binding(workspace, state, binding)
+                isolated = ensure_isolation(workspace, args.feature, feature_dir, args)
+                if isinstance(isolated, int):
+                    return isolated
+                branch, isolation = isolated
+        except git_bootstrap.BootstrapBlocked as exc:
+            return report_bootstrap_block(workspace, args.feature, exc.diagnostic)
         state = load_feature_state(workspace, args.feature) or {}
         if state.get("stage_status", {}).get("implement") == "completed":
             finish_summary(workspace, args.feature, "completed", branch, args.summary or "brief")
             return 0
-        call(workspace, "pilot", "--feature", args.feature)
         pending = resume_question(workspace, args.feature)
         if pending and not pending.get("answer"):
             print(json.dumps({"status": "needs_human", **pending}, indent=2))
@@ -777,7 +852,7 @@ def run(args: argparse.Namespace) -> int:
                 finish_summary(workspace, args.feature, "completed", branch, summary_mode)
                 return 0
             if action.get("action") == "halt":
-                print(json.dumps({"status": "halted", "reason": action.get("stop_reason")}, indent=2))
+                print(json.dumps(action.get("bootstrap") or {"status": "halted", "reason": action.get("stop_reason")}, indent=2))
                 return 1
             if action.get("action") == "advance":
                 if str(action.get("phase", "")).startswith("specify-") and str(action.get("transition_target", "")).startswith("plan-"):

@@ -119,6 +119,33 @@ class Pilot(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn('framework changed', result.stderr)
 
+    def test_campaign_can_pin_baseline_and_distinguish_candidate_routing(self):
+        baseline = 'e79b73acf11a079583539db931f70eb4fe9aa829'
+        prepare = [sys.executable, str(RUNNER), 'prepare', '--case', 'tiny-label',
+                   '--host', 'test-only', '--model', 'configured-model']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = root / 'baseline'
+            subprocess.run([*prepare, '--arm', 'baseline', '--baseline-revision', baseline,
+                            '--directory', str(run)], check=True, capture_output=True)
+            manifest = json.loads((run / 'manifest.json').read_text())
+            self.assertEqual(manifest['framework_revision'], baseline)
+            self.assertEqual((run / 'framework/core/VERSION').read_text().strip(), '5.3.2')
+            for routing in ('same-model', 'tiered'):
+                run = root / routing
+                subprocess.run([*prepare, '--arm', 'candidate', '--candidate-routing', routing,
+                                '--directory', str(run)], check=True, capture_output=True)
+                manifest = json.loads((run / 'manifest.json').read_text())
+                self.assertEqual(manifest['candidate_routing'], routing)
+                proc = subprocess.run([sys.executable, str(RUNNER), 'collect', '--directory',
+                                       str(run)], check=True, capture_output=True, text=True)
+                self.assertEqual(json.loads(proc.stdout)['outcome']['profile'], f'candidate-{routing}:tiny')
+            invalid = root / 'unpinned'
+            proc = subprocess.run([*prepare, '--arm', 'baseline', '--baseline-revision', 'HEAD',
+                                   '--directory', str(invalid)], capture_output=True)
+            self.assertEqual(proc.returncode, 2)
+            self.assertFalse(invalid.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
