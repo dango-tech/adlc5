@@ -72,6 +72,22 @@ Set `autopilot.require_explicit_worker_model: true` to require an explicit
 requested model for each worker launch. Observed model IDs come from host
 reports and can be unavailable.
 
+Set `autopilot.max_observed_worker_tokens` to a positive integer to pause
+before a new launch once the feature's attributable, already reported
+worker usage reaches that threshold. This strict policy supports Codex in
+confined mode and Claude in allowlist mode. Codex uses the enclosing input
+and output counters from one completed turn. Claude uses the terminal
+result's input, output, cache-read, and cache-creation counters. A prior
+attempt with missing, partial, conflicting, or legacy usage receipts pauses
+the run even below the threshold. This policy also pauses on malformed
+attempt journal or usage ledger records. Reported zero is valid when the counters
+are present. Without this setting, the runner continues to record usage
+without imposing an observed-token limit.
+
+This policy uses host-reported measurements after exit. A call already in
+progress can cross the threshold. Provider billing, costs, and activity
+outside this supervised feature's worker attempts are separate.
+
 Cost uses the host's own figure when it reports one, otherwise
 `core/model-prices.yaml`. Add or override entries in
 `~/.adlc5/model-prices.yaml` using the same `models:` layout. A model with no

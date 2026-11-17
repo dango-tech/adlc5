@@ -569,6 +569,8 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], prompt: s
     # Failed attempts still spent tokens: every error result carries what the host reported.
     spent = {key: events[key] for key in ("usage", "model_id", "host_reported_cost_usd", "calls") if events.get(key)}
     spent["observed_model_id"] = events.get("model_id")
+    if (host, mode) in hosts.OBSERVED_TOKEN_MODES and not (timed_out or stopped):
+        spent["observed_token_total"] = events.get("observed_token_total")
     if stopped:
         return 130, {"error": "worker interrupted", "failure_kind": "interrupted", **spent}, log_text
     if timed_out:
@@ -583,11 +585,13 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], prompt: s
         return 0, {"status": "needs_human", "attempt_id": attempt_id, "summary": "permission approval required",
                    "question": question, "denied_actions": denied, "usage": events.get("usage", {}),
                    "model_id": events.get("model_id"), "observed_model_id": events.get("model_id"),
+                   "observed_token_total": spent.get("observed_token_total"),
                    "host_reported_cost_usd": events.get("host_reported_cost_usd")}, log_text
     if events.get("is_error") or events.get("denied_actions"):
         return proc.returncode or 1, {"error": "host reported an error or denied action",
                                        "failure_kind": "permission_required" if events.get("denied_actions") else "host_failed",
-                                       **events, "observed_model_id": events.get("model_id")}, log_text
+                                       **events, "observed_model_id": events.get("model_id"),
+                                       "observed_token_total": spent.get("observed_token_total")}, log_text
     if mode != "attended" and host != "hermes":
         try:
             raw_result = events.get("text") or "{}"
@@ -618,7 +622,7 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], prompt: s
     # The attempt id is the runner-owned identity when a host exposes no session id.
     worker.update(session_id=host_session_id or attempt_id, host_session_id=host_session_id,
                   model_id=events.get("model_id") or model.get("model_id") or "unknown",
-                  observed_model_id=events.get("model_id"),
+                  observed_model_id=events.get("model_id"), observed_token_total=spent.get("observed_token_total"),
                   usage=events.get("usage") or {}, wall_seconds=round(time.monotonic() - started, 3),
                   calls=events.get("calls", 1), host_reported_cost_usd=events.get("host_reported_cost_usd"))
     temp = result.with_suffix(".tmp")
@@ -663,7 +667,8 @@ def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result:
     extra = {"attempt_id": attempt["attempt_id"], "requested_model_id": model.get("model_id") or "host-default",
              "observed_model_id": result.get("observed_model_id", result.get("model_id")), "config_sha256": attempt["config_sha256"],
              "host_session_id": result.get("host_session_id"),
-             "usage_unavailable": not bool(usage), "wall_seconds": result.get("wall_seconds"),
+             "usage_unavailable": not bool(usage), "observed_token_total": result.get("observed_token_total"),
+             "wall_seconds": result.get("wall_seconds"),
              "host_reported_cost_usd": result.get("host_reported_cost_usd"), "calls": result.get("calls", 1)}
     args = [sys.executable, str(SCRIPTS / "memory/usage-ledger.py"), "record", "--feature", feature, "--workspace", str(workspace),
             "--source", "api" if usage else "self_reported", "--platform", str(attempt.get("host") or "codex"), "--model-id", str(result.get("model_id") or "unknown"),
@@ -674,6 +679,88 @@ def record_usage(workspace: Path, feature: str, attempt: dict[str, Any], result:
         if type(usage.get(name)) is int:
             args.extend((flag, str(usage[name])))
     subprocess.run(args, cwd=workspace, check=True)
+
+
+def budget_records(path: Path, step: str, limit: int, label: str) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    except (UnicodeError, OSError) as exc:
+        raise RunnerStop("observed_token_usage_unavailable", step,
+                         f"Restore access to the feature's {label} before resuming with this policy.",
+                         budget=limit) from exc
+    rows = []
+    for line in lines:
+        if not line.strip():
+            continue
+        row = read_json_line(line)
+        if row is None:
+            raise RunnerStop("observed_token_usage_unavailable", step,
+                             f"Review the invalid {label} record before resuming with this policy.",
+                             budget=limit)
+        rows.append(row)
+    return rows
+
+
+def enforce_observed_token_budget(feature_dir: Path, step: str, policy: dict[str, Any],
+                                  host: str, mode: str) -> None:
+    if "max_observed_worker_tokens" not in policy:
+        return
+    limit = policy["max_observed_worker_tokens"]
+    if type(limit) is not int or limit < 1:
+        raise RunnerStop("invalid_observed_token_budget", step,
+                         "Set autopilot.max_observed_worker_tokens to a positive integer.")
+    if (host, mode) not in hosts.OBSERVED_TOKEN_MODES:
+        raise RunnerStop("observed_token_budget_unsupported", step,
+                         "Use Codex confined or Claude allowlist with this observed-token policy.",
+                         host=host, mode=mode)
+
+    history = budget_records(feature_dir / "pilot/attempts.jsonl", step, limit, "attempt journal")
+    reservations = [row for row in history if "start_commit" in row and not row.get("checkpoint")]
+    if any(not isinstance(row.get("attempt_id"), str) or not row["attempt_id"] for row in reservations):
+        raise RunnerStop("observed_token_usage_unavailable", step,
+                         "Review the reservation without an attempt ID before resuming with this policy.",
+                         budget=limit)
+    attempts = {row["attempt_id"]: row for row in reservations}
+    orphaned_launches = [row for row in history if row.get("checkpoint") == "launched"
+                         and (not isinstance(row.get("attempt_id"), str) or row["attempt_id"] not in attempts)]
+    ledger = budget_records(feature_dir / "memory/usage-ledger.jsonl", step, limit, "usage ledger")
+    orphaned_receipts = set()
+    measurements: dict[str, set[int | None]] = {}
+    for row in ledger:
+        extra = row.get("extra")
+        if not isinstance(extra, dict):
+            continue
+        attempt_id = extra.get("attempt_id")
+        attempt = attempts.get(attempt_id) if isinstance(attempt_id, str) else None
+        if attempt is None:
+            if isinstance(attempt_id, str) and row.get("feature") == feature_dir.name and extra.get("config_sha256"):
+                orphaned_receipts.add(attempt_id)
+            continue
+        matching = (row.get("feature") == feature_dir.name and row.get("run_id") == attempt.get("run_id")
+                    and row.get("step") == attempt.get("step") and row.get("platform") == attempt.get("host")
+                    and bool(attempt.get("run_id")) and bool(attempt.get("config_sha256"))
+                    and extra.get("config_sha256") == attempt["config_sha256"]
+                    and (attempt.get("host"), attempt.get("mode")) in hosts.OBSERVED_TOKEN_MODES)
+        total = extra.get("observed_token_total")
+        value = (total if matching and row.get("source") == "api" and extra.get("usage_unavailable") is False
+                 and type(total) is int and total >= 0 else None)
+        measurements.setdefault(attempt_id, set()).add(value)
+
+    known = [next(iter(values)) for values in measurements.values() if len(values) == 1 and None not in values]
+    known_total = sum(known)
+    missing_ids = {row["attempt_id"] for row in orphaned_launches if isinstance(row.get("attempt_id"), str)}
+    unmeasured = (len(reservations) - len(known) + len(missing_ids | orphaned_receipts)
+                  + sum(not isinstance(row.get("attempt_id"), str) for row in orphaned_launches))
+    if known_total >= limit:
+        raise RunnerStop("observed_token_budget_exhausted", step,
+                         "Review the feature usage and its configured limit before resuming.",
+                         observed_tokens=known_total, budget=limit, unmeasured_attempts=unmeasured)
+    if unmeasured:
+        raise RunnerStop("observed_token_usage_unavailable", step,
+                         "Review missing or conflicting host usage receipts before resuming with this policy.",
+                         observed_tokens=known_total, budget=limit, unmeasured_attempts=unmeasured)
 
 
 def ingest(workspace: Path, feature: str, attempt: dict[str, Any], result: dict[str, Any], coder: dict[str, Any] | None) -> None:
@@ -1002,6 +1089,8 @@ def run(args: argparse.Namespace) -> int:
                 print(json.dumps({"status": "handoff", "step": step, "branch": branch,
                                   "next": "review and approve the PR with the in-agent PR workflow, then run again"}, indent=2))
                 return 10
+            pilot_policy = policies.get("autopilot") or {}
+            enforce_observed_token_budget(feature_dir, step, pilot_policy, host, mode)
             history = journal(journal_path)
             last_closed = next((row for row in reversed(history)
                                 if row.get("step") == step and row.get("checkpoint") == "closed"), {})
@@ -1046,7 +1135,6 @@ def run(args: argparse.Namespace) -> int:
             same_step = [row for row in attempts if (row.get("step"), row.get("story"), row.get("kind", "work"))
                          == (step, story, kind)]
             attempt_no = len(same_step) + 1
-            pilot_policy = policies.get("autopilot") or {}
             limits = pilot_policy.get("retry_budgets") or {}
             feature_limit = int(pilot_policy.get("max_iterations", 200))
             step_limit = int(limits.get("worker_attempts_per_step", max(5, budget + 1)))
