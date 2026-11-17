@@ -610,6 +610,15 @@ def _recorded_blocker(directory: Path, reader: Reader, step: str) -> dict | None
     return None
 
 
+def _recorded_question(directory: Path, reader: Reader, step: str) -> dict | None:
+    record = directory / "pilot/pending-question.json"
+    entry = _json(reader, record) or {}
+    category = entry.get("category")
+    if entry.get("step") != step or category not in ("product", "permission") or entry.get("answer"):
+        return None
+    return {"category": category, "source": record.relative_to(reader.workspace).as_posix()}
+
+
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
     label, archive_id = _identity(directory, workspace)
     identity = hashlib.sha256((str(directory.relative_to(workspace)) + "\0" + label).encode()).hexdigest()[:20]
@@ -684,11 +693,15 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
     blocker = _recorded_blocker(directory, reader, step) if step and not archive_id else None
+    question = _recorded_question(directory, reader, step) if step and not archive_id else None
     warnings.extend(reader.warnings[evaluation_warning_start:])
     pending = state.get("questions")
     if isinstance(pending, dict):
         pending = pending.get("pending")
-    if pending:
+    if question:
+        action_label = "Review the recorded permission request" if question["category"] == "permission" else "Review the recorded product question"
+        next_action = {"reason_code": "human_input_pending", "label": action_label}
+    elif pending:
         next_action = {"reason_code": "human_input_pending", "label": "Resolve the pending question"}
     elif blocker:
         next_action = {"reason_code": blocker["condition"], "label": blocker["next_action"]}
@@ -739,6 +752,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         "usage": usage, "evaluation": evaluation, "next_action": next_action, "summary": summary,
         "runner": runner if capture_stable else None,
         "last_blocker": blocker if capture_stable else None,
+        "pending_input": question if capture_stable else None,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }

@@ -74,6 +74,22 @@ class PulseTests(unittest.TestCase):
         feature = project_workspace(self.workspace)["features"][0]
         self.assertEqual(feature["next_action"]["reason_code"], "pack_over_budget")
 
+    def test_runner_pending_permission_is_visible_without_exporting_command(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        pending = base / "pilot/pending-question.json"
+        question = {"step": "implement-2-verify", "category": "permission", "question": "private question",
+                    "denied_actions": [{"command": "private command"}]}
+        pending.write_text(json.dumps(question))
+        snapshot = project_workspace(self.workspace)
+        feature = snapshot["features"][0]
+        self.assertEqual(feature["id"], "sample-feature")
+        self.assertEqual(feature["next_action"]["label"], "Review the recorded permission request")
+        self.assertEqual(feature["pending_input"]["category"], "permission")
+        self.assertNotIn("private command", json.dumps(snapshot))
+        pending.write_text(json.dumps({**question, "answer": "allow"}))
+        self.assertIsNone(project_workspace(self.workspace)["features"][0]["pending_input"])
+
     def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
         base = self.feature()
         for name in ("pilot", "memory"):
