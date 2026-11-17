@@ -344,13 +344,19 @@ def _summary(directory: Path, reader: Reader, state: dict, latest_checks: dict |
     }
 
 
-def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
+def _usage(rows: list[dict], root: Path, *, prices: dict | None = None) -> dict[str, Any]:
     if not rows:
         return {"status": "unavailable", "currency": "USD", "known_cost_usd": None, "complete_total_usd": None, "observed_records": 0, "accounted_records": 0, "token_records": 0, "tokens": {}, "unpriced_models": []}
-    prices = load_prices(ROOT)
+    if prices is None:
+        prices = load_prices(root)
     by_id: dict[str, dict] = {}
     conflicts: set[str] = set()
     unique: list[dict] = []
+
+    def content(row: dict) -> str:
+        clean = {key: value for key, value in row.items() if not key.startswith("_pulse_")}
+        return json.dumps(clean, sort_keys=True, separators=(",", ":"))
+
     for row in rows:
         extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
         native_id = next((extra.get(key) for key in ("usage_event_id", "cursor_usage_event_id", "attempt_id") if isinstance(extra.get(key), str) and extra.get(key)), None)
@@ -358,13 +364,12 @@ def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
             unique.append(row)
             continue
         key = str(native_id)
-        encoded = json.dumps(row, sort_keys=True, separators=(",", ":"))
         if key in conflicts:
             continue
         if key not in by_id:
             by_id[key] = row
             unique.append(row)
-        elif json.dumps(by_id[key], sort_keys=True, separators=(",", ":")) != encoded:
+        elif content(by_id[key]) != content(row):
             conflicts.add(key)
             unique = [entry for entry in unique if entry is not by_id[key]]
     known = 0.0
@@ -513,6 +518,86 @@ def _evaluation(directory: Path, reader: Reader) -> dict[str, Any]:
     return result
 
 
+
+def _duration(start: Any, end: Any) -> float | None:
+    try:
+        seconds = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def _observed_model(value: Any) -> str | None:
+    model = _safe_text(value, 120)
+    return model if model.lower() not in {"", "unknown", "inherit", "host default", "host-default"} else None
+
+
+def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) -> dict | None:
+    warning_start = len(reader.warnings)
+    journal, limited = _jsonl(reader, directory / "pilot/attempts.jsonl")
+    starts, launches, closed = {}, {}, {}
+    for event in journal:
+        attempt_id = event.get("attempt_id")
+        if not isinstance(attempt_id, str) or not attempt_id:
+            continue
+        kind = event.get("checkpoint")
+        if kind == "launched":
+            launches[attempt_id] = event
+        elif kind == "closed":
+            closed[attempt_id] = event
+        elif not kind and isinstance(event.get("step"), str):
+            starts[attempt_id] = event
+    if not starts:
+        return None
+
+    usage_by_attempt: dict[str, list[dict]] = {}
+    for row in usage_rows:
+        extra = row.get("extra")
+        attempt_id = extra.get("attempt_id") if isinstance(extra, dict) else None
+        if isinstance(attempt_id, str) and attempt_id in starts:
+            usage_by_attempt.setdefault(attempt_id, []).append(row)
+    prices = load_prices(ROOT)
+    rows = []
+    for attempt_id, start in starts.items():
+        end = closed.get(attempt_id, {})
+        usage = _usage(usage_by_attempt.get(attempt_id, []), ROOT, prices=prices)
+        started_at = launches.get(attempt_id, start).get("at")
+        outcome = _safe_text(end.get("outcome"), 40)
+        rows.append({
+            "id": _safe_text(attempt_id, 150),
+            "step": _safe_text(start["step"], 100),
+            "story": _safe_text(start.get("story"), 100) or None,
+            "host": _safe_text(start.get("host"), 30) or None,
+            "requested_model": _observed_model(start.get("requested_model_id")),
+            "observed_model": _observed_model(end.get("model_id")),
+            "outcome": outcome or "unclosed",
+            "reason_code": _safe_text(end.get("reason_code"), 80) or None,
+            "duration_seconds": _duration(started_at, end.get("at")),
+            "tokens": usage["tokens"],
+            "known_cost_usd": usage["known_cost_usd"],
+        })
+    by_step: dict[tuple[str, str | None], dict] = {}
+    for row in rows:
+        key = (row["step"], row["story"])
+        group = by_step.setdefault(key, {
+            "step": row["step"], "story": row["story"], "attempts": 0, "failed": 0,
+            "timed_attempts": 0, "attempt_seconds": 0.0,
+        })
+        group["attempts"] += 1
+        group["failed"] += row["outcome"] == "fail"
+        if row["duration_seconds"] is not None:
+            group["timed_attempts"] += 1
+            group["attempt_seconds"] += row["duration_seconds"]
+    return {
+        "observed_attempts": len(rows),
+        "failed_attempts": sum(row["outcome"] == "fail" for row in rows),
+        "unclosed_attempts": sum(row["outcome"] == "unclosed" for row in rows),
+        "partial": limited or len(reader.warnings) > warning_start,
+        "by_step": list(by_step.values())[-100:],
+        "recent_attempts": rows[-100:],
+    }
+
+
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
     label, archive_id = _identity(directory, workspace)
     identity = hashlib.sha256((str(directory.relative_to(workspace)) + "\0" + label).encode()).hexdigest()[:20]
@@ -582,6 +667,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         else:
             gate_status = "stale"
     usage = _usage(usage_rows, ROOT)
+    runner = _runner_projection(directory, reader, usage_rows)
     summary = _summary(directory, reader, state, latest_checks, latest_review, latest_gate)
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
@@ -636,6 +722,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "pr_ready": {"status": gate_status, "reason": None if gate_status != "unavailable" else "no sufficiently bound local gate receipt"},
         },
         "usage": usage, "evaluation": evaluation, "next_action": next_action, "summary": summary,
+        "runner": runner if capture_stable else None,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }

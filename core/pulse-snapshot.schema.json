@@ -389,6 +389,19 @@
           "type": "object",
           "description": "Optional readable content: spec, stories, delivery, check results, review notes, last gate result, pending questions."
         },
+        "runner": {
+          "type": ["object", "null"],
+          "description": "Observed supervised runner attempts. Attempt durations are worker-attempt intervals, not feature elapsed time.",
+          "required": ["observed_attempts", "failed_attempts", "unclosed_attempts", "partial", "by_step", "recent_attempts"],
+          "properties": {
+            "observed_attempts": {"type": "integer", "minimum": 0},
+            "failed_attempts": {"type": "integer", "minimum": 0},
+            "unclosed_attempts": {"type": "integer", "minimum": 0},
+            "partial": {"type": "boolean"},
+            "by_step": {"type": "array", "items": {"type": "object"}},
+            "recent_attempts": {"type": "array", "items": {"type": "object"}}
+          }
+        },
         "receipts": {
           "type": "array",
           "items": {

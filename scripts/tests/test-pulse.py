@@ -48,6 +48,34 @@ class PulseTests(unittest.TestCase):
         }))
         return base
 
+    def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
+        base = self.feature()
+        for name in ("pilot", "memory"):
+            (base / name).mkdir()
+        first = {"attempt_id": "a", "step": "implement-1-build", "story": "S-1", "host": "codex",
+                 "requested_model_id": "host default", "at": "2026-11-06T21:22:52Z"}
+        journal = [
+            first,
+            {**first, "attempt_id": "b", "host": "claude", "requested_model_id": "model-a"},
+            {"attempt_id": "a", "checkpoint": "closed", "outcome": "fail", "model_id": "host default",
+             "at": "2026-11-06T21:23:13Z", "reason_code": "gate_failed", "reason": "private error text"},
+        ]
+        usage = {"model_id": "unknown", "extra": {"attempt_id": "a"}, "tokens": {"input": 7, "cache_read": 61}}
+        for path, rows in (("pilot/attempts.jsonl", journal), ("memory/usage-ledger.jsonl", [usage, usage])):
+            (base / path).write_text("".join(json.dumps(row) + "\n" for row in rows))
+        snapshot = project_workspace(self.workspace)
+        runner = snapshot["features"][0]["runner"]
+        self.assertEqual((runner["observed_attempts"], runner["failed_attempts"], runner["unclosed_attempts"]), (2, 1, 1))
+        self.assertEqual(runner["by_step"][0]["attempt_seconds"], 21)
+        self.assertEqual(runner["by_step"][0]["timed_attempts"], 1)
+        failed, unclosed = runner["recent_attempts"]
+        self.assertEqual(failed["tokens"], {"input": 7, "cache_read": 61})
+        self.assertIsNone(failed["observed_model"])
+        self.assertIsNone(unclosed["duration_seconds"])
+        self.assertEqual(unclosed["requested_model"], "model-a")
+        self.assertNotIn("private error text", json.dumps(snapshot))
+
+
     def evaluation_fixture(self):
         base = self.feature()
         directory = base / "evaluation"

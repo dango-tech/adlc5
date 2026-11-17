@@ -19,6 +19,9 @@ const feature = {id: 'export', identity: 'wf-1', project_id: 'p1', project: 'App
 const stale = {...feature, id: 'alexa', identity: 'wf-2', lifecycle: {stage: 'implement', step: 'implement-2-verify', stage_status: {implement: 'in_progress'}},
   evidence: {pr_ready: {status: 'historical'}, checks: {status: 'stale', recorded_passed: 1, required: 1}, review: {status: 'fail'}}, capture: {stable: true, freshness: 'available'},
   usage: {known_cost_usd: null}, evaluation: {reason: 'No complete evaluation records'}, next_action: {label: 'Rerun the required checks', reason_code: 'evidence_stale'},
+  runner: {observed_attempts: 2, failed_attempts: 1, unclosed_attempts: 1, partial: false,
+    by_step: [{step: 'implement-1-build', story: 'S-1', attempts: 2, failed: 1, timed_attempts: 1, attempt_seconds: 21}],
+    recent_attempts: [{step: 'implement-1-build', host: 'codex', outcome: 'fail', reason_code: 'gate_failed', duration_seconds: 21, tokens: {input: 7, cache_read: 61}}]},
   summary: {spec: {title: 'Alexa caregiver experience', summary: 'Hands-free shared history.'}, stories: [{id: 'S-1', title: 'Read API', status: 'implementation_complete', done: true}, {id: 'S-2', title: 'Undo', status: 'pending', done: false}], stories_done: 1,
     delivery: {branch: 'feat/alexa', base: 'main', pr_url: null, substeps: {qa: 'pending'}}, checks: {time: '2026-10-13T07:47:00Z', results: [{id: 'lint', status: 'pass', required: true, exit_code: 0, log: 'evidence/check-0.log'}]},
     review: {disposition: 'fail', time: '2026-10-13T05:24:00Z', blocking_findings: ['Missing auth check'], notes: []}, gate: {last_result: 'fail', step: 'implement-2-verify'}, pending_questions: 0}};
@@ -45,6 +48,9 @@ assert.match(page, /Agent tokens \(transcripts\) 2\.5M 1 session/);
 const hrefs = node => [node.href, ...(node.children || []).flatMap(hrefs)].filter(Boolean);
 assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree'), 'worktree links to its folder');
 assert.doesNotMatch(page, /Host not recorded/);
+assert.match(page, /2 observed · 1 failed · 1 unclosed/);
+assert.match(page, /21.0 s · 1\/2 timed/);
+assert.match(page, /fail · gate failed/);
 assert.match(page, /Agent sessions on this feature/); assert.match(page, /Ship Alexa reminders/);
 navigate('activity'); assert.equal(ids.features.hidden, true); assert.match(ids.fleet.textContent, /60 records/);
 assert.match(ids.fleet.textContent, /Ship Alexa reminders session-0/); assert.match(ids.fleet.textContent, /adlc5:implement, gate/);

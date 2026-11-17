@@ -69,6 +69,29 @@ function attention(feature) {
   return items;
 }
 
+function renderAttempts(runner) {
+  const section = make("section", "p-section-gap");
+  const heading = make("div", "p-panel-head");
+  heading.append(make("h2", "", "Runner attempts"), make("span", "sub",
+    `${runner.observed_attempts} observed · ${runner.failed_attempts} failed · ${runner.unclosed_attempts} unclosed${runner.partial ? " · partial journal" : ""}`));
+  section.append(heading);
+  const title = row => [label(row.step), row.story].filter(Boolean).join(" · ");
+  const duration = value => typeof value === "number" ? `${value.toFixed(1)} s` : "Unavailable";
+  if (runner.by_step.length) section.append(table(["Step or story", "Attempts", "Failed", "Observed attempt time"],
+    runner.by_step.map(row => [title(row), String(row.attempts), String(row.failed),
+      row.timed_attempts ? `${duration(row.attempt_seconds)} · ${row.timed_attempts}/${row.attempts} timed` : "Unavailable"])));
+  const details = make("details", "p-sources");
+  details.append(make("summary", "", `Latest ${runner.recent_attempts.length} attempts`));
+  const tokens = (row, key) => typeof row.tokens?.[key] === "number" ? row.tokens[key].toLocaleString() : "Unavailable";
+  details.append(table(["Step or story", "Host", "Outcome", "Requested model", "Observed model", "Time", "Input", "Cache read", "Known cost"],
+    runner.recent_attempts.slice().reverse().map(row => [title(row), row.host ? hostBadges([row.host]) : "Unavailable",
+      [label(row.outcome), row.reason_code && label(row.reason_code)].filter(Boolean).join(" · "),
+      row.requested_model || "Unavailable", row.observed_model || "Unavailable", duration(row.duration_seconds),
+      tokens(row, "input"), tokens(row, "cache_read"), typeof row.known_cost_usd === "number" ? money(row.known_cost_usd) : "Unavailable"])));
+  section.append(details);
+  return section;
+}
+
 function renderWorkflow() {
   const feature = data.features.find(item => item.identity === selector.value);
   panel.replaceChildren();
@@ -226,6 +249,8 @@ function renderWorkflow() {
     panel.append(metrics);
   }
   if (unmeasured.length) panel.append(make("p", "sub p-unmeasured", `Not measured yet: ${unmeasured.join(", ")} · ${evaluation.reason || "no evaluation records"}`));
+
+  if (feature.runner) panel.append(renderAttempts(feature.runner));
 
   if (worked.length) {
     const sessionHead = make("div", "p-panel-head p-section-gap");

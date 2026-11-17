@@ -14,7 +14,12 @@ status page: the spec title and problem summary, branch and pull request, the
 lifecycle stage and Implement substeps, the suggested next action, a plain-language
 "What needs attention" list (failing or out-of-date checks, review findings, the last
 PR-ready gate result, unfinished stories), story progress, each required check's
-result, and the latest review notes. Metrics without data are listed on one
+result, and the latest review notes. Runner attempts show observed failures, unclosed attempts, and step or story
+timing from the supervised runner journal. Attempt time is the interval from
+launch to close and can include verification or cleanup. It does not represent
+feature elapsed time or human wait time. Token buckets and known cost are shown
+only when a usage ledger row identifies that attempt.
+Metrics without data are listed on one
 "Not measured yet" line instead of as tiles. File paths, receipts, recorded events
 and the input fingerprint sit in a collapsed "Source records and provenance" panel.
 **Activity** lists agent sessions that used ADLC5 with the host's session title,
