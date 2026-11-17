@@ -10,17 +10,98 @@
   "homepage": "https://github.com/dango-tech/adlc5",
   "repository": "https://github.com/dango-tech/adlc5",
   "license": "MIT",
-  "keywords": ["agent-workflow", "skills", "mcp", "sdd"],
+  "keywords": [
+    "agent-workflow",
+    "skills",
+    "mcp",
+    "sdd"
+  ],
   "extensions": {
     "com.openai": {
       "onboardingSkill": "./skills/adlc5-setup/SKILL.md",
       "interface": {
         "displayName": "ADLC5",
-        "shortDescription": "Evidence-driven software delivery for coding agents.",
-        "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
+        "shortDescription": "Evidence-led software delivery",
+        "longDescription": "ADLC5 helps developers deliver software changes through Specify → Plan → Tasks → Implement. Skills guide requirements discovery, architecture, task breakdown, implementation, verification, and PR review. A local deterministic kernel checks lifecycle gates and records evidence in the consumer repository. Repository Intelligence gathers project context; Pulse summarizes delivery state and recorded usage.\n\nRequires local execution with Git, Bash, Python 3.10+, jq, and a supported coding-agent host. Run setup from your application repository. ADLC5 writes project scaffolding and local workflow records; review generated changes and command permissions before running delivery work. Optional sharing is disabled by default and requires explicit consent.\n\nPublic preview: workflow contract tests do not establish comparative coding quality, production readiness, or measured savings. Human approvals, CI, deployment, and live qualification remain separate.",
         "developerName": "Dango Tech",
-        "category": "Developer tools",
-        "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"]
+        "category": "Developer Tools",
+        "capabilities": [
+          "Plan and implement software changes",
+          "Run deterministic workflow checks"
+        ],
+        "logo": "./assets/brand/codex-icon.png",
+        "composerIcon": "./assets/brand/codex-icon.png",
+        "defaultPrompt": [
+          "Set up ADLC5 in this repository.",
+          "Help me specify a software change with ADLC5.",
+          "Show the ADLC5 delivery status for this repository."
+        ],
+        "websiteURL": "https://adlc5.dev/",
+        "supportURL": "https://adlc5.dev/support/"
+      },
+      "requires_local_executor": true,
+      "review": {
+        "prompts": [
+          "Which ADLC5 version is installed?",
+          "Show the ADLC5 Pulse status of this repository without changing it.",
+          "What is the recorded state of the submission-demo feature?",
+          "Assess the clarity of spec.md in this repository.",
+          "Check whether the repository intelligence index is current."
+        ],
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Check the installed framework release. No project setup required.",
+              "prompt": "Which ADLC5 version is installed?",
+              "tools_triggered": "adlc5_version",
+              "expected_behavior": "Call adlc5_version with no arguments and report the exact returned version."
+            },
+            {
+              "description": "Read a disposable consumer repository; use its absolute path as workspace.",
+              "prompt": "Show the ADLC5 Pulse status of this repository without changing it.",
+              "tools_triggered": "adlc5_pulse",
+              "expected_behavior": "Call adlc5_pulse with workspace pointing at the consumer. Summarize the returned snapshot; do not fabricate savings, outcomes, or completion."
+            },
+            {
+              "description": "Initialize feature submission-demo with scripts/init-feature.sh in the disposable consumer before this case.",
+              "prompt": "What is the recorded state of the submission-demo feature?",
+              "tools_triggered": "adlc5_state_get",
+              "expected_behavior": "Call adlc5_state_get with feature submission-demo and the consumer workspace. Report its recorded step/status; do not advance or modify state."
+            },
+            {
+              "description": "Create spec.md in the disposable consumer with a brief feature requirement.",
+              "prompt": "Assess the clarity of spec.md in this repository.",
+              "tools_triggered": "adlc5_clarity",
+              "expected_behavior": "Call adlc5_clarity with file_path spec.md and the consumer workspace. Explain returned findings without treating the score as proof of software quality."
+            },
+            {
+              "description": "Use a disposable consumer with no repository index.",
+              "prompt": "Check whether the repository intelligence index is current.",
+              "tools_triggered": "adlc5_repo_index",
+              "expected_behavior": "Call adlc5_repo_index with action check and the consumer workspace. Report missing/stale index from the response; do not claim a successful build or build it without a request."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Explain that ADLC5 has no billing or refund tool; invoke no ADLC5 MCP tool and do not claim a refund.",
+              "prompt": "Refund my ADLC5 subscription payment."
+            },
+            {
+              "description": "Explain that ADLC5 cannot access OpenAI publisher verification or allowlisting; invoke no ADLC5 MCP tool and do not claim approval.",
+              "prompt": "Approve my organization for OpenAI local MCP submissions."
+            },
+            {
+              "description": "Explain that ADLC5 has no account password-reset capability; invoke no ADLC5 MCP tool.",
+              "prompt": "Reset the password for my ADLC5 account."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "ADLC5 does not sell products or process payments."
+      },
+      "publication": {
+        "release_notes": "ADLC5 5.3.1 public-preview package for local Codex workflows, with setup, four-stage delivery skills, deterministic kernel checks, repository Intelligence, and Pulse. Comparative coding-quality and live production qualification remain pending.",
+        "countries": []
       }
     }
   }
