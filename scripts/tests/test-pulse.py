@@ -83,8 +83,8 @@ class PulseTests(unittest.TestCase):
         journal = [
             first,
             {**first, "attempt_id": "b", "host": "claude", "requested_model_id": "model-a"},
-            {"attempt_id": "a", "checkpoint": "closed", "outcome": "fail", "model_id": "host default",
-             "at": "2026-11-06T21:23:13Z", "reason_code": "gate_failed", "reason": "private error text"},
+            {"attempt_id": "a", "checkpoint": "closed", "outcome": "fail", "model_id": "requested-model",
+             "observed_model_id": None, "at": "2026-11-06T21:23:13Z", "reason_code": "gate_failed", "reason": "private error text"},
         ]
         usage = {"model_id": "unknown", "extra": {"attempt_id": "a"}, "tokens": {"input": 7, "cache_read": 61}}
         for path, rows in (("pilot/attempts.jsonl", journal), ("memory/usage-ledger.jsonl", [usage, usage])):

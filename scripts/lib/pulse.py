@@ -569,7 +569,7 @@ def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) 
             "story": _safe_text(start.get("story"), 100) or None,
             "host": _safe_text(start.get("host"), 30) or None,
             "requested_model": _observed_model(start.get("requested_model_id")),
-            "observed_model": _observed_model(end.get("model_id")),
+            "observed_model": _observed_model(end.get("observed_model_id", end.get("model_id"))),
             "outcome": outcome or "unclosed",
             "reason_code": _safe_text(end.get("reason_code"), 80) or None,
             "duration_seconds": _duration(started_at, end.get("at")),

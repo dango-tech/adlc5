@@ -84,11 +84,12 @@ function renderAttempts(runner) {
   const details = make("details", "p-sources");
   details.append(make("summary", "", `Latest ${runner.recent_attempts.length} attempts`));
   const tokens = (row, key) => typeof row.tokens?.[key] === "number" ? row.tokens[key].toLocaleString() : "Unavailable";
-  details.append(table(["Step or story", "Host", "Outcome", "Requested model", "Observed model", "Time", "Input", "Cache read", "Known cost"],
+  details.append(table(["Step or story", "Host", "Outcome", "Requested model", "Observed model", "Time", "Input", "Output", "Cache read", "Cache write", "Known cost"],
     runner.recent_attempts.slice().reverse().map(row => [title(row), row.host ? hostBadges([row.host]) : "Unavailable",
       [label(row.outcome), row.reason_code && label(row.reason_code)].filter(Boolean).join(" · "),
       row.requested_model || "Unavailable", row.observed_model || "Unavailable", duration(row.duration_seconds),
-      tokens(row, "input"), tokens(row, "cache_read"), typeof row.known_cost_usd === "number" ? money(row.known_cost_usd) : "Unavailable"])));
+      tokens(row, "input"), tokens(row, "output"), tokens(row, "cache_read"), tokens(row, "cache_creation"),
+      typeof row.known_cost_usd === "number" ? money(row.known_cost_usd) : "Unavailable"])));
   section.append(details);
   return section;
 }
