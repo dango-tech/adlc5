@@ -125,8 +125,107 @@ def check_bootstrap() -> None:
         assert json.loads(runner.call(non_git, "pilot", "--feature", "waiver").stdout)["action"] == "advance"
 
 
+def check_bounded_execution() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        checkout = Path(temp).resolve()
+
+        def git(*args):
+            return subprocess.run(["git", "-C", str(checkout), *args], check=True,
+                                  capture_output=True, text=True).stdout.strip()
+
+        git("init", "-q", "-b", "feat/bounded")
+        (checkout / "user.py").write_text("original\n")
+        subprocess.run([BASH, str(ROOT / "scripts/init-feature.sh"), "--feature", "bounded",
+                        "--workspace", str(checkout), "--mode", "brownfield",
+                        "--interaction", "autonomous"], check=True, capture_output=True)
+        (checkout / ".git/info/exclude").write_text(".adlc5/\n")
+        git("add", ".")
+        git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "initial")
+        pilot = checkout / ".adlc5/bounded/pilot"
+        state_file = pilot.parent / "state.json"
+        state = json.loads(state_file.read_text())
+        state["current_step"] = "specify-2-requirements"
+        state_file.write_text(json.dumps(state))
+        args = SimpleNamespace(workspace=str(checkout), feature="bounded", host="codex", mode="confined",
+                               accept_defaults=True, summary="off", timeout=30)
+
+        config = {"defaults": {}, "pack_budget_tokens": {"balanced": 10}}
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "stage_brief", return_value=("tiny", None)), \
+             patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}), \
+             patch.object(runner, "run_worker") as worker, redirect_stdout(io.StringIO()):
+            assert runner.run(args) == 1
+            receipt = json.loads((pilot / "runner-stop.json").read_text())
+            assert receipt["condition"] == "pack_over_budget"
+            assert receipt["estimated_tokens"] > 10
+            worker.assert_not_called()
+
+        def interrupt_with_edits(*_args):
+            (checkout / "user.py").write_text("concurrent user edit\n")
+            (checkout / "new-user.py").write_text("another user edit\n")
+            git("add", "user.py")
+            return 124, {"error": "timeout", "failure_kind": "worker_timeout"}, ""
+
+        config["pack_budget_tokens"]["balanced"] = 60000
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "stage_brief", return_value=("tiny", None)), \
+             patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}) as models, \
+             patch.object(runner, "record_usage") as usage, \
+             patch.object(runner, "run_worker", side_effect=interrupt_with_edits) as worker, redirect_stdout(io.StringIO()):
+            for _ in range(2):
+                assert runner.run(args) == 1
+                receipt = json.loads((pilot / "runner-stop.json").read_text())
+                assert receipt["condition"] == "recovery_required"
+                assert receipt["expected_commit"] == git("rev-parse", "HEAD")
+                assert (checkout / "user.py").read_text() == "concurrent user edit\n"
+                assert (checkout / "new-user.py").read_text() == "another user edit\n"
+                assert git("diff", "--cached", "--name-only") == "user.py"
+            worker.assert_called_once()
+            models.assert_called_once()
+            usage.assert_called_once()
+
+    with tempfile.TemporaryDirectory() as temp:
+        checkout = Path(temp).resolve()
+        subprocess.run(["git", "-C", str(checkout), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Fixture", "-c",
+                        "user.email=fixture@example.invalid", "commit", "-qm", "initial", "--allow-empty"], check=True)
+        commit = runner.git(checkout, "rev-parse", "HEAD")
+        pilot = checkout / ".adlc5/bounded/pilot"
+        attempt = {"attempt_id": "a", "start_commit": commit, "step": "implement-1-build", "story": "US-1"}
+        path = pilot / "attempts.jsonl"
+        runner.append(path, attempt)
+        result = {"attempt_id": "a", "status": "completed", "story_id": "US-1"}
+        runner.atomic_write_json(pilot / "results/a.json", result)
+        runner.record_checkpoint(path, attempt, "result_validated", result_sha256=runner.result_digest(result))
+        with patch.object(runner, "ingest") as ingest, patch.object(runner, "record_usage") as usage, \
+             patch.object(runner, "call") as kernel, patch.object(runner, "check_gate", return_value=True):
+            for _ in range(2):
+                runner.recover(checkout, "bounded", path, runner.journal(path))
+            ingest.assert_called_once()
+            usage.assert_called_once()
+            kernel.assert_called_once()
+        assert runner.attempt_event(runner.journal(path), "a", "closed")["outcome"] == "pass"
+        (checkout / "worker.py").write_text("worker result\n")
+        (checkout / "unrelated.py").write_text("concurrent edit\n")
+        declaration = {"changed_paths": ["worker.py"]}
+        try:
+            runner.commit_worker_changes(checkout, "bounded", path, attempt, declaration)
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "recovery_required"
+        else:
+            raise AssertionError("runner committed a result with unrelated edits")
+        assert runner.git(checkout, "diff", "--cached", "--name-only") == ""
+        assert (checkout / "unrelated.py").is_file()
+        (checkout / "unrelated.py").rename(pilot / "preserved.py")
+        runner.git(checkout, "config", "user.name", "Fixture")
+        runner.git(checkout, "config", "user.email", "fixture@example.invalid")
+        runner.commit_worker_changes(checkout, "bounded", path, attempt, declaration)
+        assert runner.git(checkout, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD") == "worker.py"
+
+
 def main() -> None:
     check_bootstrap()
+    check_bounded_execution()
     assert runner.decode_worker_result({'attempt_id': 'a', 'status': 'needs_human', 'summary': 'decision',
         'payload_json': '{"question":{"text":"Who may export?"}}'})['question']['text'] == 'Who may export?'
     fenced = 'Inspected the requirement.\n```json\n{"attempt_id":"a","status":"needs_human","payload_json":"{}"}\n```'
