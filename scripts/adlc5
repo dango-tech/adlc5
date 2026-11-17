@@ -14,7 +14,7 @@ Usage:
   ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
   ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]
   ./scripts/adlc5 repo-spec init|reconcile|validate [--workspace DIR]
-  ./scripts/adlc5 repo-index build|refresh|check [--workspace DIR]
+  ./scripts/adlc5 repo-index build|refresh|check|focus [--workspace DIR]
   ./scripts/adlc5 resolve-model --tier TIER [--platform NAME] ...
   ./scripts/adlc5 setup models [--host HOST] [--repo] [--accept-defaults] [--workspace DIR]
   ./scripts/adlc5 config show [--workspace DIR]
@@ -107,7 +107,7 @@ Commands:
   state get|set  {COMMANDS['state']}
   anchors lock|check {COMMANDS['anchors']}
   repo-spec init|reconcile|validate {COMMANDS['repo-spec']}
-  repo-index build|refresh|check {COMMANDS['repo-index']}
+  repo-index build|refresh|check|focus {COMMANDS['repo-index']}
   resolve-model  {COMMANDS['resolve-model']}
   setup models   {COMMANDS['setup']}
   setup storage  Stage the shared machine runtime under ~/.adlc5/runtimes/
@@ -554,7 +554,7 @@ def cmd_cleanup_features(args: list[str]) -> int:
 def cmd_repository_context(area: str, args: list[str]) -> int:
     allowed = {
         "repo-spec": {"init", "reconcile", "validate"},
-        "repo-index": {"build", "refresh", "check"},
+        "repo-index": {"build", "refresh", "check", "focus"},
     }
     if not args or args[0] in ("-h", "--help"):
         actions = "|".join(sorted(allowed[area]))
