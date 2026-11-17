@@ -90,7 +90,7 @@ function renderAttempts(runner) {
       [label(row.outcome), row.reason_code && label(row.reason_code)].filter(Boolean).join(" · "),
       row.requested_model || "Unavailable", row.observed_model || "Unavailable", duration(row.duration_seconds),
       tokens(row, "input"), tokens(row, "output"), tokens(row, "cache_read"), tokens(row, "cache_creation"),
-      typeof row.known_cost_usd === "number" ? money(row.known_cost_usd) : "Unavailable"])));
+      typeof row.known_cost_usd === "number" ? `${money(row.known_cost_usd)}${row.cost_basis?.length ? " · " + row.cost_basis.join(" + ") : ""}` : "Unavailable"])));
   section.append(details);
   return section;
 }

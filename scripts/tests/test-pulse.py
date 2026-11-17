@@ -421,6 +421,23 @@ class PulseTests(unittest.TestCase):
         self.assertIsNone(usage["known_cost_usd"])
         self.assertEqual(usage["invalid_records"], 2)
 
+    def test_usage_keeps_reported_cost_without_tokens_and_estimates_when_cost_is_null(self):
+        base = self.feature()
+        (base / "memory").mkdir()
+        rows = [
+            {"model_id": "unknown-model", "tokens": {"input": 0},
+             "extra": {"host_reported_cost_usd": 0.25, "usage_unavailable": True}},
+            {"model_id": "priced-model", "tokens": {"input": 10, "output": 10, "cache_creation": 0, "cache_read": 0},
+             "extra": {"host_reported_cost_usd": None}},
+        ]
+        (base / "memory/usage-ledger.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+        with patch("lib.pulse.estimate_cost_usd", return_value=(0.01, True)):
+            usage = project_workspace(self.workspace)["features"][0]["usage"]
+        self.assertEqual(usage["known_cost_usd"], 0.26)
+        self.assertEqual(usage["reported_cost_records"], 1)
+        self.assertEqual(usage["estimated_cost_records"], 1)
+        self.assertEqual(usage["token_records"], 1)
+
     def test_explicit_zero_cost_is_observed_but_total_stays_partial(self):
         base = self.feature()
         (base / "memory").mkdir()

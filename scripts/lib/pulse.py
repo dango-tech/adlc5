@@ -373,7 +373,7 @@ def _usage(rows: list[dict], root: Path, *, prices: dict | None = None) -> dict[
             conflicts.add(key)
             unique = [entry for entry in unique if entry is not by_id[key]]
     known = 0.0
-    accounted = 0
+    reported = estimated = 0
     token_totals: dict[str, int] = {}
     token_records = 0
     unpriced: set[str] = set()
@@ -381,27 +381,31 @@ def _usage(rows: list[dict], root: Path, *, prices: dict | None = None) -> dict[
     invalid = 0
     for row in unique:
         extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
-        if extra.get("usage_unavailable") is True:
+        tokens_unavailable = extra.get("usage_unavailable") is True
+        if tokens_unavailable:
             unavailable += 1
-            continue
-        host_cost = extra.get("host_reported_cost_usd", row.get("host_reported_cost_usd"))
-        tokens = row.get("tokens") if isinstance(row.get("tokens"), dict) else {}
+        host_cost = extra.get("host_reported_cost_usd")
+        if host_cost is None:
+            host_cost = row.get("host_reported_cost_usd")
+        tokens = row.get("tokens") if not tokens_unavailable and isinstance(row.get("tokens"), dict) else {}
         token_map = {key: tokens[key] for key in ("input", "output", "thinking", "cache_creation", "cache_read", "cache_5m", "cache_1h") if key in tokens}
         valid = all(type(value) is int and value >= 0 for value in token_map.values())
         if valid and token_map:
             token_records += 1
             for key, value in token_map.items():
                 token_totals[key] = token_totals.get(key, 0) + value
-        if "host_reported_cost_usd" in extra or "host_reported_cost_usd" in row:
+        if host_cost is not None:
             try:
                 amount = float(host_cost)
                 if type(host_cost) in (int, float) and math.isfinite(amount) and amount >= 0 and math.isfinite(known + amount):
                     known += amount
-                    accounted += 1
+                    reported += 1
                     continue
             except (TypeError, ValueError, OverflowError):
                 pass
             invalid += 1
+            continue
+        if tokens_unavailable:
             continue
         model = row.get("model_id") if isinstance(row.get("model_id"), str) else "unknown"
         required_cost_fields = {"input", "output", "cache_creation", "cache_read"}
@@ -412,16 +416,18 @@ def _usage(rows: list[dict], root: Path, *, prices: dict | None = None) -> dict[
             invalid += 1
         if priced and cost is not None and math.isfinite(cost) and cost >= 0 and math.isfinite(known + cost):
             known += cost
-            accounted += 1
+            estimated += 1
         elif not valid or token_map and not required_cost_fields <= token_map.keys():
             invalid += 1
         elif not lookup_price(prices, model):
             unpriced.add(model)
+    accounted = reported + estimated
     status = "partial" if accounted else "unavailable"
     return {
         "status": status, "currency": "USD", "known_cost_usd": round(known, 8) if accounted else None,
         "complete_total_usd": None,
         "observed_records": len(rows), "accounted_records": accounted,
+        "reported_cost_records": reported, "estimated_cost_records": estimated,
         "token_records": token_records, "tokens": token_totals if token_records else {},
         "unavailable_records": unavailable, "duplicate_units": max(0, len(rows) - len(unique)),
         "conflicting_units": len(conflicts), "invalid_records": invalid, "unpriced_models": sorted(unpriced),
@@ -575,6 +581,7 @@ def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) 
             "duration_seconds": _duration(started_at, end.get("at")),
             "tokens": usage["tokens"],
             "known_cost_usd": usage["known_cost_usd"],
+            "cost_basis": [basis for basis in ("reported", "estimated") if usage.get(f"{basis}_cost_records")],
         })
     by_step: dict[tuple[str, str | None], dict] = {}
     for row in rows:
