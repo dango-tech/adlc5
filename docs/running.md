@@ -97,6 +97,14 @@ This policy uses host-reported measurements after exit. A call already in
 progress can cross the threshold. Provider billing, costs, and activity
 outside this supervised feature's worker attempts are separate.
 
+Set `autopilot.max_worker_usd` to a positive finite number to pass
+`--max-budget-usd` to each Claude worker in allowlist mode. This mode uses
+Claude Code's noninteractive print command. Other hosts and attended modes
+stop before dispatch when this policy is set. The native CLI stops based
+on its estimated spend. An in-flight call can exceed the estimate, and
+billed costs can differ. The configured amount applies to each worker
+separately. [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
+
 Cost uses the host's own figure when it reports one, otherwise
 `core/model-prices.yaml`. Add or override entries in
 `~/.adlc5/model-prices.yaml` using the same `models:` layout. A model with no
