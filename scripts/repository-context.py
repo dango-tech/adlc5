@@ -12,6 +12,7 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -631,14 +632,18 @@ def repo_index_write(workspace: Path) -> int:
 class StaleIndex(ValueError):
     """The current workspace does not match the stored repository index."""
 
+    def __init__(self, reason: str, **details: Any):
+        super().__init__(reason)
+        self.details = details
 
-def checked_index(workspace: Path) -> tuple[dict[str, object], dict[str, object]]:
+
+def checked_index(workspace: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     cache = workspace / ".agent-cache"
     manifest_path = cache / "manifest.json"
-    if not manifest_path.is_file():
-        raise StaleIndex("missing cache")
     if cache.is_symlink() or manifest_path.is_symlink():
         raise StaleIndex("redirected cache")
+    if not manifest_path.is_file():
+        raise StaleIndex("missing cache")
     try:
         existing = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (ValueError, OSError) as exc:
@@ -647,17 +652,21 @@ def checked_index(workspace: Path) -> tuple[dict[str, object], dict[str, object]
     if not isinstance(existing, dict) or existing.get("artifacts") != current["artifacts"]:
         raise StaleIndex("invalid manifest artifact inventory")
     if existing.get("snapshot") != current["snapshot"]:
-        raise StaleIndex("repository changed")
+        raise StaleIndex("repository changed", expected=existing.get("snapshot"), current=current["snapshot"])
     if existing != current:
         raise StaleIndex("manifest mismatch")
     for name in current["artifacts"]:
         artifact = cache / name
-        if artifact.is_symlink() or not artifact.is_file():
-            raise StaleIndex(f"missing or redirected artifact: {name}")
+        if artifact.is_symlink():
+            raise StaleIndex(f"redirected artifact: {name}")
+        if not artifact.is_file():
+            raise StaleIndex(f"missing artifact: {name}")
         try:
             cached = json.loads(artifact.read_text(encoding="utf-8"))
         except (ValueError, OSError) as exc:
             raise StaleIndex(f"invalid artifact: {name}") from exc
+        if not isinstance(cached, dict) or cached.get("schema_version") != SCHEMA_VERSION:
+            raise StaleIndex(f"schema mismatch: {name}")
         if cached != expected_artifacts[name]:
             raise StaleIndex(f"artifact mismatch: {name}")
     return current, expected_artifacts
@@ -667,7 +676,7 @@ def repo_index_inspect(workspace: Path, paths: list[str] | None = None) -> int:
     try:
         current, artifacts = checked_index(workspace)
     except StaleIndex as exc:
-        print(json.dumps({"status": "stale", "reason": str(exc)}))
+        print(json.dumps({"status": "stale", "reason": str(exc), **exc.details}))
         return 3
     report = {"status": "ok", "snapshot": current["snapshot"]}
     if paths is not None:
@@ -676,7 +685,7 @@ def repo_index_inspect(workspace: Path, paths: list[str] | None = None) -> int:
     return 0
 
 
-def focus_records(artifacts: dict[str, object], paths: list[str]) -> dict:
+def focus_records(artifacts: dict[str, Any], paths: list[str]) -> dict:
     """Return bounded structural records for exact indexed paths."""
     selected = set(paths)
     files = [
