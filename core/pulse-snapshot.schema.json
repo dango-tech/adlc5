@@ -389,6 +389,15 @@
           "type": "object",
           "description": "Optional readable content: spec, stories, delivery, check results, review notes, last gate result, pending questions."
         },
+        "last_blocker": {
+          "type": ["object", "null"],
+          "required": ["condition", "next_action", "source"],
+          "properties": {
+            "condition": {"type": "string"},
+            "next_action": {"type": "string"},
+            "source": {"type": "string"}
+          }
+        },
         "runner": {
           "type": ["object", "null"],
           "description": "Observed supervised runner attempts. Attempt durations are worker-attempt intervals, not feature elapsed time.",

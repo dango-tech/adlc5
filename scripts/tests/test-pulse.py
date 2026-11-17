@@ -48,6 +48,26 @@ class PulseTests(unittest.TestCase):
         }))
         return base
 
+    def test_git_blocker_is_shown_only_at_the_opening_step(self):
+        base = self.feature()
+        state_file = base / "state.json"
+        state = json.loads(state_file.read_text())
+        state.update(current_stage="specify", current_step="specify-0-git")
+        state_file.write_text(json.dumps(state))
+        (base / "pilot").mkdir()
+        (base / "pilot/git-bootstrap.json").write_text(json.dumps({
+            "status": "blocked", "step": "specify-0-git", "condition": "branch_checked_out",
+            "next_action": "Open the worktree that already checks out the feature branch.",
+            "path": "/sensitive/absolute/path",
+        }))
+        feature = project_workspace(self.workspace)["features"][0]
+        self.assertEqual(feature["next_action"]["reason_code"], "branch_checked_out")
+        self.assertEqual(feature["last_blocker"]["source"], ".adlc5/sample-feature/pilot/git-bootstrap.json")
+        self.assertNotIn("/sensitive/absolute/path", json.dumps(feature))
+        state["current_step"] = "specify-1-discover"
+        state_file.write_text(json.dumps(state))
+        self.assertIsNone(project_workspace(self.workspace)["features"][0]["last_blocker"])
+
     def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
         base = self.feature()
         for name in ("pilot", "memory"):

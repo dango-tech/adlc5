@@ -671,12 +671,23 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
     summary = _summary(directory, reader, state, latest_checks, latest_review, latest_gate)
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
+    blocker = None
+    if step == "specify-0-git" and not archive_id:
+        record = directory / "pilot/git-bootstrap.json"
+        bootstrap = _json(reader, record) or {}
+        condition = bootstrap.get("condition")
+        action = _safe_text(bootstrap.get("next_action"), 220)
+        if (bootstrap.get("status") == "blocked" and bootstrap.get("step") == step and action
+                and isinstance(condition, str) and re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
+            blocker = {"condition": condition, "next_action": action, "source": record.relative_to(workspace).as_posix()}
     warnings.extend(reader.warnings[evaluation_warning_start:])
     pending = state.get("questions")
     if isinstance(pending, dict):
         pending = pending.get("pending")
     if pending:
         next_action = {"reason_code": "human_input_pending", "label": "Resolve the pending question"}
+    elif blocker:
+        next_action = {"reason_code": blocker["condition"], "label": blocker["next_action"]}
     elif check_status == "fail" or review_status == "fail" or gate_status == "fail":
         next_action = {"reason_code": "latest_evidence_failed", "label": "Review the latest failed evidence"}
     elif check_status == "stale" or review_status == "stale" or gate_status == "stale":
@@ -723,6 +734,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         },
         "usage": usage, "evaluation": evaluation, "next_action": next_action, "summary": summary,
         "runner": runner if capture_stable else None,
+        "last_blocker": blocker if capture_stable else None,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }

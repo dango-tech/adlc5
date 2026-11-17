@@ -54,6 +54,7 @@ function attention(feature) {
   const gate = feature.evidence.pr_ready.status;
   if (!feature.capture.stable && feature.capture.freshness === "unstable") add("bad", "Files changed while Pulse was reading them", "Regenerate the board once work pauses.");
   if (summary.pending_questions) add("bad", `${plural(summary.pending_questions, "question")} waiting for an answer`, "The workflow is paused on human input.");
+  if (feature.last_blocker) add("bad", `Last recorded Git blocker · ${label(feature.last_blocker.condition)}`, feature.last_blocker.next_action);
   const failed = (summary.checks?.results || []).filter(r => r.required && r.status !== "pass").map(r => r.id);
   if (checks === "fail" || checks === "partial") add("bad", `Required checks failing: ${failed.join(", ") || "see latest run"}`, `Latest run ${when(summary.checks?.time)}.`);
   else if (checks === "stale") add("warn", "Check results are out of date", `They passed ${when(summary.checks?.time)}, but the spec, tasks or code changed afterwards, so they no longer prove the current work.`);
@@ -154,6 +155,9 @@ function renderWorkflow() {
   const next = make("div", "p-next");
   const nextCopy = make("div");
   nextCopy.append(make("div", "eyebrow", "Suggested next action"), make("strong", "", feature.next_action.label), make("small", "", `Because ${label(feature.next_action.reason_code)}`));
+  if (feature.last_blocker) {
+    nextCopy.append(external("Git blocker record", fileHref(feature.workspace_label, feature.last_blocker.source)));
+  }
   next.append(nextCopy);
   panel.append(next);
 
