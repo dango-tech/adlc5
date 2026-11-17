@@ -67,6 +67,12 @@ class PulseTests(unittest.TestCase):
         state["current_step"] = "specify-1-discover"
         state_file.write_text(json.dumps(state))
         self.assertIsNone(project_workspace(self.workspace)["features"][0]["last_blocker"])
+        (base / "pilot/runner-stop.json").write_text(json.dumps({
+            "status": "stopped", "step": "specify-1-discover", "condition": "pack_over_budget",
+            "next_action": "Narrow the step context and resume.",
+        }))
+        feature = project_workspace(self.workspace)["features"][0]
+        self.assertEqual(feature["next_action"]["reason_code"], "pack_over_budget")
 
     def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
         base = self.feature()

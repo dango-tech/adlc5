@@ -19,6 +19,7 @@ const feature = {id: 'export', identity: 'wf-1', project_id: 'p1', project: 'App
 const stale = {...feature, id: 'alexa', identity: 'wf-2', lifecycle: {stage: 'implement', step: 'implement-2-verify', stage_status: {implement: 'in_progress'}},
   evidence: {pr_ready: {status: 'historical'}, checks: {status: 'stale', recorded_passed: 1, required: 1}, review: {status: 'fail'}}, capture: {stable: true, freshness: 'available'},
   usage: {known_cost_usd: null}, evaluation: {reason: 'No complete evaluation records'}, next_action: {label: 'Rerun the required checks', reason_code: 'evidence_stale'},
+  last_blocker: {condition: 'pack_over_budget', next_action: 'Narrow the step context and resume.', source: '.adlc5/alexa/pilot/runner-stop.json'},
   runner: {observed_attempts: 2, failed_attempts: 1, unclosed_attempts: 1, partial: false,
     by_step: [{step: 'implement-1-build', story: 'S-1', attempts: 2, failed: 1, timed_attempts: 1, attempt_seconds: 21}],
     recent_attempts: [{step: 'implement-1-build', host: 'codex', outcome: 'fail', reason_code: 'gate_failed', duration_seconds: 21, tokens: {input: 7, cache_read: 61}}]},
@@ -41,6 +42,7 @@ navigate('project/p1'); assert.match(ids.fleet.textContent, /export/); assert.ma
 navigate('workflow/wf-1'); assert.equal(ids.features.hidden, false); assert.match(ids.features.textContent, /Clarify requirements/);
 navigate('workflow/wf-2'); const page = ids.features.textContent;
 for (const text of ['Alexa caregiver experience', 'Hands-free shared history.', 'Branch feat/alexa → main', 'No pull request yet', 'Blocked', 'Check results are out of date', 'They passed 2026-10-13 07:47 UTC',
+  "adlc5 run --feature 'alexa' --workspace ~/'app/worktree'", 'Narrow the step context and resume.',
   'Review blocked by 1 finding', 'Missing auth check', 'Last PR-ready gate run failed at implement-2-verify', '1 story not finished', '1 of 2 done', 'S-2 · Undo', 'qa · pending', 'evidence/check-0.log'])
   assert.ok(page.includes(text), 'workflow page shows: ' + text);
 assert.match(page, /Not measured yet: Known usage cost, Agent cost \(transcripts\), Outcome success, Projected cost savings, Escaped defects, Rework/);
@@ -54,7 +56,7 @@ assert.match(page, /fail · gate failed/);
 assert.match(page, /Agent sessions on this feature/); assert.match(page, /Ship Alexa reminders/);
 navigate('activity'); assert.equal(ids.features.hidden, true); assert.match(ids.fleet.textContent, /60 records/);
 assert.match(ids.fleet.textContent, /Ship Alexa reminders session-0/); assert.match(ids.fleet.textContent, /adlc5:implement, gate/);
-assert.match(ids.fleet.textContent, /alexa implement-2-verify · Check results are out of date/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);
+assert.match(ids.fleet.textContent, /alexa implement-2-verify · Last recorded blocker · pack over budget/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);
 navigate('settings'); assert.match(ids.fleet.textContent, /defaults.summary/); assert.match(ids.fleet.textContent, /adlc5 config set defaults.summary 'brief' --scope machine/); assert.doesNotMatch(ids.fleet.textContent, /session-0/);
 navigate('project/p2'); assert.match(ids.fleet.textContent, /No ADLC5 workflows have been started in this project yet/); assert.doesNotMatch(ids.fleet.textContent, /No workflows match this filter/);
 navigate('project/p1'); assert.match(ids.fleet.textContent, /Recent ADLC5 sessions \(10 of 60\)/);

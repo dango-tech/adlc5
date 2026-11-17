@@ -598,6 +598,18 @@ def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) 
     }
 
 
+def _recorded_blocker(directory: Path, reader: Reader, step: str) -> dict | None:
+    name, status = ("git-bootstrap.json", "blocked") if step == "specify-0-git" else ("runner-stop.json", "stopped")
+    record = directory / "pilot" / name
+    entry = _json(reader, record) or {}
+    condition = entry.get("condition")
+    action = _safe_text(entry.get("next_action"), 220)
+    if (entry.get("status") == status and entry.get("step") == step and action
+            and isinstance(condition, str) and re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
+        return {"condition": condition, "next_action": action, "source": record.relative_to(reader.workspace).as_posix()}
+    return None
+
+
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
     label, archive_id = _identity(directory, workspace)
     identity = hashlib.sha256((str(directory.relative_to(workspace)) + "\0" + label).encode()).hexdigest()[:20]
@@ -671,15 +683,7 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
     summary = _summary(directory, reader, state, latest_checks, latest_review, latest_gate)
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
-    blocker = None
-    if step == "specify-0-git" and not archive_id:
-        record = directory / "pilot/git-bootstrap.json"
-        bootstrap = _json(reader, record) or {}
-        condition = bootstrap.get("condition")
-        action = _safe_text(bootstrap.get("next_action"), 220)
-        if (bootstrap.get("status") == "blocked" and bootstrap.get("step") == step and action
-                and isinstance(condition, str) and re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
-            blocker = {"condition": condition, "next_action": action, "source": record.relative_to(workspace).as_posix()}
+    blocker = _recorded_blocker(directory, reader, step) if step and not archive_id else None
     warnings.extend(reader.warnings[evaluation_warning_start:])
     pending = state.get("questions")
     if isinstance(pending, dict):
