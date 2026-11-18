@@ -73,17 +73,38 @@ case "$ACTION" in
     fi
     ;;
   worktree)
-    # Check if ignore file ignores worktree parent dir
-    if [[ -f "${REPO_ROOT}/.gitignore" ]]; then
-      if ! grep -q "^${WORKTREE_DIR}/" "${REPO_ROOT}/.gitignore"; then
-        echo "${WORKTREE_DIR}/" >> "${REPO_ROOT}/.gitignore"
-        echo "Added ${WORKTREE_DIR}/ to .gitignore" >&2
-      fi
-    fi
-    mkdir -p "${REPO_ROOT}/${WORKTREE_DIR}"
+    git check-ref-format --branch "$BRANCH_NAME" >/dev/null
     WORKTREE_TARGET="${REPO_ROOT}/${WORKTREE_DIR}/${BRANCH_NAME}"
-    
-    if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+    TARGET_PATH="$WORKTREE_TARGET"
+    while [[ "$TARGET_PATH" != "$REPO_ROOT" ]]; do
+      if [[ -L "$TARGET_PATH" ]]; then
+        echo "ERROR: Worktree target is redirected: $TARGET_PATH" >&2
+        exit 1
+      fi
+      TARGET_PATH="$(dirname "$TARGET_PATH")"
+    done
+    # Local excludes keep the repository's tracked ignore rules intact.
+    EXCLUDE="$(git rev-parse --git-path info/exclude)"
+    if [[ -L "$EXCLUDE" ]]; then
+      echo "ERROR: Git exclude file redirects outside its expected path." >&2
+      exit 1
+    fi
+    mkdir -p "$(dirname "$EXCLUDE")"
+    if ! grep -Fxq "$WORKTREE_DIR/" "$EXCLUDE" 2>/dev/null; then
+      printf '\n%s/\n' "$WORKTREE_DIR" >>"$EXCLUDE"
+    fi
+    mkdir -p "$REPO_ROOT/$WORKTREE_DIR"
+
+    if [[ -e "$WORKTREE_TARGET" ]]; then
+      TARGET_ROOT="$(git -C "$WORKTREE_TARGET" rev-parse --show-toplevel)"
+      TARGET_COMMON="$(git -C "$WORKTREE_TARGET" rev-parse --path-format=absolute --git-common-dir)"
+      SOURCE_COMMON="$(git rev-parse --path-format=absolute --git-common-dir)"
+      if [[ "$TARGET_ROOT" != "$WORKTREE_TARGET" || "$TARGET_COMMON" != "$SOURCE_COMMON" ||
+            "$(git -C "$WORKTREE_TARGET" branch --show-current)" != "$BRANCH_NAME" ]]; then
+        echo "ERROR: Worktree target already exists: $WORKTREE_TARGET" >&2
+        exit 1
+      fi
+    elif git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
       git worktree add "$WORKTREE_TARGET" "$BRANCH_NAME" >&2
     else
       git worktree add "$WORKTREE_TARGET" -b "$BRANCH_NAME" "$BASE_BRANCH" >&2

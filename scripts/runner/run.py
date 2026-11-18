@@ -294,9 +294,9 @@ def acquire_pid_lock(path: Path) -> None:
 def checkout_entries(workspace: Path, feature: str) -> dict[str, str]:
     result = subprocess.run(["git", "-C", str(workspace), "status", "--porcelain=v1", "-z", "--no-renames",
                              "--untracked-files=all"], check=True, capture_output=True)
-    runtime_prefix = f"?? .adlc5/{feature}/"
     return {entry[3:]: entry[:2] for entry in os.fsdecode(result.stdout).split("\0")
-            if entry and not entry.startswith(runtime_prefix)}
+            if entry and not (entry.startswith("?? ")
+                              and git_bootstrap.untracked_feature_runtime(workspace, feature, entry[3:]))}
 
 
 def checkout_dirty(workspace: Path, feature: str) -> bool:
@@ -813,8 +813,65 @@ def require_clean_recovery(workspace: Path, feature: str, attempt: dict[str, Any
         raise stop_for_recovery(workspace, {**attempt, "expected_commit": expected})
 
 
+def quota_wait(events: list[dict[str, Any]], step: str, host: str) -> dict | None:
+    for row in reversed(events):
+        if row.get("checkpoint") != "quota_wait" or row.get("step") != step or row.get("host") != host:
+            continue
+        earliest = retry_time(row.get("earliest_retry_at"))
+        if earliest and earliest > datetime.now(timezone.utc):
+            return {"attempt_id": row["attempt_id"], "host": host, "wait_kind": "host_quota",
+                    "earliest_retry_at": row["earliest_retry_at"]}
+    return None
+
+
 def result_digest(result: dict) -> str:
     return hashlib.sha256(json.dumps(result, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def review_failure(step: str, passed: bool, result: dict) -> dict:
+    review = result.get("review") if isinstance(result.get("review"), dict) else {}
+    if step == "implement-2-verify" and not passed and (
+        review.get("disposition") != "pass" or bool(review.get("blocking_findings"))
+    ):
+        return {"reason_code": "review_rejected", "rework": True,
+                "findings": json.dumps(review.get("blocking_findings") or "review rejected")[:4000]}
+    return {}
+
+
+def require_recovered_source(workspace: Path, attempt: dict, result: dict,
+                             events: list[dict[str, Any]], validated: dict) -> None:
+    declared = result.get("changed_paths")
+    committed = attempt_event(events, attempt["attempt_id"], "worker_committed")
+    if declared == [] and not committed:
+        return
+    if (isinstance(declared, list) and declared and all(isinstance(name, str) for name in declared)
+            and committed and validated.get("result_sha256")):
+        commit = committed["commit"]
+        parent = git(workspace, "rev-parse", f"{commit}^")
+        changed = subprocess.run(["git", "-C", str(workspace), "diff-tree", "--no-commit-id", "--name-only",
+                                  "-z", "--no-renames", "-r", commit], check=True, capture_output=True)
+        files = set(os.fsdecode(changed.stdout).split("\0")) - {""}
+        if parent == attempt["start_commit"] and files == set(declared):
+            return
+    raise RunnerStop("recovery_source_unverified", attempt["step"],
+                     "Review the preserved result and committed source before accepting this attempt.",
+                     attempt_id=attempt["attempt_id"])
+
+
+def reopen_discarded_build(workspace: Path, feature: str, attempt: dict) -> None:
+    if attempt["step"] != "implement-1-build" or not attempt.get("story"):
+        return
+    state = load_feature_state(workspace, feature) or {}
+    if state.get("current_step") != attempt["step"]:
+        return
+    stories = (state.get("tasks") or {}).get("stories", [])
+    story = next((entry for entry in stories if entry.get("id") == attempt["story"]), None)
+    if not story or story.get("status") != "implementation_complete":
+        return
+    story["status"] = "pending"
+    call(workspace, "state", "repair", "--feature", feature,
+         "--patch", json.dumps({"tasks": {"stories": stories}}),
+         "--reason", f"Discarded source from uncommitted worker attempt {attempt['attempt_id']}")
 
 
 def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, Any]]) -> None:
@@ -836,6 +893,19 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
             raise RunnerStop("recovery_result_mismatch", attempt["step"],
                              "Review the attempt result and its validation receipt before resuming.",
                              attempt_id=attempt_id)
+        declared = result.get("changed_paths")
+        if (result.get("status") == "completed" and isinstance(declared, list) and declared
+                and all(isinstance(name, str) for name in declared)
+                and not attempt_event(events, attempt_id, "worker_committed")):
+            if not used:
+                record_usage(workspace, feature, attempt, result, {"model_id": attempt.get("requested_model_id"),
+                                                                "tier": attempt.get("tier")})
+                record_checkpoint(path, attempt, "usage_recorded")
+            reopen_discarded_build(workspace, feature, attempt)
+            close_attempt(path, attempt, attempt.get("number", 1), "fail",
+                          reason_code="recovery_source_unverified",
+                          reason="Declared worker source was discarded before commit")
+            continue
         if not ingested and validated.get("result_fingerprint") and fingerprint(workspace, feature) != validated["result_fingerprint"]:
             raise RunnerStop("recovery_inputs_changed", attempt["step"],
                              "Review the changed inputs and validate the preserved attempt evidence.",
@@ -848,24 +918,34 @@ def recover(workspace: Path, feature: str, path: Path, events: list[dict[str, An
                 record_checkpoint(path, attempt, "usage_recorded")
             close_attempt(path, attempt, attempt.get("number", 1), "needs_human", reason_code=question["category"])
             continue
-        if not ingested:
-            if attempt.get("kind") != "rework":
-                coders = [row for row in events if row.get("outcome") == "pass" and row.get("session_id") and
-                          (row.get("step") == "implement-1-build" or row.get("kind") == "rework")]
-                ingest(workspace, feature, attempt, result, coders)
-            record_checkpoint(path, attempt, "evidence_ingested")
+        require_recovered_source(workspace, attempt, result, events, validated)
         if not used:
             record_usage(workspace, feature, attempt, result, {"model_id": attempt.get("requested_model_id"),
                                                             "tier": attempt.get("tier")})
             record_checkpoint(path, attempt, "usage_recorded")
+        if not ingested:
+            try:
+                if attempt.get("kind") != "rework":
+                    coders = [row for row in events if row.get("outcome") == "pass" and row.get("session_id") and
+                              (row.get("step") == "implement-1-build" or row.get("kind") == "rework")]
+                    ingest(workspace, feature, attempt, result, coders)
+            except ReworkNeeded as exc:
+                close_attempt(path, attempt, attempt.get("number", 1), "fail", reason_code="rework_required",
+                              rework=True, findings=str(exc)[:4000])
+                call(workspace, "pilot", "--feature", feature, "--record-result", "fail", check=False)
+                continue
+            record_checkpoint(path, attempt, "evidence_ingested")
         passed = attempt.get("kind") == "rework" or check_gate(workspace, feature, attempt.get("gate", ""))
         if attempt.get("step") == "implement-1-build":
             passed = result.get("story_id", attempt.get("story")) == attempt.get("story")
         outcome = "pass" if passed else "fail"
+        failure = review_failure(attempt["step"], passed, result)
+        if not passed and not failure:
+            failure = {"reason_code": "gate_failed", "blocker_fingerprint": fingerprint(workspace, feature)}
         close_attempt(path, attempt, attempt.get("number", 1), outcome,
                       session_id=result.get("session_id"), model_id=result.get("model_id"),
                       observed_model_id=result.get("observed_model_id"),
-                      **({} if passed else {"reason_code": "gate_failed", "blocker_fingerprint": fingerprint(workspace, feature)}))
+                      **failure)
         call(workspace, "pilot", "--feature", feature, "--record-result", outcome)
 
 
@@ -1011,6 +1091,10 @@ def run(args: argparse.Namespace) -> int:
         if state.get("stage_status", {}).get("implement") == "completed":
             finish_summary(workspace, args.feature, "completed", branch, args.summary or "brief")
             return 0
+        wait = quota_wait(events, state.get("current_step"), host)
+        if wait:
+            raise RunnerStop("host_quota", state.get("current_step"),
+                             "Check the host quota and resume when the host permits.", **wait)
         previous_stop = read_json(stop_path, {}) if not stop_path.is_symlink() else {}
         if (isinstance(previous_stop, dict) and previous_stop.get("condition") == "host_quota"
                 and previous_stop.get("step") == state.get("current_step")
@@ -1178,14 +1262,13 @@ def run(args: argparse.Namespace) -> int:
                 if passed:
                     commit_worker_changes(workspace, args.feature, journal_path, entry, result)
                 outcome = "pass" if passed else "fail"
-                review = result.get("review") if isinstance(result.get("review"), dict) else {}
-                rejected = step == "implement-2-verify" and not passed and (
-                    review.get("disposition") != "pass" or bool(review.get("blocking_findings")))
-                close_attempt(journal_path, entry, attempt_no, outcome, session_id=result.get("session_id"), model_id=result.get("model_id"),
-                              observed_model_id=result.get("observed_model_id"),
-                              **({} if passed else {"reason": "gate failed", "reason_code": "review_rejected" if rejected else "gate_failed"}),
-                              **({"blocker_fingerprint": fingerprint(workspace, args.feature)} if not passed and not rejected else {}),
-                              **({"rework": True, "findings": json.dumps(review.get("blocking_findings") or "review rejected")[:4000]} if rejected else {}))
+                failure = review_failure(step, passed, result)
+                rejected = bool(failure)
+                if not passed and not rejected:
+                    failure = {"reason_code": "gate_failed", "blocker_fingerprint": fingerprint(workspace, args.feature)}
+                close_attempt(journal_path, entry, attempt_no, outcome, session_id=result.get("session_id"),
+                              model_id=result.get("model_id"), observed_model_id=result.get("observed_model_id"),
+                              **failure)
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", outcome)
             except KeyboardInterrupt:
                 raise RunnerStop("interrupted", step, "Run the same feature again to recover this attempt.",
@@ -1197,12 +1280,14 @@ def run(args: argparse.Namespace) -> int:
                 if not attempt_event(recorded, attempt_id, "usage_recorded"):
                     record_usage(workspace, args.feature, entry, result, model)
                     record_checkpoint(journal_path, entry, "usage_recorded")
-                # A failed worker may have left its own or concurrent edits. A matching
-                # HEAD alone cannot establish ownership of either the index or worktree.
-                require_clean_recovery(workspace, args.feature, entry, recorded)
                 condition = result.get("failure_kind") if isinstance(result.get("failure_kind"), str) else None
                 if condition not in {"interrupted", "worker_timeout", "invalid_worker_result", "permission_required", "host_failed", "host_quota"}:
                     condition = "rework_required" if isinstance(exc, ReworkNeeded) else "worker_failed"
+                if condition == "host_quota":
+                    record_checkpoint(journal_path, entry, "quota_wait", step=step, host=host,
+                                      earliest_retry_at=result.get("earliest_retry_at"))
+                # A matching HEAD alone cannot establish ownership of index or worktree edits.
+                require_clean_recovery(workspace, args.feature, entry, recorded)
                 close_attempt(journal_path, entry, attempt_no, "fail", reason_code=condition, reason=str(exc)[:4000],
                               observed_model_id=result.get("observed_model_id"),
                               **({"rework": True, "findings": str(exc)[:4000]} if isinstance(exc, ReworkNeeded) else {}))
@@ -1219,6 +1304,11 @@ def run(args: argparse.Namespace) -> int:
                 raise RunnerStop("gate_failed", step, "Review the gate failures and repair the reported evidence before resuming.",
                                  attempt_id=attempt_id, gate=action.get("gate"))
     except RunnerStop as exc:
+        if exc.outcome["condition"] == "recovery_required":
+            quota = attempt_event(journal(journal_path), exc.outcome["attempt_id"], "quota_wait")
+            if quota:
+                exc.outcome.update(wait_kind="host_quota", host=quota["host"],
+                                   earliest_retry_at=quota.get("earliest_retry_at"))
         if not stop_path.is_symlink():
             atomic_write_json(stop_path, exc.outcome)
         print(json.dumps(exc.outcome, indent=2))
