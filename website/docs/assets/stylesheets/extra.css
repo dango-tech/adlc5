@@ -1,13 +1,5 @@
-.example-panel { border: 1px solid var(--md-default-fg-color--lightest); border-left: .25rem solid var(--md-accent-fg-color); border-radius: .4rem; padding: 1rem 1.3rem; margin: 1.5rem 0; background: var(--md-code-bg-color); }
-.example-panel p:last-child { margin-bottom: 0; }
-.workflow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; margin: 1.3rem 0; }
-.workflow a { display: flex; flex-direction: column; gap: .25rem; padding: 1rem; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .4rem; background: var(--md-code-bg-color); color: var(--md-default-fg-color); }
-.workflow a:hover, .workflow a:focus-visible { border-color: var(--md-accent-fg-color); outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
-.workflow a strong { color: var(--md-typeset-a-color); }
-.workflow a span { font-size: .85em; }
-.architecture { display: grid; gap: .8rem; padding: 1rem; border-radius: .4rem; background: var(--md-code-bg-color); }
-.architecture-row { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; }
-.architecture-row strong { padding: .6rem; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .3rem; }
-.repo-boundary { border: 2px solid var(--md-accent-fg-color); border-radius: .4rem; padding: .8rem 1rem; }
-.repo-boundary ul { margin-bottom: 0; }
-@media (max-width: 50em) { .workflow { grid-template-columns: 1fr; } .architecture-row { flex-direction: column; align-items: stretch; } }
+.feature-flow-diagram { display: block; width: min(100%, 27rem); height: auto; aspect-ratio: 329 / 645; margin: 1rem auto; }
+.decision-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 1rem 0; }
+.decision-strip a { display: grid; align-content: start; gap: .4rem; padding: .8rem; border: 1px solid var(--md-default-fg-color--lightest); border-top: .16rem solid var(--md-accent-fg-color); border-radius: .35rem; }
+.decision-strip small, .decision-strip span { color: var(--md-default-fg-color); }
+@media (max-width: 50em) { .decision-strip { grid-template-columns: 1fr; } }

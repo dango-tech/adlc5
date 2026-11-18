@@ -44,6 +44,16 @@ Inspect the diff, decision, and test evidence together. A story check alone does
 
 The gate covers the selected readiness profile. Remote CI, deployment, and live host qualification require separate evidence. See [completion limits](lifecycle.md#what-completion-establishes).
 
+## How a decision reaches review
+
+Illustrative storyboard for the CSV export example. Each frame links to its step.
+
+<div class="decision-strip">
+<a href="#specify"><small>Feature request</small><strong>Export project records</strong><span>The request leaves export permissions open.</span></a>
+<a href="#decision"><small>Owner decision</small><strong>Who may export?</strong><span>The owner selects administrators for this example.</span></a>
+<a href="#review"><small>Review evidence</small><strong>Check the denied-role test</strong><span>The reviewer inspects the test output alongside the change.</span></a>
+</div>
+
 ## Return to the work
 
 Feature intent, decisions, stories, state and evidence are retained in the consumer repository for later sessions. [Pulse](pulse.md) projects recorded progress and a suggested next action on demand; its output is a snapshot, not continuous monitoring. [How ADLC5 works](architecture.md) shows the boundaries and durable artifacts.

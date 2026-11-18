@@ -11,32 +11,23 @@ Follow a feature from the original request through planning, code changes, tests
 [Walk through a feature](walkthrough.md){ .md-button .md-button--primary }
 [Choose your agent](#choose-your-agent){ .md-button }
 
-![Pulse board for an illustrative CSV export, showing Implement in progress, unavailable checks, and a suggested next action](assets/pulse-export-demo.png)
-
-*Pulse in ADLC5 5.3.2 · illustrative CSV export fixture. The screenshot uses synthetic data and is not evidence of a completed run.*
-
-<div class="example-panel" markdown>
-**Illustrative example · CSV export**
-
-A team requests an export. The owner decides who can use it; the agent finds an existing CSV writer, defines allowed and denied cases, and produces changes and test evidence for review.
-
-This is a conceptual example, not a claim about a completed run. [See Pulse](pulse.md) for its actual surfaces and evidence limits.
-</div>
-
 ## Follow a feature
 
 The stages link to the walkthrough. An unresolved policy goes to the owner before planning continues.
 
-<div class="workflow" aria-label="Feature workflow">
-<a href="walkthrough/#specify"><strong>1 · Specify</strong><span>Who can export?</span></a>
-<a href="walkthrough/#decision"><strong>Owner decision</strong><span>Resolve an unknown role policy</span></a>
-<a href="walkthrough/#plan"><strong>2 · Plan</strong><span>Find the existing CSV writer</span></a>
-<a href="walkthrough/#tasks"><strong>3 · Tasks</strong><span>Define allowed and denied cases</span></a>
-<a href="walkthrough/#implement"><strong>4 · Implement</strong><span>Change code and run tests</span></a>
-<a href="walkthrough/#review"><strong>Review</strong><span>Inspect the diff and evidence</span></a>
-</div>
+<object class="feature-flow-diagram" data="assets/diagrams/feature-flow.svg" type="image/svg+xml" aria-label="CSV export workflow. Known role policy leads directly to planning. Unknown policy goes to the owner first.">
+<a href="walkthrough/">Read the CSV export walkthrough</a>
+</object>
 
 If the role policy is already known, Specify can proceed to Plan. If it is unknown, the owner decides first. Intelligence supplies repository knowledge and focused context across the four stages; the kernel checks progression. [See how the pieces connect](architecture.md).
+
+## See the feature in Pulse
+
+![Pulse board for an illustrative CSV export, showing Implement in progress, unavailable checks, and a suggested next action](assets/pulse-export-demo.png)
+
+*Pulse in ADLC5 5.3.2 · illustrative CSV export fixture. The screenshot uses synthetic data and is not evidence of a completed run.*
+
+[Follow the decision through the walkthrough](walkthrough.md#how-a-decision-reaches-review).
 
 ## Choose your agent
 
