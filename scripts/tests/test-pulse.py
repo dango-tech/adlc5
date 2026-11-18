@@ -2,6 +2,7 @@
 """Contract checks for the read-only ADLC5 Pulse projection."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -89,6 +90,67 @@ class PulseTests(unittest.TestCase):
         self.assertNotIn("private command", json.dumps(snapshot))
         pending.write_text(json.dumps({**question, "answer": "allow"}))
         self.assertIsNone(project_workspace(self.workspace)["features"][0]["pending_input"])
+
+    def test_pause_metadata_passes_through_the_cli_board_without_raw_actions(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        stop = base / "pilot/runner-stop.json"
+        receipt = {
+            "step": "implement-2-verify", "status": "stopped", "condition": "host_quota",
+            "resume_owner": "operator", "earliest_retry_at": "2026-11-17T21:01:07+00:00",
+            "next_action": "private raw command",
+        }
+        stop.write_text(json.dumps(receipt))
+        cli = subprocess.run([sys.executable, str(ROOT / "scripts/pulse.py"), "board",
+                              "--workspace", str(self.workspace)], check=True, capture_output=True)
+        document = Path(json.loads(cli.stdout)["board"]).read_text()
+        self.assertIn('"resume_owner":"operator"', document)
+        self.assertIn('"earliest_retry_at":"2026-11-17T21:01:07Z"', document)
+        self.assertNotIn("private raw command", document)
+        for condition, category in (("worker_time_budget_exhausted", "time"),
+                                    ("observed_token_budget_exhausted", "budget"),
+                                    ("unrecognized_stop", "other")):
+            stop.write_text(json.dumps({**receipt, "condition": condition, "earliest_retry_at": "bad"}))
+            blocker = project_workspace(self.workspace)["features"][0]["last_blocker"]
+            self.assertEqual(blocker["category"], category)
+            self.assertEqual(blocker["resume_owner"], "operator")
+            self.assertIsNone(blocker["earliest_retry_at"])
+
+    def test_product_decision_links_only_recorded_digest_bound_requirements(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        decision = {"step": "implement-2-verify", "category": "product", "decision_id": "D-1",
+                    "intent_sha256": "a" * 64, "requirement_ids": ["R-1", "R-2", "unsafe string"],
+                    "question": "private product text", "alternatives": ["private alternative"]}
+        (base / "pilot/pending-question.json").write_text(json.dumps(decision))
+        source = base / "spec.md"
+        source.write_text("recorded source")
+        source_id = source.relative_to(self.workspace).as_posix()
+        readiness = base / "requirements-readiness.json"
+        readiness.write_text(json.dumps({
+            "schema_version": 1, "feature": base.name, "intent_sha256": decision["intent_sha256"],
+            "sources": [{"path": source_id, "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}],
+            "requirements": [
+                {"id": "R-1", "source": source_id, "acceptance": ["private acceptance content"]},
+                {"id": "R-2", "source": "../somewhere.md", "acceptance": ["unsafe source"]},
+            ],
+        }))
+        snapshot = project_workspace(self.workspace)
+        question = snapshot["features"][0]["pending_input"]
+        self.assertEqual(question["decision_id"], "D-1")
+        self.assertEqual(question["resume_owner"], "operator")
+        self.assertIsNone(question["earliest_retry_at"])
+        self.assertEqual(question["requirement_ids"], ["R-1", "R-2"])
+        self.assertEqual(question["requirement_sources"], [{
+            "id": "R-1", "source": source_id,
+            "acceptance_record": readiness.relative_to(self.workspace).as_posix(),
+        }])
+        self.assertNotIn("private", json.dumps(question))
+        source.write_text("changed")
+        self.assertEqual(project_workspace(self.workspace)["features"][0]["pending_input"]["requirement_sources"], [])
+        source.unlink()
+        source.symlink_to(self.workspace / "README.md")
+        self.assertEqual(project_workspace(self.workspace)["features"][0]["pending_input"]["requirement_sources"], [])
 
     def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
         base = self.feature()

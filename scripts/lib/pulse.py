@@ -605,16 +605,108 @@ def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) 
     }
 
 
+STOP_GUIDANCE = {
+    "host_quota": ("quota", "Resume after the host quota becomes available"),
+    "pack_over_budget": ("budget", "Narrow the step context and resume"),
+    "wall_clock_cap": ("time", "Review the elapsed-time limit before resuming"),
+    "worker_timeout": ("time", "Review the worker timeout before resuming"),
+    "worker_time_budget_exhausted": ("time", "Review the elapsed-time limit before resuming"),
+    "branch_checked_out": ("git", "Open the worktree that already checks out the feature branch"),
+}
+
+
+BUDGET_STOPS = {
+    "worker_budget_exhausted", "observed_token_budget_exhausted",
+    "observed_token_usage_unavailable", "invalid_observed_token_budget",
+    "observed_token_budget_unsupported", "invalid_worker_usd_budget", "worker_usd_budget_unsupported",
+}
+
+
+def _retry_time(value: Any) -> str | None:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)", value
+    ):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat().replace("+00:00", "Z")
+    except ValueError:
+        return None
+
+
 def _recorded_blocker(directory: Path, reader: Reader, step: str) -> dict | None:
-    name, status = ("git-bootstrap.json", "blocked") if step == "specify-0-git" else ("runner-stop.json", "stopped")
-    record = directory / "pilot" / name
+    record = directory / "pilot/runner-stop.json"
+    status = "stopped"
     entry = _json(reader, record) or {}
+    if step == "specify-0-git" and (entry.get("status") != status or entry.get("step") != step):
+        record = directory / "pilot/git-bootstrap.json"
+        status = "blocked"
+        entry = _json(reader, record) or {}
     condition = entry.get("condition")
-    action = _safe_text(entry.get("next_action"), 220)
-    if (entry.get("status") == status and entry.get("step") == step and action
-            and isinstance(condition, str) and re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
-        return {"condition": condition, "next_action": action, "source": record.relative_to(reader.workspace).as_posix()}
-    return None
+    if (entry.get("status") != status or entry.get("step") != step
+            or not isinstance(condition, str) or not re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
+        return None
+    fallback = ("git" if status == "blocked" else "other", "Review the recorded blocker before resuming")
+    if condition in BUDGET_STOPS:
+        fallback = ("budget", "Review the worker budget before resuming")
+    category, action = STOP_GUIDANCE.get(condition, fallback)
+    return {
+        "condition": condition,
+        "category": category,
+        "next_action": action,
+        "source": record.relative_to(reader.workspace).as_posix(),
+        "resume_owner": "operator" if entry.get("resume_owner") == "operator" else None,
+        "earliest_retry_at": _retry_time(entry.get("earliest_retry_at")),
+    }
+
+
+def _decision_id(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", value))
+
+
+def _requirement_sources(directory: Path, reader: Reader, entry: dict, ids: list[str]) -> list[dict]:
+    record = directory / "requirements-readiness.json"
+    readiness = _json(reader, record) or {}
+    intent = entry.get("intent_sha256")
+    if (not isinstance(intent, str) or not re.fullmatch(r"[0-9a-f]{64}", intent)
+            or readiness.get("intent_sha256") != intent or readiness.get("feature") != directory.name
+            or readiness.get("schema_version") != 1):
+        return []
+    requirements = readiness.get("requirements")
+    sources = readiness.get("sources")
+    if not isinstance(requirements, list) or not isinstance(sources, list):
+        return []
+    declared = {row["path"]: row.get("sha256") for row in sources[:MAX_RECORDS]
+                if isinstance(row, dict) and isinstance(row.get("path"), str)}
+    result = []
+    matched = set()
+    valid_sources = {}
+    for row in requirements[:MAX_RECORDS]:
+        if not isinstance(row, dict) or row.get("id") not in ids or row["id"] in matched:
+            continue
+        source = row.get("source")
+        if (not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.md", source)
+                or len(source) > 300 or any(part in (".", "..") for part in source.split("/"))):
+            continue
+        expected = declared.get(source)
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            continue
+        if source not in valid_sources:
+            try:
+                raw = reader.read(reader.workspace / source)
+            except UnsafeInput:
+                raw = None
+            valid_sources[source] = raw is not None and hashlib.sha256(raw).hexdigest() == expected
+        if not valid_sources[source]:
+            continue
+        ref = {"id": row["id"], "source": source}
+        matched.add(row["id"])
+        acceptance = row.get("acceptance")
+        if isinstance(acceptance, list) and any(isinstance(item, str) and item.strip() for item in acceptance):
+            ref["acceptance_record"] = record.relative_to(reader.workspace).as_posix()
+        result.append(ref)
+        if len(result) >= len(ids):
+            break
+    return result
 
 
 def _recorded_question(directory: Path, reader: Reader, step: str) -> dict | None:
@@ -623,7 +715,20 @@ def _recorded_question(directory: Path, reader: Reader, step: str) -> dict | Non
     category = entry.get("category")
     if entry.get("step") != step or category not in ("product", "permission") or entry.get("answer"):
         return None
-    return {"category": category, "source": record.relative_to(reader.workspace).as_posix()}
+    result = {
+        "category": category,
+        "source": record.relative_to(reader.workspace).as_posix(),
+        "resume_owner": "operator",
+        "earliest_retry_at": None,
+    }
+    if category == "product" and _decision_id(entry.get("decision_id")):
+        result["decision_id"] = entry["decision_id"]
+        ids = entry.get("requirement_ids")
+        if isinstance(ids, list):
+            result["requirement_ids"] = list(dict.fromkeys(item for item in ids[:50] if _decision_id(item)))
+            if result["requirement_ids"]:
+                result["requirement_sources"] = _requirement_sources(directory, reader, entry, result["requirement_ids"])
+    return result
 
 
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
@@ -785,6 +890,7 @@ def project_workspace(workspace: Path, feature: str | None = None, active_only: 
             item["evaluation"].update(status="partial", success_rate_pct=None, success_interval_pct=None, savings_pct=None, savings_range_pct=None, escaped_defects=None, rework=None, reason="Evaluation capture changed; repeat the snapshot")
             for evidence in item["evidence"].values():
                 evidence["status"] = "unstable"
+            item["last_blocker"] = item["pending_input"] = None
             item["next_action"] = {"reason_code": "capture_unstable", "label": "Repeat the snapshot after inputs stop changing"}
     result = {
         "schema_version": "1.0", "generated_at": generated,

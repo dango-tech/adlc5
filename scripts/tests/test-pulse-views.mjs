@@ -26,8 +26,17 @@ const stale = {...feature, id: 'alexa', identity: 'wf-2', lifecycle: {stage: 'im
   summary: {spec: {title: 'Alexa caregiver experience', summary: 'Hands-free shared history.'}, stories: [{id: 'S-1', title: 'Read API', status: 'implementation_complete', done: true}, {id: 'S-2', title: 'Undo', status: 'pending', done: false}], stories_done: 1,
     delivery: {branch: 'feat/alexa', base: 'main', pr_url: null, substeps: {qa: 'pending'}}, checks: {time: '2026-10-13T07:47:00Z', results: [{id: 'lint', status: 'pass', required: true, exit_code: 0, log: 'evidence/check-0.log'}]},
     review: {disposition: 'fail', time: '2026-10-13T05:24:00Z', blocking_findings: ['Missing auth check'], notes: []}, gate: {last_result: 'fail', step: 'implement-2-verify'}, pending_questions: 0}};
+const product = {...feature, id: 'stock', identity: 'wf-3',
+  next_action: {label: 'Review the recorded product question', reason_code: 'human_input_pending'},
+  pending_input: {category: 'product', source: '.adlc5/stock/pilot/pending-question.json',
+    resume_owner: 'operator', earliest_retry_at: null, decision_id: 'D-1', requirement_ids: ['R-1', 'R-2'],
+    requirement_sources: [{id: 'R-1', source: '.adlc5/stock/spec.md', acceptance_record: '.adlc5/stock/requirements-readiness.json'}]}};
+const quota = {...feature, id: 'quota', identity: 'wf-4',
+  next_action: {label: 'Resume after the host quota becomes available', reason_code: 'host_quota'},
+  last_blocker: {category: 'quota', condition: 'host_quota', source: '.adlc5/quota/pilot/runner-stop.json',
+    resume_owner: 'operator', earliest_retry_at: '2026-11-17T21:01:07Z'}};
 const settings = {rows: [{key: 'defaults.summary', value: 'brief', status: 'inherited', source: '~/.adlc5/config.yaml', history: []}], layers: [], storage: {}, credentials: {}, telemetry: 'Not enabled'};
-ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
+ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale, product, quota], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
   sessions: Array.from({length: 60}, (_, i) => ({id: 'session-' + i, project: 'Application', host: 'codex', outcome: 'Not measured', workspace_keys: ['w1'], workspace_labels: {w1: '~/app/worktree'},
     ...(i === 0 ? {title: 'Ship Alexa reminders', actions: ['adlc5:implement', 'gate'], features: ['alexa'], tokens: 2500000} : {})})), attempts: []},
   home_uri: 'file:///home/u',
@@ -54,6 +63,17 @@ assert.match(page, /2 observed · 1 failed · 1 unclosed/);
 assert.match(page, /21.0 s · 1\/2 timed/);
 assert.match(page, /fail · gate failed/);
 assert.match(page, /Agent sessions on this feature/); assert.match(page, /Ship Alexa reminders/);
+navigate('workflow/wf-3');
+for (const text of ['Product decision', 'Decision · D-1', 'Affected requirement · R-1', 'Affected requirement · R-2',
+  'Resume owner · Operator', 'Earliest retry · Unknown', 'Resolve the request in the host session before resuming.'])
+  assert.ok(ids.features.textContent.includes(text), 'product page shows: ' + text);
+assert.doesNotMatch(ids.features.textContent, /adlc5 run --feature/);
+assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree/.adlc5/stock/spec.md'));
+assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree/.adlc5/stock/requirements-readiness.json'));
+navigate('workflow/wf-4');
+assert.match(ids.features.textContent, /Host quota/);
+assert.match(ids.features.textContent, /Resume owner · Operator/);
+assert.match(ids.features.textContent, /Earliest retry · 2026-11-17 21:01:07 UTC/);
 navigate('activity'); assert.equal(ids.features.hidden, true); assert.match(ids.fleet.textContent, /60 records/);
 assert.match(ids.fleet.textContent, /Ship Alexa reminders session-0/); assert.match(ids.fleet.textContent, /adlc5:implement, gate/);
 assert.match(ids.fleet.textContent, /alexa implement-2-verify · Last recorded blocker · pack over budget/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);

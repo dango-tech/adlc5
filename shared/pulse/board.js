@@ -157,18 +157,34 @@ function renderWorkflow() {
   const next = make("div", "p-next");
   const nextCopy = make("div");
   nextCopy.append(make("div", "eyebrow", "Suggested next action"), make("strong", "", feature.next_action.label), make("small", "", `Because ${label(feature.next_action.reason_code)}`));
-  if (feature.pending_input) {
-    nextCopy.append(external("Question record", fileHref(feature.workspace_label, feature.pending_input.source)));
-  } else if (feature.last_blocker) {
-    nextCopy.append(external("Blocker record", fileHref(feature.workspace_label, feature.last_blocker.source)));
-    if (feature.workspace_label) {
+  const pause = feature.pending_input || feature.last_blocker;
+  if (pause) {
+    const question = feature.pending_input;
+    const categoryNames = {product: "Product decision", permission: "Permission request", quota: "Host quota", time: "Time limit", budget: "Budget limit", git: "Git setup", other: "Other blocker"};
+    nextCopy.append(make("small", "", categoryNames[pause.category] || "Recorded blocker"),
+      make("small", "", `Resume owner · ${pause.resume_owner === "operator" ? "Operator" : "Unknown"}`),
+      make("small", "", `Earliest retry · ${pause.earliest_retry_at?.replace("T", " ").replace(/Z$/, " UTC") || "Unknown"}`),
+      external(question ? "Question record" : "Blocker record", fileHref(feature.workspace_label, pause.source)));
+    if (question?.decision_id) nextCopy.append(make("small", "", `Decision · ${question.decision_id}`));
+    if (question?.requirement_ids?.length) {
+      for (const id of question.requirement_ids) {
+        const ref = question.requirement_sources?.find(item => item.id === id);
+        const row = make("div", "sub", `Affected requirement · ${id}`);
+        if (ref?.source) row.append(external("Requirement source", fileHref(feature.workspace_label, ref.source)));
+        if (ref?.acceptance_record) row.append(external("Acceptance record", fileHref(feature.workspace_label, ref.acceptance_record)));
+        nextCopy.append(row);
+      }
+    }
+    const resume = make("details", "p-sources");
+    resume.append(make("summary", "", "Resume"),
+      make("p", "sub", question ? "Resolve the request in the host session before resuming." :
+        "Address the blocker and resume in the host or terminal."));
+    if (!question && feature.workspace_label) {
       const workspace = feature.workspace_label.startsWith("~/")
         ? "~/" + shellQuote(feature.workspace_label.slice(2)) : shellQuote(feature.workspace_label);
-      const resume = make("details", "p-sources");
-      resume.append(make("summary", "", "Resume after addressing the blocker"),
-        make("code", "p-mono", `adlc5 run --feature ${shellQuote(feature.id)} --workspace ${workspace}`));
-      nextCopy.append(resume);
+      resume.append(make("code", "p-mono", `adlc5 run --feature ${shellQuote(feature.id)} --workspace ${workspace}`));
     }
+    nextCopy.append(resume);
   }
   next.append(nextCopy);
   panel.append(next);

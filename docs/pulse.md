@@ -118,7 +118,15 @@ Checks and reviews are compared with the canonical ADLC5 input fingerprint. A ma
 
 Pulse does not run `pr-ready`. A local gate pass does not establish a pull request, human approval, remote CI, deployment, or production health. Archived feature evidence is historical and is not recomputed against today's workspace.
 
-The next-action label is selected from recorded blockers and current evidence. Pulse does not execute or synthesize arbitrary receipt commands. The handoff output is text for review and does not write a clipboard, issue, comment, or message.
+The next-action panel distinguishes product and permission requests from host
+quota, time, and budget stops. It shows the recorded resume owner and earliest
+retry time, or **Unknown** when the record has none. **Resume** offers guidance
+for the operator to continue in the host or terminal. Structured product
+requests can show the decision ID and affected requirement IDs. When the
+readiness record matches the recorded intent and the source digest still
+matches, Pulse links to the existing requirement source and recorded acceptance
+criteria if present. The board excludes raw request text, denied actions,
+answers, and receipt commands. The handoff output is text for review and does not write a clipboard, issue, comment, or message.
 
 ## Usage and limits
 

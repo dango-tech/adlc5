@@ -394,7 +394,23 @@
           "required": ["category", "source"],
           "properties": {
             "category": {"enum": ["product", "permission"]},
-            "source": {"type": "string"}
+            "source": {"type": "string"},
+            "resume_owner": {"enum": ["operator", null]},
+            "earliest_retry_at": {"type": ["string", "null"], "format": "date-time"},
+            "decision_id": {"type": "string"},
+            "requirement_ids": {"type": "array", "items": {"type": "string"}},
+            "requirement_sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "source"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "source": {"type": "string"},
+                  "acceptance_record": {"type": "string"}
+                }
+              }
+            }
           }
         },
         "last_blocker": {
@@ -403,7 +419,10 @@
           "properties": {
             "condition": {"type": "string"},
             "next_action": {"type": "string"},
-            "source": {"type": "string"}
+            "source": {"type": "string"},
+            "category": {"enum": ["quota", "time", "budget", "git", "other"]},
+            "resume_owner": {"enum": ["operator", null]},
+            "earliest_retry_at": {"type": ["string", "null"], "format": "date-time"}
           }
         },
         "runner": {
