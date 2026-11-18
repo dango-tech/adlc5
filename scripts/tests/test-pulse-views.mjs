@@ -19,11 +19,27 @@ const feature = {id: 'export', identity: 'wf-1', project_id: 'p1', project: 'App
 const stale = {...feature, id: 'alexa', identity: 'wf-2', lifecycle: {stage: 'implement', step: 'implement-2-verify', stage_status: {implement: 'in_progress'}},
   evidence: {pr_ready: {status: 'historical'}, checks: {status: 'stale', recorded_passed: 1, required: 1}, review: {status: 'fail'}}, capture: {stable: true, freshness: 'available'},
   usage: {known_cost_usd: null}, evaluation: {reason: 'No complete evaluation records'}, next_action: {label: 'Rerun the required checks', reason_code: 'evidence_stale'},
+  last_blocker: {condition: 'pack_over_budget', next_action: 'Narrow the step context and resume.', source: '.adlc5/alexa/pilot/runner-stop.json'},
+  runner: {observed_attempts: 2, failed_attempts: 1, unclosed_attempts: 1, partial: false,
+    by_step: [{step: 'implement-1-build', story: 'S-1', attempts: 2, failed: 1, timed_attempts: 1, attempt_seconds: 21}],
+    recent_attempts: [{step: 'implement-1-build', host: 'codex', outcome: 'fail', reason_code: 'gate_failed', duration_seconds: 21, tokens: {input: 7, cache_read: 61}}]},
   summary: {spec: {title: 'Alexa caregiver experience', summary: 'Hands-free shared history.'}, stories: [{id: 'S-1', title: 'Read API', status: 'implementation_complete', done: true}, {id: 'S-2', title: 'Undo', status: 'pending', done: false}], stories_done: 1,
     delivery: {branch: 'feat/alexa', base: 'main', pr_url: null, substeps: {qa: 'pending'}}, checks: {time: '2026-10-13T07:47:00Z', results: [{id: 'lint', status: 'pass', required: true, exit_code: 0, log: 'evidence/check-0.log'}]},
     review: {disposition: 'fail', time: '2026-10-13T05:24:00Z', blocking_findings: ['Missing auth check'], notes: []}, gate: {last_result: 'fail', step: 'implement-2-verify'}, pending_questions: 0}};
+const product = {...feature, id: 'stock', identity: 'wf-3',
+  next_action: {label: 'Review the recorded product question', reason_code: 'human_input_pending'},
+  pending_input: {category: 'product', source: '.adlc5/stock/pilot/pending-question.json',
+    resume_owner: 'operator', earliest_retry_at: null, decision_id: 'D-1', requirement_ids: ['R-1', 'R-2'],
+    requirement_sources: [{id: 'R-1', source: '.adlc5/stock/spec.md', acceptance_record: '.adlc5/stock/requirements-readiness.json'}]}};
+const quota = {...feature, id: 'quota', identity: 'wf-4',
+  next_action: {label: 'Resume after the host quota becomes available', reason_code: 'host_quota'},
+  last_blocker: {category: 'quota', condition: 'host_quota', source: '.adlc5/quota/pilot/runner-stop.json',
+    resume_owner: 'operator', earliest_retry_at: '2026-11-17T21:01:07Z'}};
+const git = {...feature, id: 'bootstrap', identity: 'wf-5',
+  next_action: {label: 'Open the worktree that already checks out the feature branch', reason_code: 'branch_checked_out'},
+  last_blocker: {category: 'git', condition: 'branch_checked_out', source: '.adlc5/bootstrap/pilot/git-bootstrap.json'}};
 const settings = {rows: [{key: 'defaults.summary', value: 'brief', status: 'inherited', source: '~/.adlc5/config.yaml', history: []}], layers: [], storage: {}, credentials: {}, telemetry: 'Not enabled'};
-ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
+ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale, product, quota, git], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
   sessions: Array.from({length: 60}, (_, i) => ({id: 'session-' + i, project: 'Application', host: 'codex', outcome: 'Not measured', workspace_keys: ['w1'], workspace_labels: {w1: '~/app/worktree'},
     ...(i === 0 ? {title: 'Ship Alexa reminders', actions: ['adlc5:implement', 'gate'], features: ['alexa'], tokens: 2500000} : {})})), attempts: []},
   home_uri: 'file:///home/u',
@@ -38,6 +54,7 @@ navigate('project/p1'); assert.match(ids.fleet.textContent, /export/); assert.ma
 navigate('workflow/wf-1'); assert.equal(ids.features.hidden, false); assert.match(ids.features.textContent, /Clarify requirements/);
 navigate('workflow/wf-2'); const page = ids.features.textContent;
 for (const text of ['Alexa caregiver experience', 'Hands-free shared history.', 'Branch feat/alexa → main', 'No pull request yet', 'Blocked', 'Check results are out of date', 'They passed 2026-10-13 07:47 UTC',
+  "adlc5 run --feature 'alexa' --workspace ~/'app/worktree'", 'Narrow the step context and resume.',
   'Review blocked by 1 finding', 'Missing auth check', 'Last PR-ready gate run failed at implement-2-verify', '1 story not finished', '1 of 2 done', 'S-2 · Undo', 'qa · pending', 'evidence/check-0.log'])
   assert.ok(page.includes(text), 'workflow page shows: ' + text);
 assert.match(page, /Not measured yet: Known usage cost, Agent cost \(transcripts\), Outcome success, Projected cost savings, Escaped defects, Rework/);
@@ -45,10 +62,28 @@ assert.match(page, /Agent tokens \(transcripts\) 2\.5M 1 session/);
 const hrefs = node => [node.href, ...(node.children || []).flatMap(hrefs)].filter(Boolean);
 assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree'), 'worktree links to its folder');
 assert.doesNotMatch(page, /Host not recorded/);
+assert.match(page, /2 observed · 1 failed · 1 unclosed/);
+assert.match(page, /21.0 s · 1\/2 timed/);
+assert.match(page, /fail · gate failed/);
 assert.match(page, /Agent sessions on this feature/); assert.match(page, /Ship Alexa reminders/);
+navigate('workflow/wf-3');
+for (const text of ['Product decision', 'Decision · D-1', 'Affected requirement · R-1', 'Affected requirement · R-2',
+  'Resume owner · Operator', 'Earliest retry · Unknown', 'Resolve the request in the host session before resuming.'])
+  assert.ok(ids.features.textContent.includes(text), 'product page shows: ' + text);
+assert.doesNotMatch(ids.features.textContent, /adlc5 run --feature/);
+assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree/.adlc5/stock/spec.md'));
+assert.ok(hrefs(ids.features).includes('file:///home/u/app/worktree/.adlc5/stock/requirements-readiness.json'));
+navigate('workflow/wf-4');
+assert.match(ids.features.textContent, /Host quota/);
+assert.match(ids.features.textContent, /Resume owner · Operator/);
+assert.match(ids.features.textContent, /Earliest retry · 2026-11-17 21:01:07 UTC/);
+assert.match(ids.features.textContent, /adlc5 run --feature 'quota'/);
+navigate('workflow/wf-5');
+assert.match(ids.features.textContent, /Open the worktree that already checks out the feature branch/);
+assert.doesNotMatch(ids.features.textContent, /adlc5 run --feature/);
 navigate('activity'); assert.equal(ids.features.hidden, true); assert.match(ids.fleet.textContent, /60 records/);
 assert.match(ids.fleet.textContent, /Ship Alexa reminders session-0/); assert.match(ids.fleet.textContent, /adlc5:implement, gate/);
-assert.match(ids.fleet.textContent, /alexa implement-2-verify · Check results are out of date/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);
+assert.match(ids.fleet.textContent, /alexa implement-2-verify · Last recorded blocker · pack over budget/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);
 navigate('settings'); assert.match(ids.fleet.textContent, /defaults.summary/); assert.match(ids.fleet.textContent, /adlc5 config set defaults.summary 'brief' --scope machine/); assert.doesNotMatch(ids.fleet.textContent, /session-0/);
 navigate('project/p2'); assert.match(ids.fleet.textContent, /No ADLC5 workflows have been started in this project yet/); assert.doesNotMatch(ids.fleet.textContent, /No workflows match this filter/);
 navigate('project/p1'); assert.match(ids.fleet.textContent, /Recent ADLC5 sessions \(10 of 60\)/);

@@ -344,13 +344,19 @@ def _summary(directory: Path, reader: Reader, state: dict, latest_checks: dict |
     }
 
 
-def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
+def _usage(rows: list[dict], root: Path, *, prices: dict | None = None) -> dict[str, Any]:
     if not rows:
         return {"status": "unavailable", "currency": "USD", "known_cost_usd": None, "complete_total_usd": None, "observed_records": 0, "accounted_records": 0, "token_records": 0, "tokens": {}, "unpriced_models": []}
-    prices = load_prices(ROOT)
+    if prices is None:
+        prices = load_prices(root)
     by_id: dict[str, dict] = {}
     conflicts: set[str] = set()
     unique: list[dict] = []
+
+    def content(row: dict) -> str:
+        clean = {key: value for key, value in row.items() if not key.startswith("_pulse_")}
+        return json.dumps(clean, sort_keys=True, separators=(",", ":"))
+
     for row in rows:
         extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
         native_id = next((extra.get(key) for key in ("usage_event_id", "cursor_usage_event_id", "attempt_id") if isinstance(extra.get(key), str) and extra.get(key)), None)
@@ -358,17 +364,16 @@ def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
             unique.append(row)
             continue
         key = str(native_id)
-        encoded = json.dumps(row, sort_keys=True, separators=(",", ":"))
         if key in conflicts:
             continue
         if key not in by_id:
             by_id[key] = row
             unique.append(row)
-        elif json.dumps(by_id[key], sort_keys=True, separators=(",", ":")) != encoded:
+        elif content(by_id[key]) != content(row):
             conflicts.add(key)
             unique = [entry for entry in unique if entry is not by_id[key]]
     known = 0.0
-    accounted = 0
+    reported = estimated = 0
     token_totals: dict[str, int] = {}
     token_records = 0
     unpriced: set[str] = set()
@@ -376,27 +381,31 @@ def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
     invalid = 0
     for row in unique:
         extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
-        if extra.get("usage_unavailable") is True:
+        tokens_unavailable = extra.get("usage_unavailable") is True
+        if tokens_unavailable:
             unavailable += 1
-            continue
-        host_cost = extra.get("host_reported_cost_usd", row.get("host_reported_cost_usd"))
-        tokens = row.get("tokens") if isinstance(row.get("tokens"), dict) else {}
+        host_cost = extra.get("host_reported_cost_usd")
+        if host_cost is None:
+            host_cost = row.get("host_reported_cost_usd")
+        tokens = row.get("tokens") if not tokens_unavailable and isinstance(row.get("tokens"), dict) else {}
         token_map = {key: tokens[key] for key in ("input", "output", "thinking", "cache_creation", "cache_read", "cache_5m", "cache_1h") if key in tokens}
         valid = all(type(value) is int and value >= 0 for value in token_map.values())
         if valid and token_map:
             token_records += 1
             for key, value in token_map.items():
                 token_totals[key] = token_totals.get(key, 0) + value
-        if "host_reported_cost_usd" in extra or "host_reported_cost_usd" in row:
+        if host_cost is not None:
             try:
                 amount = float(host_cost)
                 if type(host_cost) in (int, float) and math.isfinite(amount) and amount >= 0 and math.isfinite(known + amount):
                     known += amount
-                    accounted += 1
+                    reported += 1
                     continue
             except (TypeError, ValueError, OverflowError):
                 pass
             invalid += 1
+            continue
+        if tokens_unavailable:
             continue
         model = row.get("model_id") if isinstance(row.get("model_id"), str) else "unknown"
         required_cost_fields = {"input", "output", "cache_creation", "cache_read"}
@@ -407,16 +416,18 @@ def _usage(rows: list[dict], root: Path) -> dict[str, Any]:
             invalid += 1
         if priced and cost is not None and math.isfinite(cost) and cost >= 0 and math.isfinite(known + cost):
             known += cost
-            accounted += 1
+            estimated += 1
         elif not valid or token_map and not required_cost_fields <= token_map.keys():
             invalid += 1
         elif not lookup_price(prices, model):
             unpriced.add(model)
+    accounted = reported + estimated
     status = "partial" if accounted else "unavailable"
     return {
         "status": status, "currency": "USD", "known_cost_usd": round(known, 8) if accounted else None,
         "complete_total_usd": None,
         "observed_records": len(rows), "accounted_records": accounted,
+        "reported_cost_records": reported, "estimated_cost_records": estimated,
         "token_records": token_records, "tokens": token_totals if token_records else {},
         "unavailable_records": unavailable, "duplicate_units": max(0, len(rows) - len(unique)),
         "conflicting_units": len(conflicts), "invalid_records": invalid, "unpriced_models": sorted(unpriced),
@@ -513,6 +524,217 @@ def _evaluation(directory: Path, reader: Reader) -> dict[str, Any]:
     return result
 
 
+
+def _duration(start: Any, end: Any) -> float | None:
+    if not isinstance(start, str) or not isinstance(end, str):
+        return None
+    start = start[:-1] + "+00:00" if start.endswith("Z") else start
+    end = end[:-1] + "+00:00" if end.endswith("Z") else end
+    try:
+        seconds = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def _observed_model(value: Any) -> str | None:
+    model = _safe_text(value, 120)
+    return model if model.lower() not in {"", "unknown", "inherit", "host default", "host-default"} else None
+
+
+def _runner_projection(directory: Path, reader: Reader, usage_rows: list[dict]) -> dict | None:
+    warning_start = len(reader.warnings)
+    journal, limited = _jsonl(reader, directory / "pilot/attempts.jsonl")
+    starts, launches, closed = {}, {}, {}
+    for event in journal:
+        attempt_id = event.get("attempt_id")
+        if not isinstance(attempt_id, str) or not attempt_id:
+            continue
+        kind = event.get("checkpoint")
+        if kind == "launched":
+            launches[attempt_id] = event
+        elif kind == "closed":
+            closed[attempt_id] = event
+        elif not kind and isinstance(event.get("step"), str):
+            starts[attempt_id] = event
+    if not starts:
+        return None
+
+    usage_by_attempt: dict[str, list[dict]] = {}
+    for row in usage_rows:
+        extra = row.get("extra")
+        attempt_id = extra.get("attempt_id") if isinstance(extra, dict) else None
+        if isinstance(attempt_id, str) and attempt_id in starts:
+            usage_by_attempt.setdefault(attempt_id, []).append(row)
+    prices = load_prices(ROOT)
+    rows = []
+    for attempt_id, start in starts.items():
+        end = closed.get(attempt_id, {})
+        usage = _usage(usage_by_attempt.get(attempt_id, []), ROOT, prices=prices)
+        started_at = launches.get(attempt_id, start).get("at")
+        outcome = _safe_text(end.get("outcome"), 40)
+        rows.append({
+            "id": _safe_text(attempt_id, 150),
+            "step": _safe_text(start["step"], 100),
+            "story": _safe_text(start.get("story"), 100) or None,
+            "host": _safe_text(start.get("host"), 30) or None,
+            "requested_model": _observed_model(start.get("requested_model_id")),
+            "observed_model": _observed_model(end.get("observed_model_id", end.get("model_id"))),
+            "outcome": outcome or "unclosed",
+            "reason_code": _safe_text(end.get("reason_code"), 80) or None,
+            "duration_seconds": _duration(started_at, end.get("at")),
+            "tokens": usage["tokens"],
+            "known_cost_usd": usage["known_cost_usd"],
+            "cost_basis": [basis for basis in ("reported", "estimated") if usage.get(f"{basis}_cost_records")],
+        })
+    by_step: dict[tuple[str, str | None], dict] = {}
+    for row in rows:
+        key = (row["step"], row["story"])
+        group = by_step.setdefault(key, {
+            "step": row["step"], "story": row["story"], "attempts": 0, "failed": 0,
+            "timed_attempts": 0, "attempt_seconds": 0.0,
+        })
+        group["attempts"] += 1
+        group["failed"] += row["outcome"] == "fail"
+        if row["duration_seconds"] is not None:
+            group["timed_attempts"] += 1
+            group["attempt_seconds"] += row["duration_seconds"]
+    return {
+        "observed_attempts": len(rows),
+        "failed_attempts": sum(row["outcome"] == "fail" for row in rows),
+        "unclosed_attempts": sum(row["outcome"] == "unclosed" for row in rows),
+        "partial": limited or len(reader.warnings) > warning_start,
+        "by_step": list(by_step.values())[-100:],
+        "recent_attempts": rows[-100:],
+    }
+
+
+STOP_GUIDANCE = {
+    "host_quota": ("quota", "Resume after the host quota becomes available"),
+    "pack_over_budget": ("budget", "Narrow the step context and resume"),
+    "wall_clock_cap": ("time", "Review the elapsed-time limit before resuming"),
+    "worker_timeout": ("time", "Review the worker timeout before resuming"),
+    "worker_time_budget_exhausted": ("time", "Review the elapsed-time limit before resuming"),
+    "branch_checked_out": ("git", "Open the worktree that already checks out the feature branch"),
+}
+
+
+BUDGET_STOPS = {
+    "worker_budget_exhausted", "observed_token_budget_exhausted",
+    "observed_token_usage_unavailable", "invalid_observed_token_budget",
+    "observed_token_budget_unsupported", "invalid_worker_usd_budget", "worker_usd_budget_unsupported",
+}
+
+
+def _retry_time(value: Any) -> str | None:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)", value
+    ):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat().replace("+00:00", "Z")
+    except ValueError:
+        return None
+
+
+def _recorded_blocker(directory: Path, reader: Reader, step: str) -> dict | None:
+    record = directory / "pilot/runner-stop.json"
+    status = "stopped"
+    entry = _json(reader, record) or {}
+    if step == "specify-0-git" and (entry.get("status") != status or entry.get("step") != step):
+        record = directory / "pilot/git-bootstrap.json"
+        status = "blocked"
+        entry = _json(reader, record) or {}
+    condition = entry.get("condition")
+    if (entry.get("status") != status or entry.get("step") != step
+            or not isinstance(condition, str) or not re.fullmatch(r"[a-z0-9_]{1,80}", condition)):
+        return None
+    fallback = ("git" if status == "blocked" else "other", "Review the recorded blocker before resuming")
+    if condition in BUDGET_STOPS:
+        fallback = ("budget", "Review the worker budget before resuming")
+    category, action = STOP_GUIDANCE.get(condition, fallback)
+    return {
+        "condition": condition,
+        "category": category,
+        "next_action": action,
+        "source": record.relative_to(reader.workspace).as_posix(),
+        "resume_owner": "operator" if entry.get("resume_owner") == "operator" else None,
+        "earliest_retry_at": _retry_time(entry.get("earliest_retry_at")),
+    }
+
+
+def _decision_id(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", value))
+
+
+def _requirement_sources(directory: Path, reader: Reader, entry: dict, ids: list[str]) -> list[dict]:
+    record = directory / "requirements-readiness.json"
+    readiness = _json(reader, record) or {}
+    intent = entry.get("intent_sha256")
+    if (not isinstance(intent, str) or not re.fullmatch(r"[0-9a-f]{64}", intent)
+            or readiness.get("intent_sha256") != intent or readiness.get("feature") != directory.name
+            or readiness.get("schema_version") != 1):
+        return []
+    requirements = readiness.get("requirements")
+    sources = readiness.get("sources")
+    if not isinstance(requirements, list) or not isinstance(sources, list):
+        return []
+    declared = {row["path"]: row.get("sha256") for row in sources[:MAX_RECORDS]
+                if isinstance(row, dict) and isinstance(row.get("path"), str)}
+    result = []
+    matched = set()
+    valid_sources = {}
+    for row in requirements[:MAX_RECORDS]:
+        if not isinstance(row, dict) or row.get("id") not in ids or row["id"] in matched:
+            continue
+        source = row.get("source")
+        if (not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.md", source)
+                or len(source) > 300 or any(part in (".", "..") for part in source.split("/"))):
+            continue
+        expected = declared.get(source)
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            continue
+        if source not in valid_sources:
+            try:
+                raw = reader.read(reader.workspace / source)
+            except UnsafeInput:
+                raw = None
+            valid_sources[source] = raw is not None and hashlib.sha256(raw).hexdigest() == expected
+        if not valid_sources[source]:
+            continue
+        ref = {"id": row["id"], "source": source}
+        matched.add(row["id"])
+        acceptance = row.get("acceptance")
+        if isinstance(acceptance, list) and any(isinstance(item, str) and item.strip() for item in acceptance):
+            ref["acceptance_record"] = record.relative_to(reader.workspace).as_posix()
+        result.append(ref)
+        if len(result) >= len(ids):
+            break
+    return result
+
+
+def _recorded_question(directory: Path, reader: Reader, step: str) -> dict | None:
+    record = directory / "pilot/pending-question.json"
+    entry = _json(reader, record) or {}
+    category = entry.get("category")
+    if entry.get("step") != step or category not in ("product", "permission") or entry.get("answer"):
+        return None
+    result = {
+        "category": category,
+        "source": record.relative_to(reader.workspace).as_posix(),
+        "resume_owner": "operator",
+        "earliest_retry_at": None,
+    }
+    if category == "product" and _decision_id(entry.get("decision_id")):
+        result["decision_id"] = entry["decision_id"]
+        ids = entry.get("requirement_ids")
+        if isinstance(ids, list):
+            result["requirement_ids"] = list(dict.fromkeys(item for item in ids[:50] if _decision_id(item)))
+            if result["requirement_ids"]:
+                result["requirement_sources"] = _requirement_sources(directory, reader, entry, result["requirement_ids"])
+    return result
+
+
 def _feature_projection(directory: Path, workspace: Path, reader: Reader, generated: str) -> dict[str, Any]:
     label, archive_id = _identity(directory, workspace)
     identity = hashlib.sha256((str(directory.relative_to(workspace)) + "\0" + label).encode()).hexdigest()[:20]
@@ -582,15 +804,23 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
         else:
             gate_status = "stale"
     usage = _usage(usage_rows, ROOT)
+    runner = _runner_projection(directory, reader, usage_rows)
     summary = _summary(directory, reader, state, latest_checks, latest_review, latest_gate)
     evaluation_warning_start = len(reader.warnings)
     evaluation = _evaluation(directory, reader)
+    blocker = _recorded_blocker(directory, reader, step) if step and not archive_id else None
+    question = _recorded_question(directory, reader, step) if step and not archive_id else None
     warnings.extend(reader.warnings[evaluation_warning_start:])
     pending = state.get("questions")
     if isinstance(pending, dict):
         pending = pending.get("pending")
-    if pending:
+    if question:
+        action_label = "Review the recorded permission request" if question["category"] == "permission" else "Review the recorded product question"
+        next_action = {"reason_code": "human_input_pending", "label": action_label}
+    elif pending:
         next_action = {"reason_code": "human_input_pending", "label": "Resolve the pending question"}
+    elif blocker:
+        next_action = {"reason_code": blocker["condition"], "label": blocker["next_action"]}
     elif check_status == "fail" or review_status == "fail" or gate_status == "fail":
         next_action = {"reason_code": "latest_evidence_failed", "label": "Review the latest failed evidence"}
     elif check_status == "stale" or review_status == "stale" or gate_status == "stale":
@@ -636,6 +866,9 @@ def _feature_projection(directory: Path, workspace: Path, reader: Reader, genera
             "pr_ready": {"status": gate_status, "reason": None if gate_status != "unavailable" else "no sufficiently bound local gate receipt"},
         },
         "usage": usage, "evaluation": evaluation, "next_action": next_action, "summary": summary,
+        "runner": runner if capture_stable else None,
+        "last_blocker": blocker if capture_stable else None,
+        "pending_input": question if capture_stable else None,
         "receipts": receipts, "events": source_events,
         "warnings": warnings,
     }
@@ -661,6 +894,8 @@ def project_workspace(workspace: Path, feature: str | None = None, active_only: 
             item["evaluation"].update(status="partial", success_rate_pct=None, success_interval_pct=None, savings_pct=None, savings_range_pct=None, escaped_defects=None, rework=None, reason="Evaluation capture changed; repeat the snapshot")
             for evidence in item["evidence"].values():
                 evidence["status"] = "unstable"
+            item["last_blocker"] = item["pending_input"] = None
+            item["runner"] = None
             item["next_action"] = {"reason_code": "capture_unstable", "label": "Repeat the snapshot after inputs stop changing"}
     result = {
         "schema_version": "1.0", "generated_at": generated,
