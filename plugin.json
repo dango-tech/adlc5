@@ -100,7 +100,7 @@
         "commerce_description": "ADLC5 does not sell products or process payments."
       },
       "publication": {
-        "release_notes": "ADLC5 5.3.1 public-preview package for local Codex workflows, with setup, four-stage delivery skills, deterministic kernel checks, repository Intelligence, and Pulse. Comparative coding-quality and live production qualification remain pending.",
+        "release_notes": "ADLC5 5.3.2 public-preview package for local Codex workflows, with setup, four-stage delivery skills, deterministic kernel checks, repository Intelligence, and Pulse. Comparative coding-quality and live production qualification remain pending.",
         "countries": []
       }
     }

@@ -45,6 +45,7 @@ class CodexPluginTests(unittest.TestCase):
         built = json.loads((self.package / 'plugin.json').read_text())
         self.assertEqual(source['extensions'], built['extensions'])
         extension = built['extensions']['com.openai']
+        self.assertIn(built['version'], extension['publication']['release_notes'])
         compat = json.loads((self.package / '.codex-plugin/plugin.json').read_text())
         listing = extension['interface']
         self.assertEqual(compat['interface'], listing)
