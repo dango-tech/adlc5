@@ -31,9 +31,13 @@ theme:
   features:
     - navigation.footer
     - content.code.copy
+extra_css:
+  - assets/stylesheets/extra.css
 plugins:
   - search
 markdown_extensions:
+  - attr_list
+  - md_in_html
   - pymdownx.highlight
   - pymdownx.superfences
 nav:
@@ -44,6 +48,7 @@ nav:
   - Quickstart: quickstart.md
   - Walkthrough: walkthrough.md
   - Lifecycle: lifecycle.md
+  - Architecture: architecture.md
   - Running agents: running.md
   - Intelligence: intelligence.md
   - Troubleshooting: support.md

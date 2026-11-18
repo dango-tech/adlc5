@@ -1,70 +1,49 @@
 ---
-description: "Follow one small example through ADLC5 requirements, planning, bounded tasks, implementation, and verification."
+description: "Follow an illustrative CSV export request through the ADLC5 lifecycle and review."
 ---
 
-# First feature walkthrough
+# Walk through a feature
 
-This walkthrough shows how a small change moves through the ADLC5 stages. The
-commands and artifacts are illustrative; run them in your own application
-repository and follow the evidence produced there.
+This illustrative example shows the decisions and artifacts to look for; it is not a recorded run. Use ADLC5 in your application repository, not the framework distribution. Actual artifacts, host prompts and checks depend on your repository and selected profile.
 
-## Example request
+## The request
 
-Suppose a command-line tool has a `label` command that trims whitespace but does
-not reject a label containing only spaces. The desired behavior is to reject it
-with a clear error and preserve valid labels.
+A team asks for a CSV export. The agent needs to discover existing export code and tests, and the team needs to decide which roles may export. Start with [your host setup](installation.md), then [initialize a feature](quickstart.md). The lifecycle can be invoked in the application repository:
 
-Write the observable behavior, constraints, and acceptance evidence in plain
-language. For example: “A blank label is rejected before it is saved; valid
-labels keep their existing behavior; tests cover both cases.”
+```text
+@adlc5 for csv-export
+```
 
 ## Specify
 
-In the application repository, initialize a feature and invoke the lifecycle:
+Capture the request and observable acceptance criteria. For example: an authorized user can export the requested records, an unauthorized user is denied, and existing export behavior remains intact. Record unknowns rather than inventing an authorization policy.
 
-```bash
-/path/to/adlc5/scripts/init-feature.sh --feature reject-blank-label --interaction hitl
-```
+## Decision
 
-```text
-@adlc5 for reject-blank-label
-```
-
-Review the requirement and acceptance criteria. Confirm the behavior for edge
-cases such as leading/trailing whitespace and existing stored values before
-implementation begins.
+If the role policy is unknown, the product owner supplies it before work depends on it. Record the decision and its rationale with the feature. If the policy was already known, identify its source. The roles here are intentionally unspecified: this example is not a recommendation for your access policy.
 
 ## Plan
 
-The agent checks repository guidance and existing validation paths, then records
-the smallest safe design. For this example, that may be a validation at the
-existing command boundary plus focused tests. If the current behavior has data
-migration implications, stop and resolve those in the plan.
+Inspect repository guidance, the existing CSV writer, authorization boundaries, and the project's test command. Plan to reuse the writer where appropriate and enforce the agreed policy at the existing boundary. Capture any assumptions and risks for review.
 
 ## Tasks
 
-Break the change into bounded work, such as:
+Create bounded stories with acceptance criteria and declared tests. Include both an allowed-role case and a denied-role case. Code-spec-backed stories also declare their file boundaries and relevant signatures, so mechanical verification can check them.
 
-1. Add a failing test for blank input and retain a passing test for a valid label.
-2. Add the validation at the current input boundary.
-3. Run the declared tests and inspect the final diff.
+## Implement
 
-For code-spec-backed work, the story lists allowed files, tests, signatures when
-needed, and acceptance criteria in its required frontmatter.
+The agent changes the application and runs the declared tests. A denied-role test should demonstrate that an unauthorized request is rejected without producing an export. Inspect actual test output; the example does not assert that a test ran or passed.
 
-## Implement and verify
+## Review
 
-The implementation stage builds the change, runs the declared checks, and
-records evidence. Mechanical verification can confirm file boundaries, test
-presence/results, lint, debug-noise scans, and declared signatures. A passing
-story check alone does not establish pull-request readiness.
-
-Before calling the work ready, inspect the current patch and run the applicable
-readiness gate from the application repository:
+Inspect the diff, decision, and test evidence together. A story check alone does not establish pull-request readiness. Run the applicable readiness gate from the application repository, using the installed kernel path for your host:
 
 ```bash
-/path/to/adlc5/scripts/adlc5 gate --feature reject-blank-label --gate pr-ready --workspace .
+/path/to/adlc5/scripts/adlc5 gate --feature csv-export --gate pr-ready --workspace .
 ```
 
-`pr-ready` covers the selected readiness profile. Deployment and live host
-qualification require separate evidence; see [completion limits](lifecycle.md#what-completion-establishes).
+The gate covers the selected readiness profile. Remote CI, deployment, and live host qualification require separate evidence. See [completion limits](lifecycle.md#what-completion-establishes).
+
+## Return to the work
+
+Feature intent, decisions, stories, state and evidence are retained in the consumer repository for later sessions. [Pulse](pulse.md) projects recorded progress and a suggested next action on demand; its output is a snapshot, not continuous monitoring. [How ADLC5 works](architecture.md) shows the boundaries and durable artifacts.
