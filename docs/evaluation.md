@@ -176,3 +176,15 @@ and `ci_wait_seconds` independently. Use null when a duration is unknown.
 Treat overlapping intervals as overlapping when reporting these measurements.
 The elapsed wall clock continues during every wait. The original fixture
 quality and cost outcomes retain their observation and accounting requirements.
+
+Campaign spend per accepted feature includes spend from all started runs in
+each cohort, including failed and late runs. Its denominator counts all
+accepted features, including late acceptance. The deadline rate remains a
+separate measure. For each started run, the operator can add
+`"campaign_spend_attestation": {"complete": true, "basis": "provider billed USD"}`
+to `observations.json` once the usage entries account for the full run. Use the
+same observed accounting basis throughout the campaign. Each usage record must
+have an explicit numeric `cost_usd`, matching run/node telemetry, and a unique
+node/attempt combination within its run. Use explicit zero only when observed.
+Missing attestations, estimated-only costs, conflicting or duplicate records,
+mixed bases, and ambiguous starts leave the metric unavailable.

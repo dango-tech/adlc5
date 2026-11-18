@@ -137,7 +137,7 @@ def prepare(args):
     write(run / 'observations.json', dict(rework=None, human_rejected=None, escaped_defects=None,
         observation_completed_at=None, interventions=None, reviewer_findings=[], quality_gates_passed=None,
         question_review=None, active_seconds=None, human_wait_seconds=None, quota_wait_seconds=None, ci_wait_seconds=None,
-        started_at=None, usage=[], telemetry=[]))
+        started_at=None, campaign_spend_attestation=None, usage=[], telemetry=[]))
     handoff = f'''# Fresh host session handoff\n\nCase: {args.case}; arm: {args.arm}; profile: {case['profile']}\nHost/model: {args.host} / {args.model}\nConsumer: {repo}\nFramework: {framework}\n\n{case['task']}\n\nFrozen acceptance: `{shlex.join(manifest['acceptance_command'])}`\nFrozen regression: `PYTHONPATH={shlex.quote(str(repo))} {shlex.join(manifest['regression_command'])}`. If using a different Python runtime, prepare all arms with that same runtime.\nDo not change the frozen scripts or task. Do not commit consumer implementation.\nFor framework arms invoke @adlc5 for {args.case}, initialize canonical acceptance entries before locking anchors, and use the selected profile. Use this framework path, not your global installation. Follow host-native sessions; record actual calls, interventions and accounting with run_id {run.name} and node_id host-delivery (or matching finer-grained node IDs).\nDirect arm performs the same consumer tests and independent diff review.\nHigh-risk runs require genuine human approval; leave readiness unknown until it occurs.\nResume in a fresh session from manifest.json, feature artifacts/state and kernel pilot/state get output. Never reconstruct progress from chat or assert completion via state set.\nPopulate observations.json from actual telemetry/usage and review; escaped_defects stays null until the {case['observation_window_hours']}-hour observation window finishes. Cost/token source belongs on every usage record. Collection measures elapsed wall time from preparation, including human idle time.\n'''
     if args.candidate_routing == 'same-model':
         handoff += f'\nUse {args.model} for every model tier. Record the observed model for every worker.\n'
@@ -278,6 +278,7 @@ def collect(args):
     outcome['quality_gates_passed'] = external_review
     outcome['process_conformance'] = process_conformance
     if 'pr_acceptance' in manifest:
+        outcome['campaign_spend_attestation'] = observations.get('campaign_spend_attestation')
         outcome['campaign_acceptance'] = campaign_acceptance(
             run, manifest, observations, review, outcome, datetime.now(timezone.utc))
         outcome['quality_gates_passed'] = outcome['campaign_acceptance']['accepted_at'] is not None
