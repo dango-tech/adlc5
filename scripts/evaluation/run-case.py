@@ -195,7 +195,9 @@ def campaign_acceptance(run, manifest, observations, review, outcome, now):
     unexpected_changes = []
     for line in status.splitlines():
         path = line[3:].split(' -> ')[-1].strip('"')
-        if not path.startswith(runtime_roots) and path != '__pycache__' and not path.endswith('/__pycache__'):
+        parts = Path(path).parts
+        is_bytecode_cache = '__pycache__' in parts
+        if not path.startswith(runtime_roots) and not is_bytecode_cache:
             unexpected_changes.append(line)
     if unexpected_changes:
         return dict(result, reason='remote PR does not identify the clean evaluation checkout')
