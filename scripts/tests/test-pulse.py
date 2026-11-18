@@ -328,9 +328,11 @@ class PulseTests(unittest.TestCase):
         pilot = base / "pilot"
         pilot.mkdir()
         (pilot / "attempts.jsonl").write_text(json.dumps({
-            "attempt_id": "attempt-1", "step": "implement-1-build", "checkpoint": "started",
+            "attempt_id": "attempt-1", "step": "implement-1-build",
             "at": "2026-11-18T10:00:00Z",
         }) + "\n")
+        stable = project_workspace(self.workspace)
+        self.assertEqual(stable["features"][0]["runner"]["observed_attempts"], 1)
         with patch.object(Reader, "stable", side_effect=[True, False, False]):
             snapshot = project_workspace(self.workspace)
         feature = snapshot["features"][0]
