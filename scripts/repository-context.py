@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 from collections import defaultdict
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 
@@ -710,10 +710,14 @@ def focus_records(artifacts: dict[str, Any], paths: list[str]) -> dict:
 
 
 def valid_focus_path(path: str) -> bool:
-    relative = PurePosixPath(path)
-    return bool(relative.parts and not relative.is_absolute() and ".." not in relative.parts
-                and relative.as_posix() == path and "\\" not in path and ":" not in path
-                and len(path) <= 1000 and all(char.isprintable() for char in path))
+    # The index uses exact path strings, so inspect components before normalization.
+    return (
+        len(path) <= 1000
+        and "\\" not in path
+        and ":" not in path
+        and all(char.isprintable() for char in path)
+        and all(part not in {"", ".", ".."} for part in path.split("/"))
+    )
 
 
 def parse_args() -> argparse.Namespace:
