@@ -294,9 +294,9 @@ def acquire_pid_lock(path: Path) -> None:
 def checkout_entries(workspace: Path, feature: str) -> dict[str, str]:
     result = subprocess.run(["git", "-C", str(workspace), "status", "--porcelain=v1", "-z", "--no-renames",
                              "--untracked-files=all"], check=True, capture_output=True)
-    runtime_prefix = f"?? .adlc5/{feature}/"
     return {entry[3:]: entry[:2] for entry in os.fsdecode(result.stdout).split("\0")
-            if entry and not entry.startswith(runtime_prefix)}
+            if entry and not (entry.startswith("?? ")
+                              and git_bootstrap.untracked_feature_runtime(workspace, feature, entry[3:]))}
 
 
 def checkout_dirty(workspace: Path, feature: str) -> bool:

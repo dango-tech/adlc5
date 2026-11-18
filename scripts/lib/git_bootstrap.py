@@ -1,8 +1,11 @@
 """Mechanical checks for the opening Specify step."""
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from lib.package_guard import check_workspace
@@ -101,3 +104,48 @@ def record(workspace: Path, feature: str, result: dict) -> None:
     except OSError as exc:
         raise BootstrapBlocked("state_unwritable", path.parent,
                                "Grant write access to the feature state directory and resume.") from exc
+
+
+def untracked_feature_runtime(workspace: Path, feature: str, relative_path: str) -> bool:
+    parts = Path(relative_path).parts
+    if len(parts) < 3 or parts[0] != ".adlc5" or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", parts[1]):
+        return False
+    state = workspace / ".adlc5" / parts[1] / "state.json"
+    return state.resolve() == state and (parts[1] == feature or state.is_file())
+
+
+def place_worktree_state(workspace: Path, feature: str, metadata: dict) -> dict:
+    """Resume a bound worktree or copy opening state into an unused destination."""
+    source = feature_path(workspace, feature)
+    target_workspace = Path(metadata["worktree_path"]).resolve()
+    target = feature_path(target_workspace, feature)
+    binding = git_binding(target_workspace)
+    if (binding["git_common_dir"] != git_binding(workspace)["git_common_dir"]
+            or binding["git_dir"] == binding["git_common_dir"]
+            or binding["branch"] != metadata["branch_name"]):
+        raise BootstrapBlocked("worktree_binding_mismatch", target_workspace, "Open the intended linked worktree.")
+    metadata = dict(metadata, worktree_path=str(target_workspace), repository_root=str(target_workspace))
+    patch = {"git": metadata}
+    if target == source:
+        return metadata
+    if target.exists():
+        existing = load_feature_state(target_workspace, feature) or {}
+        if (existing.get("git") or {}).get("isolation") != "worktree" or (
+                existing.get("git") or {}).get("worktree_path") != str(target_workspace):
+            raise BootstrapBlocked("worktree_state_exists", target, "Inspect the existing destination feature state.")
+        check_binding(target_workspace, existing, binding)
+        return {key: existing["git"].get(key, value) for key, value in metadata.items()}
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.mkdir()
+        shutil.copytree(source, target, dirs_exist_ok=True, symlinks=True,
+                        ignore=shutil.ignore_patterns("runner.lock", "runner.lock.guard"))
+        subprocess.run([sys.executable, str(ROOT / "scripts/adlc5"), "state", "set",
+                        "--feature", feature, "--workspace", str(target_workspace), "--patch", json.dumps(patch)],
+                       check=True, stdout=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise BootstrapBlocked("worktree_state_transfer_failed", target,
+                               "Inspect and preserve destination feature files. Use the retained source state "
+                               "to complete the transfer, then resume in the linked worktree.",
+                               source=str(source)) from exc
+    return metadata
