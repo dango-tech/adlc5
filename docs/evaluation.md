@@ -83,9 +83,10 @@ an experiment. No host-agent executor or subscription is needed to test setup.
 
 For a golden-state comparison, pass `--baseline-revision` with the full frozen
 ADLC5 commit SHA. Run separate candidate arms with
-`--candidate-routing same-model` and `--candidate-routing tiered`. This labels
-the frozen manifest and output cohort. The evaluator pins the tier configuration
-and verifies observed model receipts before including a run in that comparison.
+`--candidate-routing same-model` and `--candidate-routing tiered`. These options
+label the frozen manifest and output cohort. Before comparing routing policies,
+independently verify observed worker model receipts against the campaign-pinned
+configuration.
 The defaults keep the original case banks and comparison labels.
 
 Run every case under `direct`, `baseline`, and `candidate` with new host sessions

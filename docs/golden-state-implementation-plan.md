@@ -112,7 +112,7 @@ For each host and surface advertised for end-to-end delivery, prove one disposab
 
 ### Primary delivery measure
 
-**Features accepted within the declared wall-clock budget ÷ features started.** Start the clock when the host receives the frozen task. Include every started run in the denominator, including blocked, abandoned, interrupted, quota-paused, failed, and late runs. Exclude scheduled runs that never received the task and report them separately. Acceptance time is the latest timestamp for passing external acceptance, passing required consumer CI, and independent approval of the actual PR's exact head. An accepted result outside the budget remains a late result. Allow completion exactly at the deadline. Missing or contradictory evidence stays unverified and does not enter the numerator.
+**Features accepted within the declared wall-clock budget ÷ features started.** Start the clock when the host receives the frozen task. Include every started run in the denominator, including blocked, abandoned, interrupted, quota-paused, failed, and late runs. Exclude scheduled runs that never received the task and report them separately. Acceptance time is the latest timestamp for passing external acceptance and regression checks, passing required consumer CI, and independent approval of the actual PR's exact head. An accepted result outside the budget remains a late result. Allow completion exactly at the deadline. Missing or contradictory evidence stays unverified and does not enter the numerator.
 
 | Feature class | Proposed elapsed budget | Proposed minimum on-time acceptance |
 | --- | --- | --- |

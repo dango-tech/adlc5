@@ -58,6 +58,27 @@ case "$ACTION" in
       --branch-name "$BRANCH_NAME" \
       --base-branch "$BASE_BRANCH")
     if [[ -f "$STATE" ]]; then
+      if [[ "$ACTION" == "worktree" ]]; then
+        OUT=$(python3 - "$ROOT" "$WORKSPACE" "$FEATURE" "$OUT" <<'PY_WORKTREE'
+import json
+from pathlib import Path
+import sys
+
+root, workspace, feature, raw = sys.argv[1:]
+sys.path.insert(0, str(Path(root) / "scripts"))
+from lib.git_bootstrap import BootstrapBlocked, place_worktree_state
+
+metadata = json.loads(raw)
+status = metadata.pop("status")
+try:
+    metadata = place_worktree_state(Path(workspace).resolve(), feature, metadata)
+except BootstrapBlocked as error:
+    print(json.dumps(error.diagnostic), file=sys.stderr)
+    sys.exit(1)
+print(json.dumps(dict(metadata, status=status)))
+PY_WORKTREE
+        )
+      fi
       PATCH=$(jq -c '{git: (del(.status) | .branch_name //= "")}' <<<"$OUT")
       if ! RESULT=$("${ROOT}/scripts/adlc5" state set --feature "$FEATURE" --workspace "$WORKSPACE" --patch "$PATCH"); then
         printf '%s\n' "$RESULT" >&2

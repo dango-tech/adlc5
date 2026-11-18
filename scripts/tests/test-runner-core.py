@@ -125,8 +125,76 @@ def check_bootstrap() -> None:
         assert json.loads(runner.call(non_git, "pilot", "--feature", "waiver").stdout)["action"] == "advance"
 
 
+def check_attended_worktree_bootstrap() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        workspace = Path(temp).resolve()
+        subprocess.run(["git", "init", "-q", "-b", "main", str(workspace)], check=True)
+        tracked = workspace / ".adlc5/standards.txt"
+        tracked.parent.mkdir()
+        tracked.write_text("committed\n")
+        for feature in ("demo", "peer"):
+            subprocess.run([BASH, str(ROOT / "scripts/init-feature.sh"), "--feature", feature,
+                            "--workspace", str(workspace), "--mode", "brownfield",
+                            "--interaction", "autonomous"], check=True, capture_output=True)
+        (workspace / ".gitignore").write_text("*.pyc\n.agent-cache/\n")
+        subprocess.run(["git", "-C", str(workspace), "add", ".agents", ".gitignore", ".adlc5/standards.txt"], check=True)
+        subprocess.run(["git", "-C", str(workspace), "-c", "user.name=Fixture", "-c",
+                        "user.email=fixture@example.invalid", "commit", "-qm", "initial"], check=True)
+        status = subprocess.check_output(["git", "-C", str(workspace), "status", "--porcelain", "--untracked-files=all"], text=True)
+        assert "?? .adlc5/peer/state.json" in status
+        assert not runner.checkout_dirty(workspace, "demo"), status
+        tracked.write_text("changed\n")
+        assert runner.checkout_dirty(workspace, "demo")
+        tracked.write_text("committed\n")
+        source = workspace / "untracked source.py"
+        source.write_text("pass\n")
+        assert runner.checkout_dirty(workspace, "demo")
+        source.unlink()
+
+        orchestrate = [BASH, str(ROOT / "scripts/git-orchestrate.sh"), "--workspace", str(workspace),
+                       "--feature", "demo", "--action", "worktree"]
+        result = subprocess.run(orchestrate, check=True, capture_output=True, text=True)
+        target = Path(json.loads(result.stdout)["worktree_path"])
+        assert (workspace / ".gitignore").read_text() == "*.pyc\n.agent-cache/\n"
+        assert (target / ".adlc5/demo/state.json").is_file()
+        assert runner.load_feature_state(target, "demo")["git"]["repository_root"] == str(target)
+        assert runner.git_bootstrap.evaluate(workspace, "demo")["condition"] == "worktree_binding_mismatch"
+        assert json.loads(runner.call(target, "pilot", "--feature", "demo").stdout)["action"] == "advance"
+        runner.call(target, "transition", "specify-1-discover", "--feature", "demo")
+        target_state = target / ".adlc5/demo/state.json"
+        advanced = target_state.read_bytes()
+        subprocess.run(orchestrate, check=True, capture_output=True, text=True)
+        assert target_state.read_bytes() == advanced
+        assert runner.load_feature_state(target, "demo")["current_step"] == "specify-1-discover"
+        transfer = runner.git_bootstrap.place_worktree_state
+        source_state = workspace / ".adlc5/peer/state.json"
+        original = source_state.read_bytes()
+        partial = target / ".adlc5/peer"
+
+        def fail_during_copy(source, destination, **options):
+            assert source == source_state.parent and destination == partial
+            (destination / "concurrent-evidence.txt").write_text("preserve\n")
+            raise OSError("fixture copy interruption")
+
+        with patch.object(runner.git_bootstrap.shutil, "copytree", side_effect=fail_during_copy):
+            try:
+                transfer(workspace, "peer", json.loads(result.stdout))
+            except runner.git_bootstrap.BootstrapBlocked as failure:
+                assert failure.diagnostic["condition"] == "worktree_state_transfer_failed"
+            else:
+                raise AssertionError("failed transfer must report a bootstrap blocker")
+        assert (partial / "concurrent-evidence.txt").read_text() == "preserve\n"
+        assert source_state.read_bytes() == original
+
+        target_state.write_text("{}")
+        refused = subprocess.run(orchestrate, capture_output=True, text=True)
+        assert refused.returncode and "worktree_state_exists" in refused.stderr
+        assert target_state.read_text() == "{}"
+
+
 def main() -> None:
     check_bootstrap()
+    check_attended_worktree_bootstrap()
     assert runner.decode_worker_result({'attempt_id': 'a', 'status': 'needs_human', 'summary': 'decision',
         'payload_json': '{"question":{"text":"Who may export?"}}'})['question']['text'] == 'Who may export?'
     fenced = 'Inspected the requirement.\n```json\n{"attempt_id":"a","status":"needs_human","payload_json":"{}"}\n```'
