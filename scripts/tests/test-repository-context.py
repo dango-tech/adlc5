@@ -210,8 +210,11 @@ class RepositoryContextTest(unittest.TestCase):
         self.assertEqual(stale.returncode, 3)
         self.assertEqual(json.loads(stale.stdout)["status"], "stale")
 
-        invalid = subprocess.run([*command, "--path", "../creative.py"], capture_output=True, text=True)
-        self.assertEqual(invalid.returncode, 2)
+        for invalid_path in ("../creative.py", "./src/creative.py", "src/./creative.py"):
+            with self.subTest(path=invalid_path):
+                invalid = subprocess.run([*command, "--path", invalid_path], capture_output=True, text=True)
+                self.assertEqual(invalid.returncode, 2)
+                self.assertIn("canonical repository-relative", invalid.stderr)
 
     def test_kernel_and_existing_initializers_provide_repository_context(self) -> None:
         subprocess.run(

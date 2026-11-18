@@ -14,7 +14,8 @@ Usage:
   ./scripts/adlc5 state set --feature NAME [--workspace DIR] (--patch JSON | --file PATH) [--replace] [--dry-run]
   ./scripts/adlc5 anchors lock|check --feature NAME [--workspace DIR]
   ./scripts/adlc5 repo-spec init|reconcile|validate [--workspace DIR]
-  ./scripts/adlc5 repo-index build|refresh|check|focus [--workspace DIR]
+  ./scripts/adlc5 repo-index build|refresh|check [--workspace DIR]
+  ./scripts/adlc5 repo-index focus --path PATH [--path PATH ...] [--workspace DIR]
   ./scripts/adlc5 resolve-model --tier TIER [--platform NAME] ...
   ./scripts/adlc5 setup models [--host HOST] [--repo] [--accept-defaults] [--workspace DIR]
   ./scripts/adlc5 config show [--workspace DIR]
@@ -557,8 +558,10 @@ def cmd_repository_context(area: str, args: list[str]) -> int:
         "repo-index": {"build", "refresh", "check", "focus"},
     }
     if not args or args[0] in ("-h", "--help"):
-        actions = "|".join(sorted(allowed[area]))
+        actions = "|".join(sorted(allowed[area] - {"focus"}))
         print(f"Usage: ./scripts/adlc5 {area} {actions} [--workspace DIR]")
+        if area == "repo-index":
+            print("       ./scripts/adlc5 repo-index focus --path PATH [--path PATH ...] [--workspace DIR]")
         return 0 if args else 2
     if args[0] not in allowed[area]:
         print(f"ERROR: unknown {area} action: {args[0]}", file=sys.stderr)
