@@ -14,8 +14,9 @@ Options: `branch` | `worktree` | `current` | `skip` — map to `git.isolation`.
 
 ## State updates
 
-- `git.isolation`, `git.branch_name`, `git.base_branch`, `git.worktree_path`
-- Advance using `adlc5 transition specify-1-discover --feature "{feature}"` after the step succeeds.
+- Run `adlc5 pilot --feature "{feature}" --workspace "{workspace}"` for the mechanical Git check.
+- On `halt`, use the reported bootstrap condition and next action. Resume the same feature after repair.
+- On `advance`, pass the returned `transition_target` to `adlc5 transition`. The kernel checks the same Git binding before advancing.
 
 ## Gate
 
