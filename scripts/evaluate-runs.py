@@ -134,6 +134,7 @@ def evaluate(
         for run_id, outcome in outcome_by_run.items()
     }
 
+    campaign_by_profile: dict[str, dict[str, int | float | None]] = {}
     by_profile: dict[str, dict[str, int | float]] = {}
     for run_id, outcome in sorted(outcome_by_run.items()):
         profile = str(outcome.get("profile") or "unspecified")
@@ -151,6 +152,21 @@ def evaluate(
         is_successful = run_success[run_id]
         bucket["runs"] += 1
         bucket["successful"] += int(is_successful)
+        campaign = outcome.get("campaign_acceptance")
+        if isinstance(campaign, dict):
+            campaign_bucket = campaign_by_profile.setdefault(profile, {
+                "started": 0, "start_unavailable": 0, "accepted_by_deadline": 0,
+                "accepted_late": 0, "acceptance_unavailable": 0, "accepted_by_deadline_rate": None,
+            })
+            if campaign.get("started") is True:
+                campaign_bucket["started"] += 1
+                status = campaign.get("status")
+                if status in ("accepted_by_deadline", "accepted_late"):
+                    campaign_bucket[status] += 1
+                else:
+                    campaign_bucket["acceptance_unavailable"] += 1
+            else:
+                campaign_bucket["start_unavailable"] += 1
         for entry in usage_by_run.get(run_id, []):
             token_count = int((entry.get("tokens") or {}).get("total", 0) or 0)
             if is_successful:
@@ -218,8 +234,11 @@ def evaluate(
             for item in valid_telemetry + valid_usage
         ),
     }
+    for bucket in campaign_by_profile.values():
+        if bucket["started"] and not bucket["start_unavailable"]:
+            bucket["accepted_by_deadline_rate"] = bucket["accepted_by_deadline"] / bucket["started"]
     status = "warn" if any(missing.values()) else "ok"
-    return {
+    report = {
         "status": status,
         "runs": {
             "total": len(outcome_by_run),
@@ -229,6 +248,9 @@ def evaluate(
         "by_node": by_node,
         "missing": missing,
     }
+    if campaign_by_profile:
+        report["campaign_acceptance_by_profile"] = campaign_by_profile
+    return report
 
 
 def main() -> int:
