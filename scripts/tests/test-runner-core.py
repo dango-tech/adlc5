@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -125,6 +126,47 @@ def check_bootstrap() -> None:
         assert json.loads(runner.call(non_git, "pilot", "--feature", "waiver").stdout)["action"] == "advance"
 
 
+def check_concurrent_stale_lock_recovery() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        lock = Path(temp) / "runner.lock"
+        code = """
+import runpy
+import sys
+from pathlib import Path
+
+acquire = runpy.run_path(sys.argv[1])["acquire_lock"]
+path = Path(sys.argv[2])
+sys.stdin.readline()
+try:
+    acquire(path)
+except RuntimeError as exc:
+    print(str(exc), flush=True)
+else:
+    print("acquired", flush=True)
+    sys.stdin.readline()
+"""
+        argv = [sys.executable, "-c", code, str(ROOT / "scripts/runner/run.py"), str(lock)]
+        # Leave a real legacy-format lock owned by a process that has exited.
+        subprocess.run(argv, input="start\n", check=True, capture_output=True, text=True, timeout=10)
+        assert lock.is_file()
+        contenders = [subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                      for _ in range(2)]
+        try:
+            for proc in contenders:
+                proc.stdin.write("start\n")
+                proc.stdin.flush()
+            results = [proc.stdout.readline().strip() for proc in contenders]
+            assert results.count("acquired") == 1, results
+            assert sum("locked by pid" in result for result in results) == 1, results
+            winner = contenders[results.index("acquired")]
+            assert json.loads(lock.read_text())["pid"] == winner.pid
+        finally:
+            for proc in contenders:
+                if proc.poll() is None:
+                    proc.terminate()
+                proc.communicate(timeout=10)
+
+
 def check_bounded_execution() -> None:
     with tempfile.TemporaryDirectory() as temp:
         checkout = Path(temp).resolve()
@@ -157,8 +199,38 @@ def check_bounded_execution() -> None:
             assert runner.run(args) == 1
             receipt = json.loads((pilot / "runner-stop.json").read_text())
             assert receipt["condition"] == "pack_over_budget"
+            assert receipt["resume_owner"] == "operator"
+            assert receipt["earliest_retry_at"] is None
             assert receipt["estimated_tokens"] > 10
             worker.assert_not_called()
+
+        config["pack_budget_tokens"]["balanced"] = 60000
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "stage_brief", return_value=("tiny", None)), \
+             patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}), \
+             patch.object(runner, "record_usage"), \
+             patch.object(runner, "call", wraps=runner.call) as kernel, \
+             patch.object(runner, "run_worker", return_value=(1, {
+                 "error": "host quota limited", "failure_kind": "host_quota",
+                 "earliest_retry_at": "2099-01-01T00:00:00+00:00",
+             }, "")) as worker, redirect_stdout(io.StringIO()):
+            assert runner.run(args) == 1
+            receipt = json.loads((pilot / "runner-stop.json").read_text())
+            assert receipt["condition"] == receipt["wait_kind"] == "host_quota"
+            assert receipt["resume_owner"] == "operator"
+            assert receipt["host"] == "codex"
+            assert receipt["earliest_retry_at"] == "2099-01-01T00:00:00+00:00"
+            assert not any("--record-result" in call.args for call in kernel.call_args_list)
+            journal_before = (pilot / "attempts.jsonl").read_bytes()
+            assert runner.run(args) == 1
+            assert (pilot / "attempts.jsonl").read_bytes() == journal_before
+            worker.assert_called_once()
+            other_host = SimpleNamespace(**{**vars(args), "host": "claude", "mode": "allowlist"})
+            assert runner.run(other_host) == 1
+            assert worker.call_count == 2
+            assert json.loads((pilot / "runner-stop.json").read_text())["host"] == "claude"
+            assert not any("--record-result" in call.args for call in kernel.call_args_list)
+        runner.clear_runner_stop(pilot / "runner-stop.json")
 
         def interrupt_with_edits(*_args):
             (checkout / "user.py").write_text("concurrent user edit\n")
@@ -166,7 +238,6 @@ def check_bounded_execution() -> None:
             git("add", "user.py")
             return 124, {"error": "timeout", "failure_kind": "worker_timeout"}, ""
 
-        config["pack_budget_tokens"]["balanced"] = 60000
         with patch.object(runner, "merge_model_config", return_value=config), \
              patch.object(runner, "stage_brief", return_value=("tiny", None)), \
              patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}) as models, \
@@ -294,6 +365,7 @@ def main() -> None:
     check_bootstrap()
     check_bounded_execution()
     check_verification_context()
+    check_concurrent_stale_lock_recovery()
     assert runner.decode_worker_result({'attempt_id': 'a', 'status': 'needs_human', 'summary': 'decision',
         'payload_json': '{"question":{"text":"Who may export?"}}'})['question']['text'] == 'Who may export?'
     fenced = 'Inspected the requirement.\n```json\n{"attempt_id":"a","status":"needs_human","payload_json":"{}"}\n```'

@@ -116,3 +116,63 @@ findings. Integrity protects against accidental changes through this procedure,
 not malicious edits to writable files. `demo-consumer.py` exercises real init,
 check evidence, a valid transition, completion rejection and process restoration
 without synthesizing review or approval; it is labeled a scripted contract demo.
+
+## Campaign PR acceptance
+
+For a campaign fixture that will be delivered to GitHub, prepare with
+`--pr-repository OWNER/REPO` and one `--required-check 'Exact check name'`
+per job required by the frozen campaign. Use a disposable repository approved
+for publishing the fixture. The same check list and case budget apply to every
+paired arm. Use `--wall-clock-minutes` to freeze a campaign-specific budget. Before doing any host work, record `started_at` in
+`observations.json` as an ISO 8601 timestamp with an offset. Collect every
+started run, including interrupted runs and runs with missing evidence.
+
+In addition to the existing independent review fields, the reviewer records
+`pr_url`, `head_sha`, and `reviewed_at` in `independent-review.json`.
+The operator captures the current PR and the matching check runs from GitHub,
+then saves the evidence in `remote-pr.json`. The receipt has this shape:
+
+```json
+{
+  "url": "https://github.com/OWNER/REPO/pull/123",
+  "head_sha": "<observed PR head SHA>",
+  "observed_at": "<timestamp when the PR and checks were checked>",
+  "acceptance": {
+    "head_sha": "<independently tested head SHA>",
+    "conclusion": "success",
+    "completed_at": "<timestamp of external acceptance completion>"
+  },
+  "regression": {
+    "head_sha": "<independently tested head SHA>",
+    "conclusion": "success",
+    "completed_at": "<timestamp of external regression completion>"
+  },
+  "checks": {
+    "Exact check name": {
+      "head_sha": "<observed check head SHA>",
+      "conclusion": "success",
+      "completed_at": "<timestamp of the successful check>"
+    }
+  }
+}
+```
+
+Use timestamps with offsets. The collector validates operator-captured evidence
+locally. Verify the receipts directly in GitHub before using them as release
+evidence. Capture a fresh receipt if the PR head changes.
+The collector checks the receipt against the clean local evaluation checkout,
+the independent review, rerun frozen acceptance and regression checks, and
+the recorded human disposition. It uses the latest independent review, remote
+CI, acceptance, or regression completion as the acceptance time. Internal
+ADLC5 process conformance is reported separately. The wall-clock deadline is
+the actual start plus the frozen case budget. A paired comparison reports
+accepted by deadline divided by started, counts late acceptance separately,
+and keeps missing acceptance evidence in the started denominator. Runs with
+an unavailable start are counted separately and leave the cohort rate unavailable. Aggregate outcomes from a single
+frozen campaign at a time.
+
+Record observed `active_seconds`, `human_wait_seconds`, `quota_wait_seconds`,
+and `ci_wait_seconds` independently. Use null when a duration is unknown.
+Treat overlapping intervals as overlapping when reporting these measurements.
+The elapsed wall clock continues during every wait. The original fixture
+quality and cost outcomes retain their observation and accounting requirements.

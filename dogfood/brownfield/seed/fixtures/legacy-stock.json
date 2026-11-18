@@ -1,0 +1,5 @@
+[
+  {"sku":"B-02","name":"Blue bin","quantity":4,"aisle":"D","reporting":{"taxable":false}},
+  {"sku":"A-01","name":"Amber bin","quantity":7,"tags":["fragile","seasonal"]},
+  {"sku":"Z-09","name":"Spare bin","quantity":0}
+]
