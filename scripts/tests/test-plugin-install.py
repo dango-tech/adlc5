@@ -66,6 +66,9 @@ class PackageTests(unittest.TestCase):
             result = subprocess.run([sys.executable, str(destination / 'install.py'), '--dry-run'],
                                     check=True, capture_output=True, text=True)
             self.assertEqual(json.loads(result.stdout)['host'], host)
+            smoke = subprocess.run([sys.executable, str(destination / 'scripts/adlc5-mcp.py'), '--smoke'],
+                                   cwd=destination, check=True, capture_output=True, text=True)
+            self.assertTrue(json.loads(smoke.stdout)['pulse_read_only'])
         self.assertFalse((self.home / '.adlc5').exists())
 
     def test_codex_prepares_supported_marketplace_without_fake_install(self):

@@ -34,6 +34,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -558,7 +559,9 @@ def smoke() -> int:
         return 1
     init = handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": PROTOCOL_VERSION}})
     call = handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "adlc5_version", "arguments": {}}})
-    pulse = handle_message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "adlc5_pulse", "arguments": {"workspace": str(ROOT)}}})
+    with tempfile.TemporaryDirectory(prefix="adlc5-mcp-smoke-") as workspace:
+        pulse = handle_message({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                                "params": {"name": "adlc5_pulse", "arguments": {"workspace": workspace}}})
     if not init or "result" not in init or not call or call["result"].get("isError") or not pulse or pulse["result"].get("isError"):
         print(f"FAIL: protocol smoke: {init} {call} {pulse}", file=sys.stderr)
         return 1
