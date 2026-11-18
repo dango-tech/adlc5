@@ -115,6 +115,18 @@ it is missing, malformed, tampered with, or stale; refresh it before planning.
    dependency, and test records.
 4. Open source files only to resolve remaining uncertainty.
 
+Use `repo-index focus` when the affected paths are known. It checks freshness and
+returns module, symbol, import, and likely test records for those paths only.
+
+```bash
+./scripts/adlc5 repo-index focus --workspace . --path src/service.py --path src/storage.py
+```
+
+The result reports unindexed paths and truncated record lists. Test candidates are
+name-based hints. Confirm them against the repository's canonical commands. The
+query still verifies the current index by rebuilding its expected structure in
+memory. Its current benefit is smaller agent input and targeted retrieval.
+
 The cache is local structural intelligence, not a privacy filter. Any context sent
 to a remote model still needs an allow-list, secret scan, and data-minimization step.
 
