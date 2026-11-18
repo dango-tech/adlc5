@@ -19,6 +19,9 @@ Run `./scripts/adlc5 repo-index check --workspace .`; refresh when stale. Read t
 tracked `.agents/` constitution first, then `.agent-cache/repo-index.json` and only
 the module/symbol/dependency/test records relevant to the feature. Source remains
 authoritative; generated cache observations never override constitution constraints.
+When the affected paths are known, use `./scripts/adlc5 repo-index focus --path PATH`
+to retrieve their structural records and candidate tests. Repeat `--path` for
+each repository-relative path.
 
 Read the current `requirements-readiness.json` alongside the handoff so reviewed
 decisions and assumptions reach design. Reassess changed intent before protected
