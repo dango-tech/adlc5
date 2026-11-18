@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Prepare frozen manual host-agent runs; collect real consumer checks, never fake a run."""
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import shlex
@@ -73,6 +74,15 @@ def prepare(args):
             raise ValueError('baseline revision must identify an exact commit')
     if args.candidate_routing is not None and args.arm != 'candidate':
         raise ValueError('--candidate-routing requires the candidate arm')
+    if bool(args.pr_repository) != bool(args.required_check):
+        raise ValueError('--pr-repository and --required-check must be provided together')
+    if args.pr_repository and not re.fullmatch(r'[\w.-]+/[\w.-]+', args.pr_repository, re.ASCII):
+        raise ValueError('--pr-repository requires OWNER/REPO on GitHub')
+    if args.required_check and any(not name.strip() for name in args.required_check):
+        raise ValueError('--required-check names must be nonempty')
+    if args.wall_clock_minutes is not None and (
+            not args.pr_repository or not math.isfinite(args.wall_clock_minutes) or args.wall_clock_minutes <= 0):
+        raise ValueError('--wall-clock-minutes requires campaign PR acceptance and a positive finite number')
     run = Path(args.directory).resolve()
     run.mkdir(parents=True, exist_ok=False)
     repo = run / 'consumer'
@@ -118,11 +128,16 @@ def prepare(args):
                     regression_command=[sys.executable, str(run / 'regression.py')])
     if args.candidate_routing is not None:
         manifest['candidate_routing'] = args.candidate_routing
+    if args.pr_repository:
+        manifest['pr_acceptance'] = dict(repository=args.pr_repository, required_checks=sorted(set(args.required_check)))
+        if args.wall_clock_minutes is not None:
+            manifest['budget'] = dict(manifest['budget'], wall_clock_minutes=args.wall_clock_minutes)
     write(run / 'manifest.json', manifest)
     write(run / 'manifest-lock.json', {'sha256': digest(run / 'manifest.json')})
     write(run / 'observations.json', dict(rework=None, human_rejected=None, escaped_defects=None,
         observation_completed_at=None, interventions=None, reviewer_findings=[], quality_gates_passed=None,
-        question_review=None, active_seconds=None, human_wait_seconds=None, usage=[], telemetry=[]))
+        question_review=None, active_seconds=None, human_wait_seconds=None, quota_wait_seconds=None, ci_wait_seconds=None,
+        started_at=None, usage=[], telemetry=[]))
     handoff = f'''# Fresh host session handoff\n\nCase: {args.case}; arm: {args.arm}; profile: {case['profile']}\nHost/model: {args.host} / {args.model}\nConsumer: {repo}\nFramework: {framework}\n\n{case['task']}\n\nFrozen acceptance: `{shlex.join(manifest['acceptance_command'])}`\nFrozen regression: `PYTHONPATH={shlex.quote(str(repo))} {shlex.join(manifest['regression_command'])}`. If using a different Python runtime, prepare all arms with that same runtime.\nDo not change the frozen scripts or task. Do not commit consumer implementation.\nFor framework arms invoke @adlc5 for {args.case}, initialize canonical acceptance entries before locking anchors, and use the selected profile. Use this framework path, not your global installation. Follow host-native sessions; record actual calls, interventions and accounting with run_id {run.name} and node_id host-delivery (or matching finer-grained node IDs).\nDirect arm performs the same consumer tests and independent diff review.\nHigh-risk runs require genuine human approval; leave readiness unknown until it occurs.\nResume in a fresh session from manifest.json, feature artifacts/state and kernel pilot/state get output. Never reconstruct progress from chat or assert completion via state set.\nPopulate observations.json from actual telemetry/usage and review; escaped_defects stays null until the {case['observation_window_hours']}-hour observation window finishes. Cost/token source belongs on every usage record. Collection measures elapsed wall time from preparation, including human idle time.\n'''
     if args.candidate_routing == 'same-model':
         handoff += f'\nUse {args.model} for every model tier. Record the observed model for every worker.\n'
@@ -132,10 +147,85 @@ def prepare(args):
         handoff = handoff.replace('For framework arms invoke @adlc5', 'For ADLC5 baseline/candidate arms only, invoke @adlc5')
         handoff += '\nUse direct coding for the direct arm. For Spec Kit, inspect this pinned checkout and use its actual documented workflow; do not apply ADLC5 internal gates.\n'
     handoff += '\nAll arms require the same independent external review, bound to framework_digest(consumer), in independent-review.json with patch_sha256, coder_session_id, verifier_session_id, disposition and blocking_findings. Internal process conformance is reported separately.\n'
+    if args.pr_repository:
+        handoff = handoff.replace('Do not commit consumer implementation.', 'Commit and open the actual PR in the designated campaign repository.')
+        handoff += (
+            '\nRecord the start time before host work. Obtain an independent review and required remote CI'
+            ' on the exact PR head, then record remote-pr.json as documented in docs/evaluation.md.\n'
+        )
     (run / 'HANDOFF.md').write_text(handoff)
     if qualification:
         write(run / 'STAKEHOLDER.json', case['stakeholder_script'])
     print(run / 'HANDOFF.md')
+
+
+def observed_time(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def campaign_acceptance(run, manifest, observations, review, outcome, now):
+    policy = manifest['pr_acceptance']
+    started = observed_time(observations.get('started_at'))
+    prepared = datetime.fromisoformat(manifest['created_at'])
+    if started is None or not prepared <= started <= now:
+        return dict(status='unavailable', started=None, accepted_at=None, deadline_at=None,
+                    reason='valid start timestamp unavailable')
+    deadline = started + timedelta(minutes=manifest['budget']['wall_clock_minutes'])
+    result = dict(status='unavailable', started=True, accepted_at=None, deadline_at=deadline.isoformat(),
+                  elapsed_seconds=(now - started).total_seconds())
+    receipt_path = run / 'remote-pr.json'
+    if not receipt_path.is_file():
+        return dict(result, reason='remote PR evidence unavailable')
+    receipt = json.loads(receipt_path.read_text())
+    head = receipt.get('head_sha')
+    url = receipt.get('url')
+    repo_url = 'https://github.com/' + policy['repository'] + '/pull/'
+    consumer = run / 'consumer'
+    if (not isinstance(url, str) or not re.fullmatch(re.escape(repo_url) + r'[1-9][0-9]*', url)
+            or head != command(['git', 'rev-parse', 'HEAD'], consumer)
+            or command(['git', 'status', '--porcelain', '--untracked-files=normal'], consumer)):
+        return dict(result, reason='remote PR does not identify the clean evaluation checkout')
+    reviewed = observed_time(review.get('reviewed_at'))
+    captured = observed_time(receipt.get('observed_at'))
+    if (review.get('head_sha') != head or review.get('pr_url') != url
+            or reviewed is None or captured is None or not started <= reviewed <= captured <= now
+            or not outcome['quality_gates_passed']):
+        return dict(result, reason='independent review evidence unavailable on the PR head')
+    checks = receipt.get('checks')
+    if not isinstance(checks, dict):
+        return dict(result, reason='required remote CI evidence unavailable')
+    completed = [reviewed]
+    for name in policy['required_checks']:
+        check = checks.get(name)
+        if not isinstance(check, dict):
+            return dict(result, reason='required remote CI evidence unavailable')
+        finished = observed_time(check.get('completed_at'))
+        if (check.get('head_sha') != head or finished is None or not started <= finished <= captured
+                or check.get('conclusion') != 'success'):
+            return dict(result, reason='required remote CI success unavailable on the PR head')
+        completed.append(finished)
+    for name in ('acceptance', 'regression'):
+        evidence = receipt.get(name)
+        if not isinstance(evidence, dict):
+            return dict(result, reason=f'independent {name} evidence unavailable')
+        finished = observed_time(evidence.get('completed_at'))
+        if (evidence.get('head_sha') != head or finished is None or not started <= finished <= captured
+                or evidence.get('conclusion') != 'success'):
+            return dict(result, reason=f'independent {name} success unavailable on the PR head')
+        completed.append(finished)
+    if (not outcome['anchors_passed'] or not outcome['regression_passed']
+            or observations.get('human_rejected') is not False):
+        return dict(result, reason='required acceptance, regression, or human evidence unavailable')
+    accepted = max(completed)
+    return dict(result, status='accepted_by_deadline' if accepted <= deadline else 'accepted_late',
+                accepted_at=accepted.isoformat(), acceptance_elapsed_seconds=(accepted - started).total_seconds(),
+                pr_url=url, head_sha=head)
 
 
 def collect(args):
@@ -169,6 +259,7 @@ def collect(args):
     process_conformance = gate_passed if manifest['arm'] in ('baseline', 'candidate') else None
     review_path = run / 'independent-review.json'
     external_review = False
+    review = {}
     if review_path.is_file():
         review = json.loads(review_path.read_text())
         external_review = bool(review.get('coder_session_id') and review.get('verifier_session_id')
@@ -186,7 +277,11 @@ def collect(args):
         **{k: observations.get(k) for k in ('rework', 'human_rejected', 'escaped_defects', 'interventions', 'reviewer_findings')})
     outcome['quality_gates_passed'] = external_review
     outcome['process_conformance'] = process_conformance
-    for field in ('active_seconds', 'human_wait_seconds'):
+    if 'pr_acceptance' in manifest:
+        outcome['campaign_acceptance'] = campaign_acceptance(
+            run, manifest, observations, review, outcome, datetime.now(timezone.utc))
+        outcome['quality_gates_passed'] = outcome['campaign_acceptance']['accepted_at'] is not None
+    for field in ('active_seconds', 'human_wait_seconds', 'quota_wait_seconds', 'ci_wait_seconds'):
         value = observations.get(field)
         if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
             raise ValueError(field + ' must be an observed nonnegative duration or null')
@@ -243,6 +338,9 @@ def main():
     p.add_argument('--host', required=True)
     p.add_argument('--model', required=True)
     p.add_argument('--directory', required=True)
+    p.add_argument('--pr-repository', help='GitHub OWNER/REPO for campaign PR acceptance')
+    p.add_argument('--wall-clock-minutes', type=float, help='Override the frozen case time budget for a PR campaign')
+    p.add_argument('--required-check', action='append', help='Pinned required remote CI check (repeatable)')
     p = subs.add_parser('collect')
     p.add_argument('--directory', required=True)
     args = parser.parse_args()

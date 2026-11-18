@@ -29,6 +29,12 @@ def main() -> None:
     codex_turn = '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}'
     assert hosts.parse_events("codex", codex_turn + "\n" + codex_turn)["observed_token_total"] is None
     assert hosts.parse_events("codex", '{"type":"turn.completed","usage":{"input_tokens":10}}')["observed_token_total"] is None
+    quota = hosts.parse_events("codex", '{"type":"turn.failed","error":{"code":"usage_limit_reached",'
+                              '"retry_at":"2099-01-01T00:00:00Z"}}')
+    assert quota["quota_limited"] and quota["earliest_retry_at"] == "2099-01-01T00:00:00Z"
+    quota_without_time = hosts.parse_events("claude", '{"is_error":true,"error":{"type":"rate_limit_error"}}')
+    assert quota_without_time["quota_limited"] and quota_without_time["earliest_retry_at"] is None
+    assert "quota_limited" not in failure
     usage_record = hosts.parse_events("codex", '{"type":"token_usage_record","payload":{"session_id":"s2","usage":{"input_tokens":31,"cached_input_tokens":16,"cache_write_input_tokens":7,"output_tokens":4,"reasoning_output_tokens":2}}}')
     assert usage_record["usage"] == {"input": 15, "cache_read": 16, "cache_creation": 7, "output": 4, "thinking": 2}
     assert usage_record["session_id"] == "s2"

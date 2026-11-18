@@ -36,6 +36,16 @@ def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def retry_time(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return result.astimezone(timezone.utc) if result.tzinfo else None
+
+
 def call(workspace: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run([sys.executable, str(SCRIPTS / "adlc5"), *args, "--workspace", str(workspace)],
                           cwd=workspace, text=True, capture_output=True, check=False)
@@ -131,7 +141,8 @@ class RunnerStop(RuntimeError):
     def __init__(self, condition: str, step: str, next_action: str, **detail: Any):
         super().__init__(condition)
         self.outcome = {"status": "stopped", "condition": condition, "step": step,
-                        "next_action": next_action, **detail}
+                        "next_action": next_action, "resume_owner": "operator",
+                        "earliest_retry_at": None, **detail}
 
 
 def stop_for_recovery(workspace: Path, attempt: dict[str, Any]) -> RunnerStop:
@@ -181,7 +192,7 @@ def isolate_in_worktree(workspace: Path, feature: str, feature_dir: Path, branch
     subprocess.run(["git", "-C", str(workspace), "worktree", "add", "-q", "-b", branch, str(target), base], check=True)
     target_feature = target / ".adlc5" / feature
     target_feature.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock"))
+    shutil.copytree(feature_dir, target_feature, dirs_exist_ok=True, ignore=shutil.ignore_patterns("runner.lock", "runner.lock.guard"))
     # State changes are validated through the canonical kernel command.
     patch_file = target_feature / "pilot/runner-isolation.json"
     patch_file.parent.mkdir(parents=True, exist_ok=True)
@@ -214,6 +225,50 @@ def feature_worktree(workspace: Path, feature: str) -> Path | None:
 
 def acquire_lock(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Serialize stale-owner reclamation. Keep the guard inode in place so
+    # every contender locks the same file, including after a process exits.
+    guard = path.with_name(path.name + ".guard")
+    if path.is_symlink() or guard.is_symlink():
+        raise RuntimeError(f"runner lock must be a regular file: {path}")
+    with guard.open("ab") as stream:
+        if os.name == "nt":
+            import msvcrt
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        acquire_pid_lock(path)
+
+
+def process_exists(pid: int) -> bool:
+    if os.name == "nt":
+        # A signal probe through os.kill is destructive on Windows.
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        process = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        if not process:
+            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER
+        try:
+            return kernel.WaitForSingleObject(process, 0) != 0  # WAIT_OBJECT_0
+        finally:
+            kernel.CloseHandle(process)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def acquire_pid_lock(path: Path) -> None:
     payload = {"pid": os.getpid(), "started_at": now()}
     while True:
         try:
@@ -223,16 +278,16 @@ def acquire_lock(path: Path) -> None:
                 stream.write("\n")
             return
         except FileExistsError:
+            if not path.exists():
+                continue
             owner = read_json(path)
-            if not isinstance(owner, dict) or not isinstance(owner.get("pid"), int):
+            if not path.exists():
+                continue
+            if not isinstance(owner, dict) or type(owner.get("pid")) is not int or owner["pid"] <= 0:
                 raise RuntimeError(f"invalid run lock at {path}; inspect and remove it manually")
-            try:
-                os.kill(owner["pid"], 0)
-            except ProcessLookupError:
+            if not process_exists(owner["pid"]):
                 path.unlink(missing_ok=True)
                 continue
-            except PermissionError:
-                pass
             raise RuntimeError(f"feature is locked by pid {owner['pid']}, started {owner.get('started_at', 'unknown')}")
 
 
@@ -587,6 +642,10 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], prompt: s
                    "model_id": events.get("model_id"), "observed_model_id": events.get("model_id"),
                    "observed_token_total": spent.get("observed_token_total"),
                    "host_reported_cost_usd": events.get("host_reported_cost_usd")}, log_text
+    if events.get("quota_limited") and not events.get("denied_actions"):
+        earliest = retry_time(events.get("earliest_retry_at"))
+        return proc.returncode or 1, {"error": "host quota limited", "failure_kind": "host_quota",
+                                     "earliest_retry_at": earliest.isoformat() if earliest else None, **spent}, log_text
     if events.get("is_error") or events.get("denied_actions"):
         return proc.returncode or 1, {"error": "host reported an error or denied action",
                                        "failure_kind": "permission_required" if events.get("denied_actions") else "host_failed",
@@ -1039,6 +1098,14 @@ def run(args: argparse.Namespace) -> int:
         if state.get("stage_status", {}).get("implement") == "completed":
             finish_summary(workspace, args.feature, "completed", branch, args.summary or "brief")
             return 0
+        previous_stop = read_json(stop_path, {}) if not stop_path.is_symlink() else {}
+        if (isinstance(previous_stop, dict) and previous_stop.get("condition") == "host_quota"
+                and previous_stop.get("step") == state.get("current_step")
+                and previous_stop.get("host") in (None, host)):
+            earliest = retry_time(previous_stop.get("earliest_retry_at"))
+            if earliest and earliest > datetime.now(timezone.utc):
+                print(json.dumps(previous_stop, indent=2))
+                return 1
         recover(workspace, args.feature, journal_path, events)
         pending = resume_question(workspace, args.feature)
         if pending and not pending.get("answer"):
@@ -1222,11 +1289,15 @@ def run(args: argparse.Namespace) -> int:
                 # HEAD alone cannot establish ownership of either the index or worktree.
                 require_clean_recovery(workspace, args.feature, entry, recorded)
                 condition = result.get("failure_kind") if isinstance(result.get("failure_kind"), str) else None
-                if condition not in {"interrupted", "worker_timeout", "invalid_worker_result", "permission_required", "host_failed"}:
+                if condition not in {"interrupted", "worker_timeout", "invalid_worker_result", "permission_required", "host_failed", "host_quota"}:
                     condition = "rework_required" if isinstance(exc, ReworkNeeded) else "worker_failed"
                 close_attempt(journal_path, entry, attempt_no, "fail", reason_code=condition, reason=str(exc)[:4000],
                               observed_model_id=result.get("observed_model_id"),
                               **({"rework": True, "findings": str(exc)[:4000]} if isinstance(exc, ReworkNeeded) else {}))
+                if condition == "host_quota":
+                    raise RunnerStop(condition, step, "Check the host quota and resume when the host permits.",
+                                     attempt_id=attempt_id, host=host, wait_kind="host_quota",
+                                     earliest_retry_at=result.get("earliest_retry_at"))
                 call(workspace, "pilot", "--feature", args.feature, "--record-result", "fail", check=False)
                 if isinstance(exc, ReworkNeeded):
                     continue

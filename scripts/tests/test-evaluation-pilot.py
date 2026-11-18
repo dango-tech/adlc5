@@ -13,6 +13,59 @@ RUNNER = ROOT / 'scripts/evaluation/run-case.py'
 
 
 class Pilot(unittest.TestCase):
+    def test_campaign_acceptance_requires_exact_head_and_keeps_started_denominator(self):
+        from datetime import datetime, timedelta
+        spec = importlib.util.spec_from_file_location('runner', RUNNER)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / 'campaign'
+            subprocess.run([sys.executable, str(RUNNER), 'prepare', '--case', 'tiny-label', '--arm', 'direct',
+                '--host', 'test-only', '--model', 'none', '--directory', str(run),
+                '--pr-repository', 'owner/disposable', '--required-check', 'build', '--wall-clock-minutes', '30'],
+                check=True, capture_output=True)
+            manifest = json.loads((run / 'manifest.json').read_text())
+            self.assertEqual(manifest['budget']['wall_clock_minutes'], 30)
+            started = datetime.fromisoformat(manifest['created_at'])
+            deadline = started + timedelta(minutes=manifest['budget']['wall_clock_minutes'])
+            now = deadline + timedelta(minutes=10)
+            observations = dict(started_at=started.isoformat(), human_rejected=False)
+            head = manifest['fixture_revision']
+            url = 'https://github.com/owner/disposable/pull/1'
+            review = dict(head_sha=head, pr_url=url, reviewed_at=started.isoformat())
+            checks = dict(anchors_passed=True, regression_passed=True, quality_gates_passed=True,
+                          process_conformance=False)
+            missing = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(missing['status'], 'unavailable')
+            self.assertTrue(missing['started'])
+            passed = dict(head_sha=head, conclusion='success', completed_at=deadline.isoformat())
+            receipt = dict(url=url, head_sha=head, observed_at=now.isoformat(), checks={'build': dict(passed)},
+                           acceptance=dict(passed), regression=dict(passed))
+            runner.write(run / 'remote-pr.json', receipt)
+            timely = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(timely['status'], 'accepted_by_deadline')
+            self.assertEqual(timely['acceptance_elapsed_seconds'], 1800)
+            receipt['acceptance']['completed_at'] = (deadline + timedelta(seconds=1)).isoformat()
+            runner.write(run / 'remote-pr.json', receipt)
+            late = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(late['status'], 'accepted_late')
+            receipt['checks']['build']['head_sha'] = 'a' * 40
+            runner.write(run / 'remote-pr.json', receipt)
+            stale = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(stale['status'], 'unavailable')
+            no_start = runner.campaign_acceptance(run, manifest, {}, review, checks, now)
+            spec = importlib.util.spec_from_file_location('scorer', ROOT / 'scripts/evaluate-runs.py')
+            scorer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(scorer)
+            outcomes = [dict(run_id=str(index), profile='direct:tiny', campaign_acceptance=item)
+                        for index, item in enumerate((timely, late, stale, no_start))]
+            report = scorer.evaluate([], [], outcomes)['campaign_acceptance_by_profile']['direct:tiny']
+            self.assertEqual(report, dict(started=3, start_unavailable=1, accepted_by_deadline=1,
+                                          accepted_late=1, acceptance_unavailable=1,
+                                          accepted_by_deadline_rate=None))
+            known = scorer.evaluate([], [], outcomes[:-1])['campaign_acceptance_by_profile']['direct:tiny']
+            self.assertEqual(known['accepted_by_deadline_rate'], 1 / 3)
+
     def test_extended_cases_are_frozen_and_incomplete_starting_points_fail(self):
         bank = json.loads((ROOT / 'templates/evaluation/qualification-cases.json').read_text())
         original = json.loads((ROOT / 'templates/evaluation/cases.json').read_text())
