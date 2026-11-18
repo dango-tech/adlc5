@@ -560,8 +560,10 @@ def main() -> None:
         runner.close_attempt(journal, {**verify, "attempt_id": "v2"}, 1, "fail", rework=True, findings="still failing")
         try:
             runner.rework_findings(runner.journal(journal), 1)
-        except RuntimeError as exc:
-            assert "human review required" in str(exc)
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "verification_rework_exhausted"
+            assert exc.outcome["resume_owner"] == "operator"
+            assert exc.outcome["findings"] == "still failing"
         else:
             raise AssertionError("an exhausted rework budget must stop the run")
         # A dirty main checkout gets one worktree under .worktrees/, and the feature state moves into it.
