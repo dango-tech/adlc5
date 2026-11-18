@@ -12,6 +12,7 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -628,41 +629,95 @@ def repo_index_write(workspace: Path) -> int:
     return 0
 
 
-def repo_index_check(workspace: Path) -> int:
-    manifest_path = workspace / ".agent-cache" / "manifest.json"
+class StaleIndex(ValueError):
+    """The current workspace does not match the stored repository index."""
+
+    def __init__(self, reason: str, **details: Any):
+        super().__init__(reason)
+        self.details = details
+
+
+def checked_index(workspace: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    cache = workspace / ".agent-cache"
+    manifest_path = cache / "manifest.json"
+    if cache.is_symlink() or manifest_path.is_symlink():
+        raise StaleIndex("redirected cache")
     if not manifest_path.is_file():
-        print(json.dumps({"status": "stale", "reason": "missing cache"}))
-        return 3
+        raise StaleIndex("missing cache")
     try:
         existing = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        print(json.dumps({"status": "stale", "reason": "invalid manifest"}))
-        return 3
-    cached_artifacts: dict[str, object] = {}
-    for name in existing.get("artifacts", []):
-        artifact = workspace / ".agent-cache" / str(name)
-        if not artifact.is_file():
-            print(json.dumps({"status": "stale", "reason": f"missing artifact: {name}"}))
-            return 3
-        try:
-            data = json.loads(artifact.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            print(json.dumps({"status": "stale", "reason": f"invalid artifact: {name}"}))
-            return 3
-        if data.get("schema_version") != SCHEMA_VERSION:
-            print(json.dumps({"status": "stale", "reason": f"schema mismatch: {name}"}))
-            return 3
-        cached_artifacts[str(name)] = data
+    except (ValueError, OSError) as exc:
+        raise StaleIndex("invalid manifest") from exc
     current, expected_artifacts = build_index(workspace, write=False)
-    if existing.get("snapshot") != current.get("snapshot"):
-        print(json.dumps({"status": "stale", "reason": "repository changed", "expected": existing.get("snapshot"), "current": current.get("snapshot")}))
+    if not isinstance(existing, dict) or existing.get("artifacts") != current["artifacts"]:
+        raise StaleIndex("invalid manifest artifact inventory")
+    if existing.get("snapshot") != current["snapshot"]:
+        raise StaleIndex("repository changed", expected=existing.get("snapshot"), current=current["snapshot"])
+    if existing != current:
+        raise StaleIndex("manifest mismatch")
+    for name in current["artifacts"]:
+        artifact = cache / name
+        if artifact.is_symlink():
+            raise StaleIndex(f"redirected artifact: {name}")
+        if not artifact.is_file():
+            raise StaleIndex(f"missing artifact: {name}")
+        try:
+            cached = json.loads(artifact.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise StaleIndex(f"invalid artifact: {name}") from exc
+        if not isinstance(cached, dict) or cached.get("schema_version") != SCHEMA_VERSION:
+            raise StaleIndex(f"schema mismatch: {name}")
+        if cached != expected_artifacts[name]:
+            raise StaleIndex(f"artifact mismatch: {name}")
+    return current, expected_artifacts
+
+
+def repo_index_inspect(workspace: Path, paths: list[str] | None = None) -> int:
+    try:
+        current, artifacts = checked_index(workspace)
+    except StaleIndex as exc:
+        print(json.dumps({"status": "stale", "reason": str(exc), **exc.details}))
         return 3
-    for name, cached in cached_artifacts.items():
-        if cached != expected_artifacts.get(name):
-            print(json.dumps({"status": "stale", "reason": f"artifact mismatch: {name}"}))
-            return 3
-    print(json.dumps({"status": "ok", "snapshot": current["snapshot"]}))
+    report = {"status": "ok", "snapshot": current["snapshot"]}
+    if paths is not None:
+        report.update(focus_records(artifacts, paths))
+    print(json.dumps(report))
     return 0
+
+
+def focus_records(artifacts: dict[str, Any], paths: list[str]) -> dict:
+    """Return bounded structural records for exact indexed paths."""
+    selected = set(paths)
+    files = [
+        {**file, "module": module["id"]}
+        for module in artifacts["module-map.json"]["modules"]
+        for file in module["files"]
+        if file["path"] in selected
+    ]
+    indexed = {file["path"] for file in files}
+    symbols = [symbol for symbol in artifacts["symbols.json"]["symbols"] if symbol["file"] in indexed]
+    imports = [edge for edge in artifacts["dependency-graph.json"]["edges"] if edge["source"] in indexed]
+    tests = artifacts["test-map.json"]["by_source"]
+    matches = [{"source": path, "test": test} for path in sorted(indexed) for test in tests.get(path, [])]
+    result = {"files": files, "symbols": symbols, "imports": imports, "test_candidates": matches}
+    counts = {key: len(values) for key, values in result.items()}
+    return {
+        **{key: values[:100] for key, values in result.items()},
+        "counts": counts,
+        "truncated": [key for key, count in counts.items() if count > 100],
+        "unindexed_paths": sorted(selected - indexed),
+    }
+
+
+def valid_focus_path(path: str) -> bool:
+    # The index uses exact path strings, so inspect components before normalization.
+    return (
+        len(path) <= 1000
+        and "\\" not in path
+        and ":" not in path
+        and all(char.isprintable() for char in path)
+        and all(part not in {"", ".", ".."} for part in path.split("/"))
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -670,7 +725,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("area", choices=("repo-spec", "repo-index"))
     parser.add_argument("action")
     parser.add_argument("--workspace", default=".")
-    return parser.parse_args()
+    parser.add_argument("--path", action="append", help="Exact repository-relative POSIX path. Required for focus and repeatable (1–25 paths).")
+    args = parser.parse_args()
+    if args.area == "repo-index" and args.action == "focus":
+        if not args.path or len(args.path) > 25 or not all(map(valid_focus_path, args.path)):
+            parser.error("repo-index focus requires 1–25 canonical repository-relative --path values")
+    elif args.path:
+        parser.error("--path requires repo-index focus")
+    return args
 
 
 def main() -> int:
@@ -690,7 +752,9 @@ def main() -> int:
         if args.action in {"build", "refresh"}:
             return repo_index_write(workspace)
         if args.action == "check":
-            return repo_index_check(workspace)
+            return repo_index_inspect(workspace)
+        if args.action == "focus":
+            return repo_index_inspect(workspace, args.path)
     print(json.dumps({"status": "error", "error": f"unsupported action: {args.area} {args.action}"}))
     return 2
 

@@ -14,7 +14,12 @@ status page: the spec title and problem summary, branch and pull request, the
 lifecycle stage and Implement substeps, the suggested next action, a plain-language
 "What needs attention" list (failing or out-of-date checks, review findings, the last
 PR-ready gate result, unfinished stories), story progress, each required check's
-result, and the latest review notes. Metrics without data are listed on one
+result, and the latest review notes. Runner attempts show observed failures, unclosed attempts, and step or story
+timing from the supervised runner journal. Attempt time is the interval from
+launch to close and can include verification or cleanup. It does not represent
+feature elapsed time or human wait time. Token buckets and known cost are shown
+only when a usage ledger row identifies that attempt.
+Metrics without data are listed on one
 "Not measured yet" line instead of as tiles. File paths, receipts, recorded events
 and the input fingerprint sit in a collapsed "Source records and provenance" panel.
 **Activity** lists agent sessions that used ADLC5 with the host's session title,
@@ -113,7 +118,15 @@ Checks and reviews are compared with the canonical ADLC5 input fingerprint. A ma
 
 Pulse does not run `pr-ready`. A local gate pass does not establish a pull request, human approval, remote CI, deployment, or production health. Archived feature evidence is historical and is not recomputed against today's workspace.
 
-The next-action label is selected from recorded blockers and current evidence. Pulse does not execute or synthesize arbitrary receipt commands. The handoff output is text for review and does not write a clipboard, issue, comment, or message.
+The next-action panel distinguishes product and permission requests from host
+quota, time, and budget stops. It shows the recorded resume owner and earliest
+retry time, or **Unknown** when the record has none. **Resume** offers guidance
+for the operator to continue in the host or terminal. Structured product
+requests can show the decision ID and affected requirement IDs. When the
+readiness record matches the recorded intent and the source digest still
+matches, Pulse links to the existing requirement source and recorded acceptance
+criteria if present. The board excludes raw request text, denied actions,
+answers, and receipt commands. The handoff output is text for review and does not write a clipboard, issue, comment, or message.
 
 ## Usage and limits
 
