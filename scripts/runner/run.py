@@ -220,9 +220,15 @@ def acquire_lock(path: Path) -> None:
 
 
 def checkout_dirty(workspace: Path, feature: str) -> bool:
-    status = git(workspace, "status", "--porcelain", "--untracked-files=all")
-    runtime_prefix = f"?? .adlc5/{feature}/"
-    return any(not line.startswith(runtime_prefix) for line in status.splitlines())
+    status = git(workspace, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    for entry in status.split("\0"):
+        if not entry:
+            continue
+        if not entry.startswith("?? "):
+            return True
+        if not git_bootstrap.untracked_feature_runtime(workspace, feature, entry[3:]):
+            return True
+    return False
 
 
 def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: argparse.Namespace) -> tuple[str, str] | int:
