@@ -526,6 +526,10 @@ def _evaluation(directory: Path, reader: Reader) -> dict[str, Any]:
 
 
 def _duration(start: Any, end: Any) -> float | None:
+    if not isinstance(start, str) or not isinstance(end, str):
+        return None
+    start = start[:-1] + "+00:00" if start.endswith("Z") else start
+    end = end[:-1] + "+00:00" if end.endswith("Z") else end
     try:
         seconds = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
     except (ValueError, TypeError, OverflowError):

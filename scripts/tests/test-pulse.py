@@ -2,6 +2,8 @@
 """Contract checks for the read-only ADLC5 Pulse projection."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import hashlib
 import json
 import os
@@ -14,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from lib.pulse import Reader, _evaluation, band, board_document, handoff, project_workspace  # noqa: E402
+from lib.pulse import Reader, _duration, _evaluation, band, board_document, handoff, project_workspace  # noqa: E402
 from lib.completion_evidence import fingerprint, gate_dependency_digest  # noqa: E402
 
 
@@ -151,6 +153,17 @@ class PulseTests(unittest.TestCase):
         source.unlink()
         source.symlink_to(self.workspace / "README.md")
         self.assertEqual(project_workspace(self.workspace)["features"][0]["pending_input"]["requirement_sources"], [])
+
+    def test_duration_normalizes_utc_suffix_for_python_310(self):
+        def legacy_parser(value):
+            if value.endswith("Z"):
+                raise ValueError("pre-3.11 datetime parser cannot parse Z")
+            return datetime.fromisoformat(value)
+
+        with patch("lib.pulse.datetime") as clock:
+            clock.fromisoformat.side_effect = legacy_parser
+            self.assertEqual(_duration("2026-11-06T21:22:52Z", "2026-11-06T21:23:13Z"), 21)
+            self.assertIsNone(_duration("2026-11-06T21:23:13Z", "2026-11-06T21:22:52Z"))
 
     def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
         base = self.feature()

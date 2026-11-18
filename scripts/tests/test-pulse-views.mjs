@@ -35,8 +35,11 @@ const quota = {...feature, id: 'quota', identity: 'wf-4',
   next_action: {label: 'Resume after the host quota becomes available', reason_code: 'host_quota'},
   last_blocker: {category: 'quota', condition: 'host_quota', source: '.adlc5/quota/pilot/runner-stop.json',
     resume_owner: 'operator', earliest_retry_at: '2026-11-17T21:01:07Z'}};
+const git = {...feature, id: 'bootstrap', identity: 'wf-5',
+  next_action: {label: 'Open the worktree that already checks out the feature branch', reason_code: 'branch_checked_out'},
+  last_blocker: {category: 'git', condition: 'branch_checked_out', source: '.adlc5/bootstrap/pilot/git-bootstrap.json'}};
 const settings = {rows: [{key: 'defaults.summary', value: 'brief', status: 'inherited', source: '~/.adlc5/config.yaml', history: []}], layers: [], storage: {}, credentials: {}, telemetry: 'Not enabled'};
-ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale, product, quota], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
+ids.snapshot.textContent = JSON.stringify({generated_at: 'fixture', features: [feature, stale, product, quota, git], fleet: {scope: 'Captured history', projects: [{id: 'p1', name: 'Application', workspace_keys: ['w1', 'w2']}, {id: 'p2', name: 'Framework', workspace_keys: ['w3']}], workspace_inventory: [{key: 'w1', project_id: 'p1', label: '~/app/worktree', hosts: ['claude', 'codex']}],
   sessions: Array.from({length: 60}, (_, i) => ({id: 'session-' + i, project: 'Application', host: 'codex', outcome: 'Not measured', workspace_keys: ['w1'], workspace_labels: {w1: '~/app/worktree'},
     ...(i === 0 ? {title: 'Ship Alexa reminders', actions: ['adlc5:implement', 'gate'], features: ['alexa'], tokens: 2500000} : {})})), attempts: []},
   home_uri: 'file:///home/u',
@@ -74,6 +77,10 @@ navigate('workflow/wf-4');
 assert.match(ids.features.textContent, /Host quota/);
 assert.match(ids.features.textContent, /Resume owner · Operator/);
 assert.match(ids.features.textContent, /Earliest retry · 2026-11-17 21:01:07 UTC/);
+assert.match(ids.features.textContent, /adlc5 run --feature 'quota'/);
+navigate('workflow/wf-5');
+assert.match(ids.features.textContent, /Open the worktree that already checks out the feature branch/);
+assert.doesNotMatch(ids.features.textContent, /adlc5 run --feature/);
 navigate('activity'); assert.equal(ids.features.hidden, true); assert.match(ids.fleet.textContent, /60 records/);
 assert.match(ids.fleet.textContent, /Ship Alexa reminders session-0/); assert.match(ids.fleet.textContent, /adlc5:implement, gate/);
 assert.match(ids.fleet.textContent, /alexa implement-2-verify · Last recorded blocker · pack over budget/); assert.match(ids.fleet.textContent, /Untitled session session-1/); assert.match(ids.fleet.textContent, /session-24/); assert.doesNotMatch(ids.fleet.textContent, /session-25/);

@@ -179,7 +179,8 @@ function renderWorkflow() {
     resume.append(make("summary", "", "Resume"),
       make("p", "sub", question ? "Resolve the request in the host session before resuming." :
         "Address the blocker and resume in the host or terminal."));
-    if (!question && feature.workspace_label) {
+    const runnerStop = feature.last_blocker?.source === `.adlc5/${feature.id}/pilot/runner-stop.json`;
+    if (!question && pause.category !== "git" && runnerStop && feature.workspace_label) {
       const workspace = feature.workspace_label.startsWith("~/")
         ? "~/" + shellQuote(feature.workspace_label.slice(2)) : shellQuote(feature.workspace_label);
       resume.append(make("code", "p-mono", `adlc5 run --feature ${shellQuote(feature.id)} --workspace ${workspace}`));
