@@ -895,6 +895,7 @@ def project_workspace(workspace: Path, feature: str | None = None, active_only: 
             for evidence in item["evidence"].values():
                 evidence["status"] = "unstable"
             item["last_blocker"] = item["pending_input"] = None
+            item["runner"] = None
             item["next_action"] = {"reason_code": "capture_unstable", "label": "Repeat the snapshot after inputs stop changing"}
     result = {
         "schema_version": "1.0", "generated_at": generated,

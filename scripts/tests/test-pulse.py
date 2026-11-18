@@ -323,6 +323,21 @@ class PulseTests(unittest.TestCase):
         self.assertIsNone(metrics["success_rate_pct"])
         self.assertIsNone(metrics["escaped_defects"])
 
+    def test_workspace_unstable_capture_clears_runner_attempt_projection(self):
+        base = self.feature()
+        pilot = base / "pilot"
+        pilot.mkdir()
+        (pilot / "attempts.jsonl").write_text(json.dumps({
+            "attempt_id": "attempt-1", "step": "implement-1-build", "checkpoint": "started",
+            "at": "2026-11-18T10:00:00Z",
+        }) + "\n")
+        with patch.object(Reader, "stable", side_effect=[True, False, False]):
+            snapshot = project_workspace(self.workspace)
+        feature = snapshot["features"][0]
+        self.assertFalse(snapshot["capture"]["stable"])
+        self.assertFalse(feature["capture"]["stable"])
+        self.assertIsNone(feature["runner"])
+
     def test_multiple_cases_use_total_cost_and_expose_case_range(self):
         base = self.evaluation_fixture()
         for name in ("outcomes", "telemetry", "usage"):
