@@ -204,6 +204,36 @@ def check_bounded_execution() -> None:
             assert receipt["estimated_tokens"] > 10
             worker.assert_not_called()
 
+        state = json.loads(state_file.read_text())
+        state.update(current_stage="implement", current_step="implement-1-build",
+                     tasks={"stories": [{"id": "US-1", "status": "implementation_complete"}]})
+        state_file.write_text(json.dumps(state))
+        path = pilot / "attempts.jsonl"
+        prior = {"attempt_id": "discarded", "start_commit": git("rev-parse", "HEAD"), "story": "US-1",
+                 "step": "implement-1-build", "number": 1}
+        result = {"attempt_id": "discarded", "status": "completed", "changed_paths": ["worker.py"]}
+        runner.append(path, prior)
+        runner.atomic_write_json(pilot / "results/discarded.json", result)
+        runner.record_checkpoint(path, prior, "result_validated", result_sha256=runner.result_digest(result),
+                                 result_fingerprint="dirty-fingerprint-before-discard")
+        runner.record_checkpoint(path, prior, "evidence_ingested")
+        config["pack_budget_tokens"]["balanced"] = 60000
+        def next_worker(*_args):
+            assert runner.load_feature_state(checkout, "bounded")["tasks"]["stories"][0]["status"] == "pending"
+            return 1, {"error": "fixture stops after dispatch"}, ""
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "stage_brief", return_value=("tiny", "US-1")), \
+             patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}), \
+             patch.object(runner, "record_usage"), \
+             patch.object(runner, "run_worker", side_effect=next_worker) as worker, redirect_stdout(io.StringIO()):
+            assert runner.run(args) == 1
+            worker.assert_called_once()
+            closed = runner.attempt_event(runner.journal(path), "discarded", "closed")
+            assert closed["outcome"] == "fail" and closed["reason_code"] == "recovery_source_unverified"
+        state = json.loads(state_file.read_text())
+        state.update(current_stage="specify", current_step="specify-2-requirements")
+        state_file.write_text(json.dumps(state))
+
         config["pack_budget_tokens"]["balanced"] = 60000
         with patch.object(runner, "merge_model_config", return_value=config), \
              patch.object(runner, "stage_brief", return_value=("tiny", None)), \
@@ -231,12 +261,16 @@ def check_bounded_execution() -> None:
             assert json.loads((pilot / "runner-stop.json").read_text())["host"] == "claude"
             assert not any("--record-result" in call.args for call in kernel.call_args_list)
         runner.clear_runner_stop(pilot / "runner-stop.json")
+        state = json.loads(state_file.read_text())
+        state["current_step"] = "specify-3-nfr"
+        state_file.write_text(json.dumps(state))
 
         def interrupt_with_edits(*_args):
             (checkout / "user.py").write_text("concurrent user edit\n")
             (checkout / "new-user.py").write_text("another user edit\n")
             git("add", "user.py")
-            return 124, {"error": "timeout", "failure_kind": "worker_timeout"}, ""
+            return 1, {"error": "quota", "failure_kind": "host_quota",
+                       "earliest_retry_at": "2099-01-01T00:00:00+00:00"}, ""
 
         with patch.object(runner, "merge_model_config", return_value=config), \
              patch.object(runner, "stage_brief", return_value=("tiny", None)), \
@@ -248,9 +282,19 @@ def check_bounded_execution() -> None:
                 receipt = json.loads((pilot / "runner-stop.json").read_text())
                 assert receipt["condition"] == "recovery_required"
                 assert receipt["expected_commit"] == git("rev-parse", "HEAD")
+                assert receipt["wait_kind"] == "host_quota"
+                assert receipt["earliest_retry_at"] == "2099-01-01T00:00:00+00:00"
                 assert (checkout / "user.py").read_text() == "concurrent user edit\n"
                 assert (checkout / "new-user.py").read_text() == "another user edit\n"
                 assert git("diff", "--cached", "--name-only") == "user.py"
+            (checkout / "new-user.py").rename(pilot / "preserved-new-user.py")
+            (checkout / "user.py").rename(pilot / "preserved-user.py")
+            subprocess.run(["git", "-C", str(checkout), "restore", "--source=HEAD", "--staged", "--worktree",
+                            "user.py"], check=True)
+            assert runner.run(args) == 1
+            receipt = json.loads((pilot / "runner-stop.json").read_text())
+            assert receipt["condition"] == "host_quota"
+            assert receipt["earliest_retry_at"] == "2099-01-01T00:00:00+00:00"
             worker.assert_called_once()
             models.assert_called_once()
             usage.assert_called_once()
@@ -265,7 +309,7 @@ def check_bounded_execution() -> None:
         attempt = {"attempt_id": "a", "start_commit": commit, "step": "implement-1-build", "story": "US-1"}
         path = pilot / "attempts.jsonl"
         runner.append(path, attempt)
-        result = {"attempt_id": "a", "status": "completed", "story_id": "US-1"}
+        result = {"attempt_id": "a", "status": "completed", "story_id": "US-1", "changed_paths": []}
         runner.atomic_write_json(pilot / "results/a.json", result)
         runner.record_checkpoint(path, attempt, "result_validated", result_sha256=runner.result_digest(result))
         with patch.object(runner, "ingest") as ingest, patch.object(runner, "record_usage") as usage, \
@@ -276,6 +320,36 @@ def check_bounded_execution() -> None:
             usage.assert_called_once()
             kernel.assert_called_once()
         assert runner.attempt_event(runner.journal(path), "a", "closed")["outcome"] == "pass"
+        for attempt_id, findings in (("rejected", "Missing assertion"), ("rework", "Check suite failed")):
+            verify = {**attempt, "attempt_id": attempt_id, "step": "implement-2-verify"}
+            outcome = {"attempt_id": attempt_id, "status": "completed", "changed_paths": [],
+                       "review": {"disposition": "reject", "blocking_findings": [findings]}}
+            runner.append(path, verify)
+            runner.atomic_write_json(pilot / "results" / f"{attempt_id}.json", outcome)
+            runner.record_checkpoint(path, verify, "result_validated", result_sha256=runner.result_digest(outcome))
+            error = runner.ReworkNeeded(findings) if attempt_id == "rework" else None
+            with patch.object(runner, "ingest", side_effect=error), patch.object(runner, "record_usage"), \
+                 patch.object(runner, "call"), patch.object(runner, "check_gate", return_value=False):
+                runner.recover(checkout, "bounded", path, runner.journal(path))
+            rows = runner.journal(path)
+            closed = runner.attempt_event(rows, attempt_id, "closed")
+            assert closed["outcome"] == "fail" and "blocker_fingerprint" not in closed
+            assert findings in runner.rework_findings(rows, 3)
+        discarded = {**attempt, "attempt_id": "discarded"}
+        output = {**result, "attempt_id": "discarded", "changed_paths": ["missing.py"]}
+        runner.append(path, discarded)
+        runner.atomic_write_json(pilot / "results/discarded.json", output)
+        runner.record_checkpoint(path, discarded, "result_validated", result_sha256=runner.result_digest(output),
+                                 result_fingerprint="fingerprint-with-discarded-source")
+        with patch.object(runner, "ingest") as ingest, patch.object(runner, "record_usage") as usage, \
+             patch.object(runner, "reopen_discarded_build") as reopen:
+            for _ in range(2):
+                runner.recover(checkout, "bounded", path, runner.journal(path))
+            ingest.assert_not_called()
+            usage.assert_called_once()
+            reopen.assert_called_once()
+        closed = runner.attempt_event(runner.journal(path), "discarded", "closed")
+        assert closed["outcome"] == "fail" and closed["reason_code"] == "recovery_source_unverified"
         (checkout / "worker.py").write_text("worker result\n")
         (checkout / "unrelated.py").write_text("concurrent edit\n")
         declaration = {"changed_paths": ["worker.py"]}
@@ -292,6 +366,16 @@ def check_bounded_execution() -> None:
         runner.git(checkout, "config", "user.email", "fixture@example.invalid")
         runner.commit_worker_changes(checkout, "bounded", path, attempt, declaration)
         assert runner.git(checkout, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD") == "worker.py"
+        runner.require_recovered_source(checkout, attempt, declaration, runner.journal(path),
+                                        {"result_sha256": runner.result_digest(declaration)})
+        mismatch = {"changed_paths": ["different.py"]}
+        try:
+            runner.require_recovered_source(checkout, attempt, mismatch, runner.journal(path),
+                                            {"result_sha256": runner.result_digest(mismatch)})
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "recovery_source_unverified"
+        else:
+            raise AssertionError("recovery accepted a commit with mismatched source")
 
 
 def main() -> None:
