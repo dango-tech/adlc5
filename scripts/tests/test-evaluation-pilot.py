@@ -62,9 +62,38 @@ class Pilot(unittest.TestCase):
             report = scorer.evaluate([], [], outcomes)['campaign_acceptance_by_profile']['direct:tiny']
             self.assertEqual(report, dict(started=3, start_unavailable=1, accepted_by_deadline=1,
                                           accepted_late=1, acceptance_unavailable=1,
-                                          accepted_by_deadline_rate=None))
+                                          accepted_by_deadline_rate=None, accepted_features=2,
+                                          comparable_spend_per_accepted_feature_usd=None))
             known = scorer.evaluate([], [], outcomes[:-1])['campaign_acceptance_by_profile']['direct:tiny']
             self.assertEqual(known['accepted_by_deadline_rate'], 1 / 3)
+
+    def test_campaign_spend_includes_failed_and_late_runs_and_requires_complete_accounting(self):
+        spec = importlib.util.spec_from_file_location('scorer', ROOT / 'scripts/evaluate-runs.py')
+        scorer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scorer)
+        outcomes = [
+            dict(run_id=str(index), profile='direct:tiny',
+                 campaign_acceptance=dict(started=True, status=status),
+                 campaign_spend_attestation=dict(complete=True, basis='provider billed USD'))
+            for index, status in enumerate(('accepted_by_deadline', 'accepted_late', 'unavailable'))
+        ]
+        telemetry = [dict(run_id=str(index), node_id='worker') for index in range(3)]
+        usage = [dict(node, cost_usd=amount) for node, amount in zip(telemetry, (1, 2, 5))]
+
+        def metric():
+            return scorer.evaluate(telemetry, usage, outcomes)['campaign_acceptance_by_profile']['direct:tiny']
+
+        self.assertEqual(metric()['accepted_features'], 2)
+        self.assertEqual(metric()['comparable_spend_per_accepted_feature_usd'], 4)
+        usage.append(dict(usage[-1], cost_usd=6))
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
+        usage.pop()
+        outcomes[-1]['campaign_spend_attestation']['basis'] = 'allocated subscription USD'
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
+        outcomes[-1]['campaign_spend_attestation']['basis'] = 'provider billed USD'
+        usage[-1].pop('cost_usd')
+        usage[-1]['extra'] = {'estimated_cost_usd': 5}
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
 
     def test_extended_cases_are_frozen_and_incomplete_starting_points_fail(self):
         bank = json.loads((ROOT / 'templates/evaluation/qualification-cases.json').read_text())
