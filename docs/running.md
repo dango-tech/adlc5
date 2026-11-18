@@ -40,6 +40,15 @@ attempt journal and result files for inspection. Recovery reuses validated
 results from the expected checkout without staging any files. A result
 whose inputs changed before ingestion requires review before recovery.
 
+The runner records durable stops in `pilot/runner-stop.json` under the feature
+directory. The operator owns resume. If a structured host error reports a quota
+limit, the receipt identifies the host quota wait and records the earliest retry
+time when the host supplies one. Invoking the runner on the same host before that time returns the
+existing receipt without launching another worker. If the host gives no time,
+check host availability before resuming. This path uses the normal lock,
+permission checks, and retry budgets. Resume is an explicit invocation.
+
+
 Started from a main checkout with uncommitted changes, the runner creates one
 worktree at `.worktrees/FEATURE` (excluded through `.git/info/exclude`, so
 `.gitignore` is not edited) and moves the feature's `.adlc5/FEATURE` state
