@@ -721,7 +721,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("area", choices=("repo-spec", "repo-index"))
     parser.add_argument("action")
     parser.add_argument("--workspace", default=".")
-    parser.add_argument("--path", action="append", help="Exact repository-relative POSIX path for repo-index focus")
+    parser.add_argument("--path", action="append", help="Exact repository-relative POSIX path. Required for focus and repeatable (1–25 paths).")
     args = parser.parse_args()
     if args.area == "repo-index" and args.action == "focus":
         if not args.path or len(args.path) > 25 or not all(map(valid_focus_path, args.path)):
