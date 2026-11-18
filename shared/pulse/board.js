@@ -53,7 +53,9 @@ function attention(feature) {
   const review = feature.evidence.review.status;
   const gate = feature.evidence.pr_ready.status;
   if (!feature.capture.stable && feature.capture.freshness === "unstable") add("bad", "Files changed while Pulse was reading them", "Regenerate the board once work pauses.");
-  if (summary.pending_questions) add("bad", `${plural(summary.pending_questions, "question")} waiting for an answer`, "The workflow is paused on human input.");
+  if (feature.pending_input) add("bad", `Recorded ${feature.pending_input.category} request`, feature.next_action.label);
+  else if (summary.pending_questions) add("bad", `${plural(summary.pending_questions, "question")} waiting for an answer`, "The workflow is paused on human input.");
+  if (feature.last_blocker) add("bad", `Last recorded blocker · ${label(feature.last_blocker.condition)}`, feature.last_blocker.next_action);
   const failed = (summary.checks?.results || []).filter(r => r.required && r.status !== "pass").map(r => r.id);
   if (checks === "fail" || checks === "partial") add("bad", `Required checks failing: ${failed.join(", ") || "see latest run"}`, `Latest run ${when(summary.checks?.time)}.`);
   else if (checks === "stale") add("warn", "Check results are out of date", `They passed ${when(summary.checks?.time)}, but the spec, tasks or code changed afterwards, so they no longer prove the current work.`);
@@ -67,6 +69,30 @@ function attention(feature) {
   const open = (summary.stories || []).filter(s => !s.done).length;
   if (open) add("warn", `${plural(open, "story")} not finished`);
   return items;
+}
+
+function renderAttempts(runner) {
+  const section = make("section", "p-section-gap");
+  const heading = make("div", "p-panel-head");
+  heading.append(make("h2", "", "Runner attempts"), make("span", "sub",
+    `${runner.observed_attempts} observed · ${runner.failed_attempts} failed · ${runner.unclosed_attempts} unclosed${runner.partial ? " · partial journal" : ""}`));
+  section.append(heading);
+  const title = row => [label(row.step), row.story].filter(Boolean).join(" · ");
+  const duration = value => typeof value === "number" ? `${value.toFixed(1)} s` : "Unavailable";
+  if (runner.by_step.length) section.append(table(["Step or story", "Attempts", "Failed", "Observed attempt time"],
+    runner.by_step.map(row => [title(row), String(row.attempts), String(row.failed),
+      row.timed_attempts ? `${duration(row.attempt_seconds)} · ${row.timed_attempts}/${row.attempts} timed` : "Unavailable"])));
+  const details = make("details", "p-sources");
+  details.append(make("summary", "", `Latest ${runner.recent_attempts.length} attempts`));
+  const tokens = (row, key) => typeof row.tokens?.[key] === "number" ? row.tokens[key].toLocaleString() : "Unavailable";
+  details.append(table(["Step or story", "Host", "Outcome", "Requested model", "Observed model", "Time", "Input", "Output", "Cache read", "Cache write", "Known cost"],
+    runner.recent_attempts.slice().reverse().map(row => [title(row), row.host ? hostBadges([row.host]) : "Unavailable",
+      [label(row.outcome), row.reason_code && label(row.reason_code)].filter(Boolean).join(" · "),
+      row.requested_model || "Unavailable", row.observed_model || "Unavailable", duration(row.duration_seconds),
+      tokens(row, "input"), tokens(row, "output"), tokens(row, "cache_read"), tokens(row, "cache_creation"),
+      typeof row.known_cost_usd === "number" ? `${money(row.known_cost_usd)}${row.cost_basis?.length ? " · " + row.cost_basis.join(" + ") : ""}` : "Unavailable"])));
+  section.append(details);
+  return section;
 }
 
 function renderWorkflow() {
@@ -131,6 +157,36 @@ function renderWorkflow() {
   const next = make("div", "p-next");
   const nextCopy = make("div");
   nextCopy.append(make("div", "eyebrow", "Suggested next action"), make("strong", "", feature.next_action.label), make("small", "", `Because ${label(feature.next_action.reason_code)}`));
+  const pause = feature.pending_input || feature.last_blocker;
+  if (pause) {
+    const question = feature.pending_input;
+    const categoryNames = {product: "Product decision", permission: "Permission request", quota: "Host quota", time: "Time limit", budget: "Budget limit", git: "Git setup", other: "Other blocker"};
+    nextCopy.append(make("small", "", categoryNames[pause.category] || "Recorded blocker"),
+      make("small", "", `Resume owner · ${pause.resume_owner === "operator" ? "Operator" : "Unknown"}`),
+      make("small", "", `Earliest retry · ${pause.earliest_retry_at?.replace("T", " ").replace(/Z$/, " UTC") || "Unknown"}`),
+      external(question ? "Question record" : "Blocker record", fileHref(feature.workspace_label, pause.source)));
+    if (question?.decision_id) nextCopy.append(make("small", "", `Decision · ${question.decision_id}`));
+    if (question?.requirement_ids?.length) {
+      for (const id of question.requirement_ids) {
+        const ref = question.requirement_sources?.find(item => item.id === id);
+        const row = make("div", "sub", `Affected requirement · ${id}`);
+        if (ref?.source) row.append(external("Requirement source", fileHref(feature.workspace_label, ref.source)));
+        if (ref?.acceptance_record) row.append(external("Acceptance record", fileHref(feature.workspace_label, ref.acceptance_record)));
+        nextCopy.append(row);
+      }
+    }
+    const resume = make("details", "p-sources");
+    resume.append(make("summary", "", "Resume"),
+      make("p", "sub", question ? "Resolve the request in the host session before resuming." :
+        "Address the blocker and resume in the host or terminal."));
+    const runnerStop = feature.last_blocker?.source === `.adlc5/${feature.id}/pilot/runner-stop.json`;
+    if (!question && pause.category !== "git" && runnerStop && feature.workspace_label) {
+      const workspace = feature.workspace_label.startsWith("~/")
+        ? "~/" + shellQuote(feature.workspace_label.slice(2)) : shellQuote(feature.workspace_label);
+      resume.append(make("code", "p-mono", `adlc5 run --feature ${shellQuote(feature.id)} --workspace ${workspace}`));
+    }
+    nextCopy.append(resume);
+  }
   next.append(nextCopy);
   panel.append(next);
 
@@ -226,6 +282,8 @@ function renderWorkflow() {
     panel.append(metrics);
   }
   if (unmeasured.length) panel.append(make("p", "sub p-unmeasured", `Not measured yet: ${unmeasured.join(", ")} · ${evaluation.reason || "no evaluation records"}`));
+
+  if (feature.runner) panel.append(renderAttempts(feature.runner));
 
   if (worked.length) {
     const sessionHead = make("div", "p-panel-head p-section-gap");
