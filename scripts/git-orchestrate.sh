@@ -52,18 +52,38 @@ BASE_BRANCH="${BASE_BRANCH:-main}"
 
 case "$ACTION" in
   branch|worktree|current|skip)
-    OUT=$("${ROOT}/scripts/git-isolation.sh" \
+    OUT=$(cd "$WORKSPACE" && "${ROOT}/scripts/git-isolation.sh" \
       --feature "$FEATURE" \
       --action "$ACTION" \
       --branch-name "$BRANCH_NAME" \
       --base-branch "$BASE_BRANCH")
-    ISOLATION=$(echo "$OUT" | jq -r '.git.isolation // .isolation // empty')
-    BRANCH=$(echo "$OUT" | jq -r '.git.branch_name // .branch_name // empty')
-    WT=$(echo "$OUT" | jq -r '.git.worktree_path // .worktree_path // empty')
     if [[ -f "$STATE" ]]; then
-      jq --arg iso "$ISOLATION" --arg br "$BRANCH" --arg wt "$WT" \
-        '.git.isolation=$iso | .git.branch_name=$br | .git.worktree_path=(if $wt=="null" or $wt=="" then null else $wt end)' \
-        "$STATE" >"${STATE}.tmp" && mv "${STATE}.tmp" "$STATE"
+      if [[ "$ACTION" == "worktree" ]]; then
+        OUT=$(python3 - "$ROOT" "$WORKSPACE" "$FEATURE" "$OUT" <<'PY_WORKTREE'
+import json
+from pathlib import Path
+import sys
+
+root, workspace, feature, raw = sys.argv[1:]
+sys.path.insert(0, str(Path(root) / "scripts"))
+from lib.git_bootstrap import BootstrapBlocked, place_worktree_state
+
+metadata = json.loads(raw)
+status = metadata.pop("status")
+try:
+    metadata = place_worktree_state(Path(workspace).resolve(), feature, metadata)
+except BootstrapBlocked as error:
+    print(json.dumps(error.diagnostic), file=sys.stderr)
+    sys.exit(1)
+print(json.dumps(dict(metadata, status=status)))
+PY_WORKTREE
+        )
+      fi
+      PATCH=$(jq -c '{git: (del(.status) | .branch_name //= "")}' <<<"$OUT")
+      if ! RESULT=$("${ROOT}/scripts/adlc5" state set --feature "$FEATURE" --workspace "$WORKSPACE" --patch "$PATCH"); then
+        printf '%s\n' "$RESULT" >&2
+        exit 1
+      fi
     fi
     echo "$OUT"
     ;;

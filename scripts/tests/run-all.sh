@@ -1704,8 +1704,8 @@ pass "tasks-complete enforces task graph"
 
 # v2 pilot emits valid action JSON on a fresh feature
 ./scripts/pilot-autopilot.sh --feature "$FEATURE_V2" --workspace "$V2_TMP" >/tmp/v2-pilot.json
-jq -e '.action == "spawn" and .skill == "adlc5-specify" and .gate == "specify-complete"' /tmp/v2-pilot.json >/dev/null || fail "pilot-v2 fresh feature action contract"
-jq -e '.recommended_model != null and (.model_version|tostring|length)>0' /tmp/v2-pilot.json >/dev/null || fail "pilot-v2 recommended_model fields"
+jq -e '.action == "halt" and .gate == "specify-0-git" and .bootstrap.condition == "git_isolation_unrecorded"' /tmp/v2-pilot.json >/dev/null || fail "pilot-v2 fresh feature action contract"
+jq -e 'has("recommended_model") | not' /tmp/v2-pilot.json >/dev/null || fail "pilot-v2 bootstrap unexpectedly resolved a model"
 jq -e '(.run_id | length) > 0 and .node_id == "specify-0-git" and .attempt == 1' \
   /tmp/v2-pilot.json >/dev/null || fail "pilot-v2 correlation fields"
 PILOT_RUN_ID=$(jq -r '.run_id' /tmp/v2-pilot.json)
@@ -1989,6 +1989,15 @@ DISPATCH_TMP="${TMP}/v2-dispatch"
 mkdir -p "$DISPATCH_TMP"
 set +e
 ./scripts/runner/dispatch.sh --feature "$FEATURE_DISPATCH" --workspace "$DISPATCH_TMP" --mode greenfield --max-iter 1 >/tmp/v2-dispatch.json 2>/tmp/v2-dispatch.err
+EC=$?
+set -e
+[[ "$EC" -eq 1 ]] || fail "dispatch bootstrap expected exit 1 got $EC"
+jq -e '.dispatch == "halted" and .action == "halt" and .bootstrap.condition == "git_isolation_unrecorded"' \
+  /tmp/v2-dispatch.json >/dev/null || fail "dispatch bootstrap halt contract"
+fixture_state_patch --feature "$FEATURE_DISPATCH" --workspace "$DISPATCH_TMP" --patch \
+  '{"current_step":"specify-2-requirements","git":{"isolation":"skip"}}'
+set +e
+./scripts/runner/dispatch.sh --feature "$FEATURE_DISPATCH" --workspace "$DISPATCH_TMP" --max-iter 1 >/tmp/v2-dispatch.json 2>/tmp/v2-dispatch.err
 EC=$?
 set -e
 [[ "$EC" -eq 1 ]] || fail "dispatch needs_executor expected exit 1 got $EC"

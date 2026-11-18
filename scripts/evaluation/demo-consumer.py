@@ -21,6 +21,8 @@ def main():
     subprocess.run([sys.executable, str(ROOT / 'scripts/evaluation/run-case.py'), 'prepare', '--case', 'tiny-label', '--arm', 'candidate', '--host', 'scripted-contract-demo', '--model', 'none', '--directory', str(run)], check=True, capture_output=True)
     repo = run / 'consumer'
     subprocess.run([BASH, str(ROOT / 'scripts/init-feature.sh'), '--workspace', str(repo), '--feature', 'tiny-label', '--mode', 'brownfield', '--scope', 'increment'], check=True, capture_output=True)
+    subprocess.run([BASH, str(ROOT / 'scripts/git-orchestrate.sh'), '--workspace', str(repo),
+                    '--feature', 'tiny-label', '--action', 'current'], check=True, capture_output=True)
     feature = repo / '.adlc5/tiny-label'
     (feature / 'policies.yaml').write_text((ROOT / 'templates/policies-tiny.yaml.example').read_text())
     (feature / 'risk.json').write_text(json.dumps({'categories': [], 'uncertain': False, 'rationale': 'Scripted whitespace-only internal label behavior; no public API promise.'}))

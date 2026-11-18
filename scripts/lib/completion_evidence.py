@@ -383,6 +383,11 @@ def transition(workspace, feature, target):
     expected = 'completed' if current == 'implement-5-pr' else next_step_for_profile(policies, current)
     if target != expected or current == target:
         raise ValueError(f'expected next step {expected}, got {target}')
+    from lib import git_bootstrap
+    if current == git_bootstrap.STEP:
+        bootstrap = git_bootstrap.evaluate(workspace, feature)
+        if bootstrap["status"] != "pass":
+            return {"status": "error", "error": "git_bootstrap_blocked", "bootstrap": bootstrap}
     from lib.requirements_readiness import check
     protected = state['current_stage'] != 'specify' or not target.startswith('specify-')
     if protected:
