@@ -121,6 +121,9 @@ def evaluate(
     usage_nodes = {(str(item["run_id"]), str(item["node_id"])) for item in valid_usage}
     correlated_usage_runs = {run_id for run_id, _ in telemetry_nodes & usage_nodes}
 
+    raw_usage_by_run: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in run_usage:
+        raw_usage_by_run[str(entry["run_id"])].append(entry)
     usage_by_run: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for entry in valid_usage:
         usage_by_run[str(entry["run_id"])].append(entry)
@@ -134,6 +137,9 @@ def evaluate(
         for run_id, outcome in outcome_by_run.items()
     }
 
+    campaign_spend: dict[str, list[float]] = defaultdict(list)
+    campaign_cost_bases: set[str] = set()
+    campaign_cost_complete = not duplicate_outcomes
     campaign_by_profile: dict[str, dict[str, int | float | None]] = {}
     by_profile: dict[str, dict[str, int | float]] = {}
     for run_id, outcome in sorted(outcome_by_run.items()):
@@ -157,9 +163,33 @@ def evaluate(
             campaign_bucket = campaign_by_profile.setdefault(profile, {
                 "started": 0, "start_unavailable": 0, "accepted_by_deadline": 0,
                 "accepted_late": 0, "acceptance_unavailable": 0, "accepted_by_deadline_rate": None,
+                "accepted_features": 0, "comparable_spend_per_accepted_feature_usd": None,
             })
             if campaign.get("started") is True:
                 campaign_bucket["started"] += 1
+                attestation = outcome.get("campaign_spend_attestation")
+                entries = raw_usage_by_run[run_id]
+                if isinstance(attestation, dict) and isinstance(attestation.get("basis"), str):
+                    basis = attestation["basis"].strip()
+                    if basis and attestation.get("complete") is True:
+                        campaign_cost_bases.add(basis)
+                    else:
+                        campaign_cost_complete = False
+                else:
+                    campaign_cost_complete = False
+                seen = set()
+                if not entries:
+                    campaign_cost_complete = False
+                for entry in entries:
+                    node_id = str(entry.get("node_id") or "")
+                    attempt = entry.get("attempt", 1)
+                    amount = entry.get("cost_usd")
+                    if (type(amount) not in (int, float) or not valid_usage_numbers(entry)
+                            or (run_id, node_id) not in telemetry_nodes or (node_id, attempt) in seen):
+                        campaign_cost_complete = False
+                        continue
+                    seen.add((node_id, attempt))
+                    campaign_spend[profile].append(float(amount))
                 status = campaign.get("status")
                 if status in ("accepted_by_deadline", "accepted_late"):
                     campaign_bucket[status] += 1
@@ -167,6 +197,7 @@ def evaluate(
                     campaign_bucket["acceptance_unavailable"] += 1
             else:
                 campaign_bucket["start_unavailable"] += 1
+                campaign_cost_complete = False
         for entry in usage_by_run.get(run_id, []):
             token_count = int((entry.get("tokens") or {}).get("total", 0) or 0)
             if is_successful:
@@ -234,7 +265,12 @@ def evaluate(
             for item in valid_telemetry + valid_usage
         ),
     }
-    for bucket in campaign_by_profile.values():
+    for profile, bucket in campaign_by_profile.items():
+        bucket["accepted_features"] = bucket["accepted_by_deadline"] + bucket["accepted_late"]
+        if campaign_cost_complete and len(campaign_cost_bases) == 1 and bucket["accepted_features"]:
+            spend = sum(campaign_spend[profile])
+            if math.isfinite(spend):
+                bucket["comparable_spend_per_accepted_feature_usd"] = round(spend / bucket["accepted_features"], 6)
         if bucket["started"] and not bucket["start_unavailable"]:
             bucket["accepted_by_deadline_rate"] = bucket["accepted_by_deadline"] / bucket["started"]
     status = "warn" if any(missing.values()) else "ok"
