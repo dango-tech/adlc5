@@ -19,7 +19,7 @@ flowchart TD
 
 ## Where the evidence lives
 
-Your host runs the agent. ADLC5's kernel checks whether the feature can advance. The repository holds the reviewed architecture, feature state, and evidence. Pulse reads those records to show what happened and what needs attention. Open the [architecture guide](https://www.adlc5.dev/intelligence/) for the repository layout.
+Your host runs the agent. ADLC5's kernel checks whether the feature can advance. The repository holds the reviewed architecture, feature state, and evidence. Pulse reads those records to show what happened and what needs attention. Trace the connections in the [architecture guide](https://www.adlc5.dev/architecture/). See [Intelligence](https://www.adlc5.dev/intelligence/) for the repository layout.
 
 ```mermaid
 flowchart TD

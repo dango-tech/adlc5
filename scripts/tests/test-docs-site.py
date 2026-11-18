@@ -155,7 +155,7 @@ class DocsSiteTests(unittest.TestCase):
         deploy_workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         release_workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
         actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow + deploy_workflow + release_workflow, re.MULTILINE)
-        self.assertEqual(len(actions), 5)
+        self.assertEqual(len(actions), 6)
         for action in actions:
             with self.subTest(action=action):
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")

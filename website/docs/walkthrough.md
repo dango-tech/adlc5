@@ -50,7 +50,7 @@ Illustrative storyboard for the CSV export example. Each frame links to its step
 
 <div class="decision-strip">
 <a href="#specify"><small>Feature request</small><strong>Export project records</strong><span>The request leaves export permissions open.</span></a>
-<a href="#decision"><small>Owner decision</small><strong>Who may export?</strong><span>The owner selects administrators for this example.</span></a>
+<a href="#decision"><small>Owner decision</small><strong>Who may export?</strong><span>The owner records which roles may export.</span></a>
 <a href="#review"><small>Review evidence</small><strong>Check the denied-role test</strong><span>The reviewer inspects the test output alongside the change.</span></a>
 </div>
 
