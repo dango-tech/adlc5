@@ -56,6 +56,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     "adlc5_version": {
         "description": "Print ADLC5 semver (→ adlc5 version)",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False, "destructiveHint": False},
         "build": lambda _a: ["version"],
     },
     "adlc5_pulse": {
@@ -69,7 +70,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             },
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False, "destructiveHint": False},
         "build": lambda a: ["pulse", "snapshot", *_opt("--workspace", a.get("workspace")), *_opt("--feature", a.get("feature")), *( ["--active-only"] if a.get("active_only") else [])],
     },
     "adlc5_gate": {
@@ -85,6 +86,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_gate(a),
     },
     "adlc5_pack": {
@@ -100,6 +102,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature", "story_id"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_pack(a),
     },
     "adlc5_clarity": {
@@ -114,6 +117,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["file_path"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False, "destructiveHint": False},
         "build": lambda a: _args_clarity(a),
     },
     "adlc5_phase": {
@@ -128,6 +132,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_phase(a),
     },
     "adlc5_pilot": {
@@ -142,6 +147,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_pilot(a),
     },
     "adlc5_run": {
@@ -158,11 +164,13 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": True, "destructiveHint": True},
         "build": lambda a: ["run", "--feature", a["feature"], *_opt("--workspace", a.get("workspace")), *_opt("--host", a.get("host")), *_opt("--summary", a.get("summary")), *( ["--accept-defaults"] if a.get("accept_defaults") else [])],
     },
     "adlc5_answer": {
         "description": "Record the human's reply to a pending runner question",
         "inputSchema": {"type": "object", "properties": {"question_id": {"type": "string"}, "answer": {"type": "string"}, "workspace": {"type": "string"}}, "required": ["question_id", "answer"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: ["answer", a["question_id"], "--text", a["answer"], *_opt("--workspace", a.get("workspace"))],
     },
     "adlc5_state_get": {
@@ -176,21 +184,25 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False, "destructiveHint": False},
         "build": lambda a: ["state", "get", "--feature", a["feature"], * _opt("--workspace", a.get("workspace"))],
     },
     "adlc5_transition": {
         "description": "Validated canonical next step; completion requires fresh evidence",
         "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "target": {"type": "string"}}, "required": ["feature", "target"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: ["transition", a["target"], "--feature", a["feature"], *_opt("--workspace", a.get("workspace"))],
     },
     "adlc5_evidence": {
         "description": "Run declared checks or record local reviewer/approval attestation",
         "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "action": {"enum": ["check", "review", "approve", "build"]}, "file": {"type": "string"}}, "required": ["feature", "action"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": False, "openWorldHint": True, "destructiveHint": True},
         "build": lambda a: ["evidence", a["action"], "--feature", a["feature"], *_opt("--workspace", a.get("workspace")), *_opt("--file", a.get("file"))],
     },
     "adlc5_readiness": {
         "description": "Review requirements, delivery obligations and changed intent through the canonical kernel",
         "inputSchema": {"type": "object", "properties": {"feature": {"type": "string"}, "workspace": {"type": "string"}, "action": {"enum": ["prepare", "record", "check", "delivery", "impact"]}, "file": {"type": "string"}, "sources": {"type": "array", "items": {"type": "string"}}}, "required": ["feature", "action"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_readiness(a),
     },
     "adlc5_state_set": {
@@ -208,6 +220,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["feature"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: _args_state_set(a),
     },
     "adlc5_resolve_model": {
@@ -224,6 +237,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["tier"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False, "destructiveHint": False},
         "build": lambda a: _args_resolve(a),
     },
     "adlc5_repo_spec": {
@@ -237,6 +251,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["action"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: ["repo-spec", a["action"], *_opt("--workspace", a.get("workspace"))],
     },
     "adlc5_repo_index": {
@@ -250,6 +265,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
             "required": ["action"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": True},
         "build": lambda a: ["repo-index", a["action"], *_opt("--workspace", a.get("workspace"))],
     },
 }

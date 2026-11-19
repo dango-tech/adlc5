@@ -204,6 +204,43 @@ def check_bounded_execution() -> None:
             assert receipt["estimated_tokens"] > 10
             worker.assert_not_called()
 
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "load_policies") as load_policies, \
+             patch.object(runner.hosts, "resolve_model") as models, \
+             patch.object(runner, "run_worker") as worker, \
+             patch.object(runner.sys.stdin, "isatty", return_value=True), redirect_stdout(io.StringIO()):
+            cases = [
+                ("claude", "allowlist", None, "invalid_worker_usd_budget"),
+                ("claude", "allowlist", 0, "invalid_worker_usd_budget"),
+                ("claude", "allowlist", "1.25", "invalid_worker_usd_budget"),
+                ("claude", "allowlist", float("inf"), "invalid_worker_usd_budget"),
+                ("claude", "attended", 1.25, "worker_usd_budget_unsupported"),
+                ("codex", "confined", 1.25, "worker_usd_budget_unsupported"),
+            ]
+            for host, mode, amount, condition in cases:
+                load_policies.return_value = {"autopilot": {"max_worker_usd": amount}}
+                request = SimpleNamespace(**{**vars(args), "host": host, "mode": mode})
+                assert runner.run(request) == 1
+                receipt = json.loads((pilot / "runner-stop.json").read_text())
+                assert receipt["condition"] == condition
+            models.assert_not_called()
+            worker.assert_not_called()
+        assert not (pilot / "attempts.jsonl").exists()
+
+        # Inspect the actual native launch boundary without starting a host process.
+        request = {"attempt_id": "capped", "max_worker_usd": 1.25}
+        with patch.object(runner.subprocess, "Popen", side_effect=RuntimeError("fixture stops at dispatch")) as dispatch:
+            try:
+                runner.run_worker(checkout, "bounded", request, "fixture prompt", {"model_id": "sonnet"},
+                                  30, "claude", "allowlist", "hitl")
+            except RuntimeError as exc:
+                assert str(exc) == "fixture stops at dispatch"
+            else:
+                raise AssertionError("native dispatch spy was not invoked")
+            argv = dispatch.call_args.args[0]
+            assert argv[:2] == ["claude", "-p"]
+            assert argv[argv.index("--max-budget-usd") + 1] == "1.25"
+
         prior_attempt = {"attempt_id": "observed", "run_id": "prior-run", "config_sha256": "config",
                          "start_commit": git("rev-parse", "HEAD"), "step": "specify-1-discover",
                          "host": "codex", "mode": "confined", "number": 1}

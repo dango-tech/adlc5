@@ -42,6 +42,26 @@ def main() -> None:
     claude = hosts.command(host="claude", mode="allowlist", workspace=workspace, prompt="work", model="sonnet",
                            effort="low", allowlist=["Bash(pytest)"])
     assert "--permission-mode" in claude and "acceptEdits" in claude and "--allowedTools" in claude
+    capped = hosts.command(host="claude", mode="allowlist", workspace=workspace, prompt="work", model="sonnet",
+                           effort="low", allowlist=["Bash(pytest)"], max_worker_usd=1.25)
+    assert "--max-budget-usd" not in claude
+    assert capped == [*claude[:-1], "--max-budget-usd", "1.25", claude[-1]]
+    for host, mode in (("codex", "confined"), ("claude", "attended"), ("hermes", "confined")):
+        try:
+            hosts.command(host=host, mode=mode, workspace=workspace, prompt="work", model=None,
+                          effort=None, max_worker_usd=1.25)
+        except ValueError as exc:
+            assert "requires Claude allowlist" in str(exc)
+        else:
+            raise AssertionError("unsupported adapter accepted the native USD budget")
+    for amount in (0, -1, "1.25", True, float("nan"), float("inf"), 10**1000):
+        try:
+            hosts.command(host="claude", mode="allowlist", workspace=workspace, prompt="work", model=None,
+                          effort=None, max_worker_usd=amount)
+        except ValueError as exc:
+            assert "positive finite" in str(exc)
+        else:
+            raise AssertionError(f"adapter accepted invalid budget {amount}")
     cursor = hosts.command(host="cursor", mode="confined", workspace=workspace, prompt="work", model="gpt-5",
                            effort=None)
     assert "--sandbox" in cursor and "enabled" in cursor and "--force" not in cursor and "--trust" in cursor
