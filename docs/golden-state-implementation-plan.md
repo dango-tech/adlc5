@@ -159,7 +159,8 @@ Place this on Wiki Home and the website architecture guide. Draw a visible bound
 flowchart TB
     E["Engineer"] --> H["Claude Code · Codex · Cursor · Hermes"]
     H -->|"CLI or MCP"| K["ADLC5 kernel · validate gates and advance state"]
-    W["Runner and host adapter"] -->|"launch scoped work"| A["Agent worker · reason, edit, review"]
+    H -->|"start supervised run"| W["Runner and host adapter"]
+    W -->|"launch scoped work"| A["Agent worker · reason, edit, review"]
     W -->|"submit results"| K
     subgraph Repo["Consumer repository"]
         C["Reviewed constitution and repository index"]
