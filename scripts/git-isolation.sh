@@ -61,35 +61,54 @@ if [[ "$ACTION" != "skip" ]]; then
   CURRENT_BRANCH="$(git branch --show-current)"
 fi
 
-WORKTREE_PATH="null"
 STATUS="completed"
 
 case "$ACTION" in
   branch)
     git fetch origin 2>/dev/null || true
     if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
-      git checkout "$BRANCH_NAME"
+      git switch "$BRANCH_NAME" >&2
     else
-      git checkout -b "$BRANCH_NAME" "$BASE_BRANCH"
+      git switch -c "$BRANCH_NAME" "$BASE_BRANCH" >&2
     fi
     ;;
   worktree)
-    # Check if ignore file ignores worktree parent dir
-    if [[ -f "${REPO_ROOT}/.gitignore" ]]; then
-      if ! grep -q "^${WORKTREE_DIR}/" "${REPO_ROOT}/.gitignore"; then
-        echo "${WORKTREE_DIR}/" >> "${REPO_ROOT}/.gitignore"
-        echo "Added ${WORKTREE_DIR}/ to .gitignore" >&2
-      fi
-    fi
-    mkdir -p "${REPO_ROOT}/${WORKTREE_DIR}"
+    git check-ref-format --branch "$BRANCH_NAME" >/dev/null
     WORKTREE_TARGET="${REPO_ROOT}/${WORKTREE_DIR}/${BRANCH_NAME}"
-    
-    if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
-      git worktree add "$WORKTREE_TARGET" "$BRANCH_NAME"
-    else
-      git worktree add "$WORKTREE_TARGET" -b "$BRANCH_NAME" "$BASE_BRANCH"
+    TARGET_PATH="$WORKTREE_TARGET"
+    while [[ "$TARGET_PATH" != "$REPO_ROOT" ]]; do
+      if [[ -L "$TARGET_PATH" ]]; then
+        echo "ERROR: Worktree target is redirected: $TARGET_PATH" >&2
+        exit 1
+      fi
+      TARGET_PATH="$(dirname "$TARGET_PATH")"
+    done
+    # Local excludes keep the repository's tracked ignore rules intact.
+    EXCLUDE="$(git rev-parse --git-path info/exclude)"
+    if [[ -L "$EXCLUDE" ]]; then
+      echo "ERROR: Git exclude file redirects outside its expected path." >&2
+      exit 1
     fi
-    WORKTREE_PATH="\"${WORKTREE_TARGET}\""
+    mkdir -p "$(dirname "$EXCLUDE")"
+    if ! grep -Fxq "$WORKTREE_DIR/" "$EXCLUDE" 2>/dev/null; then
+      printf '\n%s/\n' "$WORKTREE_DIR" >>"$EXCLUDE"
+    fi
+    mkdir -p "$REPO_ROOT/$WORKTREE_DIR"
+
+    if [[ -e "$WORKTREE_TARGET" ]]; then
+      TARGET_ROOT="$(git -C "$WORKTREE_TARGET" rev-parse --show-toplevel)"
+      TARGET_COMMON="$(git -C "$WORKTREE_TARGET" rev-parse --path-format=absolute --git-common-dir)"
+      SOURCE_COMMON="$(git rev-parse --path-format=absolute --git-common-dir)"
+      if [[ "$TARGET_ROOT" != "$WORKTREE_TARGET" || "$TARGET_COMMON" != "$SOURCE_COMMON" ||
+            "$(git -C "$WORKTREE_TARGET" branch --show-current)" != "$BRANCH_NAME" ]]; then
+        echo "ERROR: Worktree target already exists: $WORKTREE_TARGET" >&2
+        exit 1
+      fi
+    elif git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
+      git worktree add "$WORKTREE_TARGET" "$BRANCH_NAME" >&2
+    else
+      git worktree add "$WORKTREE_TARGET" -b "$BRANCH_NAME" "$BASE_BRANCH" >&2
+    fi
     ;;
   current)
     BRANCH_NAME="$CURRENT_BRANCH"
@@ -106,15 +125,18 @@ esac
 
 COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# Output Git state JSON for the skill to capture and merge into state.json
-cat <<EOF
-{
-  "status": "${STATUS}",
-  "isolation": "${ACTION}",
-  "branch_name": $([[ "$BRANCH_NAME" == "null" ]] && echo "null" || echo "\"${BRANCH_NAME}\""),
-  "base_branch": "${BASE_BRANCH}",
-  "worktree_path": ${WORKTREE_PATH},
-  "repository_root": $([[ -z "$REPO_ROOT" ]] && echo "null" || echo "\"${REPO_ROOT}\""),
-  "completed_at": "${COMPLETED_AT}"
-}
-EOF
+# Output Git state JSON for the skill to capture and merge into state.json.
+START_COMMIT=""
+if [[ "$ACTION" == "worktree" ]]; then
+  START_COMMIT="$(git -C "$WORKTREE_TARGET" rev-parse HEAD)"
+elif [[ "$ACTION" != "skip" ]]; then
+  START_COMMIT="$(git rev-parse HEAD)"
+fi
+
+jq -n --arg status "$STATUS" --arg isolation "$ACTION" --arg branch "$BRANCH_NAME" \
+  --arg base "$BASE_BRANCH" --arg path "${WORKTREE_TARGET:-}" --arg root "$REPO_ROOT" \
+  --arg commit "$START_COMMIT" --arg at "$COMPLETED_AT" \
+  '{status:$status, isolation:$isolation, branch_name:($branch | select(. != "null") // null),
+    base_branch:$base, worktree_path:($path | select(length > 0) // null),
+    repository_root:($root | select(length > 0) // null),
+    start_commit:($commit | select(length > 0) // null), completed_at:$at}'

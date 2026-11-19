@@ -1,0 +1,19 @@
+name: Inventory contract
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory-contract:
+    name: inventory-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+      - run: python3 -m unittest regression reservation_check

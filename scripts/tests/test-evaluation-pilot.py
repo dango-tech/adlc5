@@ -13,6 +13,88 @@ RUNNER = ROOT / 'scripts/evaluation/run-case.py'
 
 
 class Pilot(unittest.TestCase):
+    def test_campaign_acceptance_requires_exact_head_and_keeps_started_denominator(self):
+        from datetime import datetime, timedelta
+        spec = importlib.util.spec_from_file_location('runner', RUNNER)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / 'campaign'
+            subprocess.run([sys.executable, str(RUNNER), 'prepare', '--case', 'tiny-label', '--arm', 'direct',
+                '--host', 'test-only', '--model', 'none', '--directory', str(run),
+                '--pr-repository', 'owner/disposable', '--required-check', 'build', '--wall-clock-minutes', '30'],
+                check=True, capture_output=True)
+            manifest = json.loads((run / 'manifest.json').read_text())
+            self.assertEqual(manifest['budget']['wall_clock_minutes'], 30)
+            started = datetime.fromisoformat(manifest['created_at'])
+            deadline = started + timedelta(minutes=manifest['budget']['wall_clock_minutes'])
+            now = deadline + timedelta(minutes=10)
+            observations = dict(started_at=started.isoformat(), human_rejected=False)
+            head = manifest['fixture_revision']
+            url = 'https://github.com/owner/disposable/pull/1'
+            review = dict(head_sha=head, pr_url=url, reviewed_at=started.isoformat())
+            checks = dict(anchors_passed=True, regression_passed=True, quality_gates_passed=True,
+                          process_conformance=False)
+            missing = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(missing['status'], 'unavailable')
+            self.assertTrue(missing['started'])
+            passed = dict(head_sha=head, conclusion='success', completed_at=deadline.isoformat())
+            receipt = dict(url=url, head_sha=head, observed_at=now.isoformat(), checks={'build': dict(passed)},
+                           acceptance=dict(passed), regression=dict(passed))
+            runner.write(run / 'remote-pr.json', receipt)
+            timely = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(timely['status'], 'accepted_by_deadline')
+            self.assertEqual(timely['acceptance_elapsed_seconds'], 1800)
+            receipt['acceptance']['completed_at'] = (deadline + timedelta(seconds=1)).isoformat()
+            runner.write(run / 'remote-pr.json', receipt)
+            late = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(late['status'], 'accepted_late')
+            receipt['checks']['build']['head_sha'] = 'a' * 40
+            runner.write(run / 'remote-pr.json', receipt)
+            stale = runner.campaign_acceptance(run, manifest, observations, review, checks, now)
+            self.assertEqual(stale['status'], 'unavailable')
+            no_start = runner.campaign_acceptance(run, manifest, {}, review, checks, now)
+            spec = importlib.util.spec_from_file_location('scorer', ROOT / 'scripts/evaluate-runs.py')
+            scorer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(scorer)
+            outcomes = [dict(run_id=str(index), profile='direct:tiny', campaign_acceptance=item)
+                        for index, item in enumerate((timely, late, stale, no_start))]
+            report = scorer.evaluate([], [], outcomes)['campaign_acceptance_by_profile']['direct:tiny']
+            self.assertEqual(report, dict(started=3, start_unavailable=1, accepted_by_deadline=1,
+                                          accepted_late=1, acceptance_unavailable=1,
+                                          accepted_by_deadline_rate=None, accepted_features=2,
+                                          comparable_spend_per_accepted_feature_usd=None))
+            known = scorer.evaluate([], [], outcomes[:-1])['campaign_acceptance_by_profile']['direct:tiny']
+            self.assertEqual(known['accepted_by_deadline_rate'], 1 / 3)
+
+    def test_campaign_spend_includes_failed_and_late_runs_and_requires_complete_accounting(self):
+        spec = importlib.util.spec_from_file_location('scorer', ROOT / 'scripts/evaluate-runs.py')
+        scorer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scorer)
+        outcomes = [
+            dict(run_id=str(index), profile='direct:tiny',
+                 campaign_acceptance=dict(started=True, status=status),
+                 campaign_spend_attestation=dict(complete=True, basis='provider billed USD'))
+            for index, status in enumerate(('accepted_by_deadline', 'accepted_late', 'unavailable'))
+        ]
+        telemetry = [dict(run_id=str(index), node_id='worker') for index in range(3)]
+        usage = [dict(node, cost_usd=amount) for node, amount in zip(telemetry, (1, 2, 5))]
+
+        def metric():
+            return scorer.evaluate(telemetry, usage, outcomes)['campaign_acceptance_by_profile']['direct:tiny']
+
+        self.assertEqual(metric()['accepted_features'], 2)
+        self.assertEqual(metric()['comparable_spend_per_accepted_feature_usd'], 4)
+        usage.append(dict(usage[-1], cost_usd=6))
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
+        usage.pop()
+        outcomes[-1]['campaign_spend_attestation']['basis'] = 'allocated subscription USD'
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
+        outcomes[-1]['campaign_spend_attestation']['basis'] = 'provider billed USD'
+        usage[-1].pop('cost_usd')
+        usage[-1]['extra'] = {'estimated_cost_usd': 5}
+        self.assertIsNone(metric()['comparable_spend_per_accepted_feature_usd'])
+
     def test_extended_cases_are_frozen_and_incomplete_starting_points_fail(self):
         bank = json.loads((ROOT / 'templates/evaluation/qualification-cases.json').read_text())
         original = json.loads((ROOT / 'templates/evaluation/cases.json').read_text())
@@ -118,6 +200,33 @@ class Pilot(unittest.TestCase):
             result = subprocess.run([sys.executable, str(RUNNER), 'collect', '--directory', str(run)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
             self.assertIn('framework changed', result.stderr)
+
+    def test_campaign_can_pin_baseline_and_distinguish_candidate_routing(self):
+        baseline = 'e79b73acf11a079583539db931f70eb4fe9aa829'
+        prepare = [sys.executable, str(RUNNER), 'prepare', '--case', 'tiny-label',
+                   '--host', 'test-only', '--model', 'configured-model']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = root / 'baseline'
+            subprocess.run([*prepare, '--arm', 'baseline', '--baseline-revision', baseline,
+                            '--directory', str(run)], check=True, capture_output=True)
+            manifest = json.loads((run / 'manifest.json').read_text())
+            self.assertEqual(manifest['framework_revision'], baseline)
+            self.assertEqual((run / 'framework/core/VERSION').read_text().strip(), '5.3.2')
+            for routing in ('same-model', 'tiered'):
+                run = root / routing
+                subprocess.run([*prepare, '--arm', 'candidate', '--candidate-routing', routing,
+                                '--directory', str(run)], check=True, capture_output=True)
+                manifest = json.loads((run / 'manifest.json').read_text())
+                self.assertEqual(manifest['candidate_routing'], routing)
+                proc = subprocess.run([sys.executable, str(RUNNER), 'collect', '--directory',
+                                       str(run)], check=True, capture_output=True, text=True)
+                self.assertEqual(json.loads(proc.stdout)['outcome']['profile'], f'candidate-{routing}:tiny')
+            invalid = root / 'unpinned'
+            proc = subprocess.run([*prepare, '--arm', 'baseline', '--baseline-revision', 'HEAD',
+                                   '--directory', str(invalid)], capture_output=True)
+            self.assertEqual(proc.returncode, 2)
+            self.assertFalse(invalid.exists())
 
 
 if __name__ == '__main__':
