@@ -573,7 +573,8 @@ def run_worker(workspace: Path, feature: str, attempt: dict[str, Any], prompt: s
     session_file = result_dir / f"{attempt_id}.session.json"
     argv = hosts.command(host=host, mode=mode, workspace=workspace, prompt=prompt,
                          model=model.get("model_id"), effort=model.get("effort"), allowlist=allowlist,
-                         session_id=attempt_id, usage_file=usage_file if host == "hermes" and mode != "attended" else None)
+                         session_id=attempt_id, usage_file=usage_file if host == "hermes" and mode != "attended" else None,
+                         max_worker_usd=attempt.get("max_worker_usd"))
     if mode != "attended" and host == "codex":
         argv[2:2] = ["--output-schema", str(schema), "-o", str(last)]
     elif mode != "attended" and host == "claude":
@@ -766,6 +767,20 @@ def budget_records(path: Path, step: str, limit: int, label: str) -> list[dict[s
                              budget=limit)
         rows.append(row)
     return rows
+
+
+def worker_usd_budget(policy: dict[str, Any], host: str, mode: str, step: str) -> int | float | None:
+    if "max_worker_usd" not in policy:
+        return None
+    try:
+        amount = hosts.validate_worker_usd(policy["max_worker_usd"])
+    except ValueError as exc:
+        raise RunnerStop("invalid_worker_usd_budget", step,
+                         "Set autopilot.max_worker_usd to a positive finite number.") from exc
+    if (host, mode) != hosts.NATIVE_USD_BUDGET_MODE:
+        raise RunnerStop("worker_usd_budget_unsupported", step,
+                         "Use Claude allowlist mode with this per-worker USD budget.", host=host, mode=mode)
+    return amount
 
 
 def enforce_observed_token_budget(feature_dir: Path, step: str, policy: dict[str, Any],
@@ -1247,6 +1262,7 @@ def run(args: argparse.Namespace) -> int:
                                   "next": "review and approve the PR with the in-agent PR workflow, then run again"}, indent=2))
                 return 10
             pilot_policy = policies.get("autopilot") or {}
+            max_worker_usd = worker_usd_budget(pilot_policy, host, mode, step)
             enforce_observed_token_budget(feature_dir, step, pilot_policy, host, mode)
             history = journal(journal_path)
             last_closed = next((row for row in reversed(history)
@@ -1320,6 +1336,8 @@ def run(args: argparse.Namespace) -> int:
                      "start_commit": start_commit, "kernel_fingerprint": fingerprint(workspace, args.feature),
                      "requested_model_id": model.get("model_id"), "tier": tier, "gate": action.get("gate"), "at": now(),
                      "host": host, "mode": mode, "kind": kind}
+            if max_worker_usd is not None:
+                entry["max_worker_usd"] = max_worker_usd
             append(journal_path, entry)
             record_checkpoint(journal_path, entry, "launched")
             clear_runner_stop(stop_path)
