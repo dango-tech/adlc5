@@ -1,99 +1,49 @@
 ---
-description: "ADLC5 is an AI coding delivery workflow for software teams: Specify, Plan, Tasks, and Implement, connected by repository intelligence and current evidence."
+description: "Follow a feature from request to review with ADLC5, an evidence-driven workflow for coding agents."
 ---
 
-# ADLC5 developer guide
+# See what your coding agent is building
 
-<img alt="ADLC5 — AI Development Lifecycle" src="assets/brand/logo-light.svg#only-light" width="480">
-<img alt="ADLC5 — AI Development Lifecycle" src="assets/brand/logo-dark.svg#only-dark" width="480">
+**Public preview.** Workflow contracts are tested; comparative coding-quality results and outside-contributor qualification remain pending.
 
-**Public preview.** Workflow contracts are tested; comparative coding-quality
-results and outside-contributor qualification remain pending.
+Follow a feature from the original request through planning, code changes, tests, and review. Open Pulse to see progress and what needs your attention.
 
-ADLC5 gives AI coding tools a repeatable delivery workflow: **Specify → Plan →
-Tasks → Implement**, connected by a fifth pillar: **Intelligence**. Intelligence
-gathers repository knowledge, assembles focused context, and grounds progression
-in current evidence. Agent skills handle judgment; one deterministic kernel owns
-progression and checks. It aims for repeatable acceptance and failure handling,
-not identical generated code.
+[Walk through a feature](walkthrough.md){ .md-button .md-button--primary }
+[Choose your agent](#choose-your-agent){ .md-button }
 
-**Provenance.** ADLC5 is the accumulated practice of Specify → Plan → Tasks →
-Implement applied to AI-assisted delivery: agent judgment for reasoning,
-a deterministic kernel for progression and checks, repository intelligence
-for grounded context, and evidence for completion. It is the whole picture —
-lifecycle, knowledge, context, and verification — working together. See
-[Intelligence](intelligence.md) and the [kernel](https://github.com/dango-tech/adlc5/blob/main/docs/ADLC5-kernel.md).
+## Follow a feature
 
-Read [why an AI coding tool needs a delivery workflow](https://medium.com/@abishek.y/your-ai-coding-tool-needs-a-delivery-workflow-9919b0b58bb4).
+The stages link to the walkthrough. An unresolved policy goes to the owner before planning continues.
 
-Use ADLC5 in your application repository. This repository distributes the
-framework and a portable `dogfood/` consumer example.
+<object class="feature-flow-diagram" data="assets/diagrams/feature-flow.svg" type="image/svg+xml" aria-label="CSV export workflow. Known role policy leads directly to planning. Unknown policy goes to the owner first.">
+<a href="walkthrough/">Read the CSV export walkthrough</a>
+</object>
 
-## Five pillars, connected delivery
+If the role policy is already known, Specify can proceed to Plan. If it is unknown, the owner decides first. Intelligence supplies repository knowledge and focused context across the four stages; the kernel checks progression. [See how the pieces connect](architecture.md).
 
-**Specify · Plan · Tasks · Implement · Intelligence.** The first four are delivery
-stages; Intelligence connects them to your codebase. Models supply reasoning;
-ADLC5 supplies structured knowledge, focused context, and deterministic checks.
+## See the feature in Pulse
 
-| Intelligence capability | Role in delivery |
-| --- | --- |
-| Repository maps | Locate relevant modules, symbols, import dependencies, and tests before planning. |
-| Reviewed guidance | Carry architecture, boundaries, and commands across agent sessions. |
-| Focused context packs | Equip each agent with its story, acceptance, and repository guidance. |
-| Freshness and evidence | Refresh stale maps and require current checks and review before completion. |
+![Pulse board for an illustrative CSV export, showing Implement in progress, unavailable checks, and a suggested next action](assets/pulse-export-demo.png)
 
-The distinction is how these capabilities connect the lifecycle. Read
-[Intelligence](intelligence.md) for a worked flow, commands, and honest limits.
-SOUL supports this pillar as the reasoning discipline across the four stages.
+*Pulse in ADLC5 5.3.2 · illustrative CSV export fixture. The screenshot uses synthetic data and is not evidence of a completed run.*
 
-[Download host plugin packages](downloads.md) for Codex, Claude Code, Cursor,
-and Hermes Agent. See [configuration](configuration.md) for shared storage and
-worktree overrides.
+[Follow the decision through the walkthrough](walkthrough.md#how-a-decision-reaches-review).
 
-## Prove and qualify
+## Choose your agent
 
-- [Benchmarks](benchmarks.md) — suites and publication rules; claims cite measured runs only.
-- [Host qualification cycles](host-qualification-cycles.md) — per-host matrix status.
-- [Brownfield at scale](brownfield-scale.md) — OpenViking as durable store for derived repo state.
+Start with a host package and check its recorded qualification before relying on a particular workflow. Package availability does not imply equal end-to-end qualification.
 
-## Choose your next step
+| Agent | Setup | Evidence |
+| --- | --- | --- |
+| Codex | [Install a native plugin](installation.md#native-agent-plugins-codex-claude-code-cursor-and-hermes-agent) | [Host qualification](host-qualification-cycles.md) |
+| Claude Code | [Install for Claude Code](installation.md#claude-code-plugin-local-package) | [Host qualification](host-qualification-cycles.md) |
+| Cursor | [Install a native plugin](installation.md#native-agent-plugins-codex-claude-code-cursor-and-hermes-agent) | [Host qualification](host-qualification-cycles.md) |
+| Hermes Agent | [Install a native plugin](installation.md#native-agent-plugins-codex-claude-code-cursor-and-hermes-agent) | [Host qualification](host-qualification-cycles.md) |
 
-| If you want to… | Start here |
-| --- | --- |
-| Install for your agent host | [Installation](installation.md) |
-| Deliver your first feature | [Quickstart](quickstart.md) |
-| See the stages in a complete example | [Walkthrough](walkthrough.md) |
-| Diagnose a failed command or gate | [Troubleshooting](support.md) |
-| Check releases and host support | [Releases](releases.md) |
-
-## Proportionate depth
-
-| Work | Delivery artifacts |
-| --- | --- |
-| Tiny | A single `change.md` with behavior, reuse, boundaries, acceptance, and risks |
-| Standard | A brief `design/plan.md` and machine-checkable story specs |
-| High risk | Detailed design, independent critique, QA, and human approval |
-
-Knowledge-base and craftsmanship material are pulled in when a concrete problem
-needs them. SOUL is a reasoning guard across the four stages, not an extra stage.
+[Downloads](downloads.md) · [All installation options](installation.md) · [Quickstart](quickstart.md)
 
 ## Evidence before completion
 
-Checks and reviews must apply to the current patch and acceptance inputs.
-`pr-ready` establishes the required checks and review for the selected profile;
-deployment and live host qualification need separate evidence.
-Read the [completion limits](lifecycle.md#what-completion-establishes) before making release claims.
+`pr-ready` checks the selected readiness profile against the current work. Deployment, remote CI and live host qualification require separate evidence. Read the [completion limits](lifecycle.md#what-completion-establishes), [benchmarks](benchmarks.md), and [host qualification cycles](host-qualification-cycles.md). Missing usage or cost data is unknown, not zero.
 
-The [reference](reference.md) links to canonical repository documentation,
-kernel commands, skill map, and [GitHub Wiki overview](https://github.com/dango-tech/adlc5/wiki/ADLC5-Overview).
-The [README](https://github.com/dango-tech/adlc5#readme) remains the install-oriented
-project entry point; repository documents define the technical contracts.
-Benchmarks: [benchmarks.md](benchmarks.md) ·
-Host qualification: [host-qualification-cycles.md](host-qualification-cycles.md) ·
-Brownfield scale: [brownfield-scale.md](brownfield-scale.md).
-
-## Get help and contribute
-
-Use [GitHub Discussions](https://github.com/dango-tech/adlc5/discussions) for
-questions and ideas, or [GitHub Issues](https://github.com/dango-tech/adlc5/issues)
-for reproducible bugs. Read the [support guide](support.md) before filing.
+[Reference](reference.md) · [Troubleshooting](support.md) · [GitHub Discussions](https://github.com/dango-tech/adlc5/discussions) · [GitHub Issues](https://github.com/dango-tech/adlc5/issues)

@@ -1,0 +1,5 @@
+.feature-flow-diagram { display: block; width: min(100%, 34rem); height: auto; aspect-ratio: 680 / 427; margin: 1rem auto; }
+.decision-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 1rem 0; }
+.decision-strip a { display: grid; align-content: start; gap: .4rem; padding: .8rem; border: 1px solid var(--md-default-fg-color--lightest); border-top: .16rem solid var(--md-accent-fg-color); border-radius: .35rem; }
+.decision-strip small, .decision-strip span { color: var(--md-default-fg-color); }
+@media (max-width: 50em) { .decision-strip { grid-template-columns: 1fr; } }

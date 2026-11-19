@@ -1,0 +1,82 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="610" viewBox="0 0 680 610" role="img" aria-labelledby="title desc">
+  <title id="title">ADLC5 architecture</title>
+  <desc id="desc">The host invokes the kernel directly or uses a supervised runner. Workers use repo context and edit code. The kernel records evidence. Pulse reads it for the engineer.</desc>
+  <defs>
+    <pattern id="dots" width="12" height="12" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r=".75" fill="#dce4dc"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0l9 5-9 5" fill="#16785b"/>
+    </marker>
+    <marker id="amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0l9 5-9 5" fill="#9c6416"/>
+    </marker>
+  </defs>
+  <style>a:hover .tile,a:focus .tile{stroke:#16785b;stroke-width:3}a:focus{outline:none}</style>
+  <rect x="1" y="1" width="678" height="608" rx="18" fill="#f8faf7" stroke="#dce4dc"/>
+  <rect x="2" y="2" width="676" height="606" rx="18" fill="url(#dots)" stroke="none"/>
+  <rect x="18" y="16" width="644" height="85" rx="12" fill="#112825" stroke="none"/>
+  <text x="38" y="42" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#8ae6ba">ADLC5  /  SYSTEM ARCHITECTURE</text>
+  <text x="37" y="79" font-family="Inter,Arial,Helvetica,sans-serif" font-size="29" font-weight="650" fill="white">How a feature moves through ADLC5</text>
+  <rect class="tile" x="205" y="120" width="278" height="62" rx="10" fill="#112825" stroke="#112825"/>
+  <rect x="216" y="133" width="36" height="36" rx="8" fill="#26453c" stroke="none"/>
+  <g transform="translate(222 139)" fill="none" stroke="#77e7b1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 3h20v16H2z M5 8l3 3-3 3 M11 14h5"/>
+  </g>
+  <text x="263" y="146" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="white">Agent host</text>
+  <text x="263" y="167" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#bdd5ca">Engineer requests a feature</text>
+  <path d="M300 182V202H168V228" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M380 182V202H506V228" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="48" y="196" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#16785b">Supervised run</text>
+  <text x="506" y="195" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#16785b">CLI / MCP</text>
+  <rect class="tile" x="26" y="232" width="284" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+  <rect x="37" y="245" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+  <g transform="translate(43 251)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 7h14m-4-4 4 4-4 4M22 17H8m4-4-4 4 4 4"/>
+  </g>
+  <text x="84" y="258" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Runner + adapter</text>
+  <text x="84" y="279" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Dispatch a scoped assignment</text>
+  <rect class="tile" x="370" y="232" width="284" height="62" rx="10" fill="#112825" stroke="#112825"/>
+  <rect x="381" y="245" width="36" height="36" rx="8" fill="#26453c" stroke="none"/>
+  <g transform="translate(387 251)" fill="none" stroke="#77e7b1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6h12v12H6z M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"/>
+  </g>
+  <text x="428" y="258" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="white">ADLC5 kernel</text>
+  <text x="428" y="279" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#bdd5ca">Validate gates and transitions</text>
+  <path d="M310 266H366" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="314" y="251" font-family="Inter,Arial,Helvetica,sans-serif" font-size="12" font-weight="450" fill="#16785b">results</text>
+  <path d="M168 294V327" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <rect class="tile" x="26" y="331" width="284" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+  <rect x="37" y="344" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+  <g transform="translate(43 350)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 6l-6 6 6 6m8-12 6 6-6 6m-3-14-2 16"/>
+  </g>
+  <text x="84" y="357" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Agent worker</text>
+  <text x="84" y="378" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Reason, edit and verify</text>
+  <path d="M512 294V445" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="523" y="370" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#16785b">Record</text>
+  <text x="523" y="388" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#16785b">progress</text>
+  <rect x="17" y="415" width="646" height="101" rx="12" fill="#e9f4ed" stroke="#97bba8"/>
+  <text x="271" y="438" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="650" fill="#16785b">CONSUMER REPOSITORY</text>
+  <path d="M97 449V397" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M244 393V449" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <rect x="30" y="451" width="154" height="54" rx="6" fill="white" stroke="#bfd1c9"/>
+  <text x="41" y="475" font-family="Inter,Arial,Helvetica,sans-serif" font-size="16" font-weight="620" fill="#112825">Guidance + index</text>
+  <text x="41" y="494" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="450" fill="#526964">Focused context</text>
+  <rect x="196" y="451" width="153" height="54" rx="6" fill="white" stroke="#bfd1c9"/>
+  <text x="207" y="475" font-family="Inter,Arial,Helvetica,sans-serif" font-size="16" font-weight="620" fill="#112825">Source + tests</text>
+  <text x="207" y="494" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="450" fill="#526964">Code and checks</text>
+  <rect x="362" y="451" width="285" height="54" rx="6" fill="white" stroke="#bfd1c9"/>
+  <text x="373" y="475" font-family="Inter,Arial,Helvetica,sans-serif" font-size="16" font-weight="620" fill="#112825">Feature state + evidence</text>
+  <text x="373" y="494" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="450" fill="#526964">Intent, decisions and usage</text>
+  <path d="M512 411V447" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M512 516V533" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <rect class="tile" x="370" y="537" width="284" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+  <rect x="381" y="550" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+  <g transform="translate(387 556)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 13h5l3-8 5 15 3-9 2 2h4"/>
+  </g>
+  <text x="428" y="563" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Pulse</text>
+  <text x="428" y="584" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Engineer sees the next action</text>
+</svg>

@@ -39,3 +39,20 @@ jobs:
         run: vercel deploy --prod --yes
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  publish-wiki:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Publish reviewed Home and sidebar to the Wiki
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          git clone --depth 1 "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.wiki.git" "${RUNNER_TEMP}/release-wiki"
+          bash scripts/wiki/publish-site-pages.sh "${RUNNER_TEMP}/release-wiki"

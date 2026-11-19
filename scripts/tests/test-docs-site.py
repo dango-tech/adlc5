@@ -155,7 +155,7 @@ class DocsSiteTests(unittest.TestCase):
         deploy_workflow = (ROOT / ".github/workflows/deploy-site.yml").read_text()
         release_workflow = (ROOT / ".github/workflows/release-site.yml").read_text()
         actions = re.findall(r"^\s*(?:-\s*)?uses:\s+([^\s]+)", workflow + deploy_workflow + release_workflow, re.MULTILINE)
-        self.assertEqual(len(actions), 5)
+        self.assertEqual(len(actions), 6)
         for action in actions:
             with self.subTest(action=action):
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
@@ -174,6 +174,38 @@ class DocsSiteTests(unittest.TestCase):
         self.assertNotIn("pull_request:", workflow)
         self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
         self.assertIn("environment: private-preview", workflow)
+
+    def test_wiki_publisher_preserves_concurrent_edits_and_is_repeatable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            remote, editor, release = (root / name for name in ("wiki.git", "editor", "release"))
+
+            def git(repo, *args):
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                     "user.email=test@example.com", *args], text=True,
+                )
+
+            git(root, "init", "--bare", "-b", "master", str(remote))
+            git(root, "clone", str(remote), str(editor))
+            git(editor, "commit", "--allow-empty", "-m", "Initialize Wiki")
+            git(editor, "push", "origin", "HEAD")
+            git(root, "clone", remote.as_uri(), "--depth", "1", str(release))
+            (editor / "Overview.md").write_text("Concurrent edit")
+            git(editor, "add", "Overview.md")
+            git(editor, "commit", "-m", "Edit during release")
+            git(editor, "push", "origin", "HEAD")
+
+            publish = ["bash", str(ROOT / "scripts/wiki/publish-site-pages.sh")]
+            subprocess.run([*publish, str(release)], check=True)
+            for name in ("Home.md", "_Sidebar.md"):
+                self.assertEqual(git(remote, "show", f"HEAD:{name}"),
+                                 (ROOT / "docs/github-wiki" / name).read_text())
+            self.assertEqual(git(remote, "show", "HEAD:Overview.md"), "Concurrent edit")
+            tip = git(remote, "rev-parse", "HEAD")
+            git(editor, "pull", "--ff-only")
+            subprocess.run([*publish, str(editor)], check=True)
+            self.assertEqual(git(remote, "rev-parse", "HEAD"), tip)
 
     def test_production_release_is_manual_and_gated(self):
         workflow = (ROOT / ".github/workflows/release-site.yml").read_text()

@@ -1,0 +1,17 @@
+digraph Workflow {
+  graph [bgcolor="#f6faf9", pad=.24, nodesep=.30, ranksep=.32]
+  node [shape=box, style="rounded,filled", color="#89aca6", fillcolor="white", fontname="Arial", fontsize=16, margin=".18,.12", fontcolor="#123632"]
+  edge [color="#407069", fontname="Arial", fontsize=13, fontcolor="#264d47", arrowsize=.75]
+  specify [label="Specify\nWho may export?", URL="../../walkthrough/#specify", target="_top"]
+  policy [label="Role policy\nknown?", shape=diamond, fillcolor="#fff2cc", color="#bb923e"]
+  owner [label="Owner decides\nwhich roles may export", URL="../../walkthrough/#decision", target="_top"]
+  plan [label="Plan\nLocate the CSV writer", URL="../../walkthrough/#plan", target="_top"]
+  tasks [label="Tasks\nDefine allowed and denied cases", URL="../../walkthrough/#tasks", target="_top"]
+  build [label="Implement\nChange code and run tests", URL="../../walkthrough/#implement", target="_top"]
+  review [label="Review\nInspect the diff and evidence", fillcolor="#ccebdd", URL="../../walkthrough/#review", target="_top"]
+  specify -> policy
+  policy -> plan [label=" Yes "]
+  policy -> owner [label=" No "]
+  owner -> plan
+  plan -> tasks -> build -> review
+}

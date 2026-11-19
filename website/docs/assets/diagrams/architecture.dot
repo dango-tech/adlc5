@@ -1,0 +1,27 @@
+digraph Architecture {
+  graph [bgcolor="#f6faf9", pad=.22, nodesep=.22, ranksep=.40, compound=true]
+  node [shape=box, style="rounded,filled", color="#89aca6", fillcolor="white", fontname="Arial", fontsize=16, margin=".15,.10", fontcolor="#123632"]
+  edge [color="#407069", fontname="Arial", fontsize=13, fontcolor="#264d47", arrowsize=.72]
+  engineer [label="Engineer"]
+  host [label="Agent host"]
+  runner [label="Runner + host adapter"]
+  worker [label="Agent worker"]
+  kernel [label="ADLC5 kernel", fillcolor="#ccebdd"]
+  pulse [label="Pulse"]
+  subgraph cluster_repo {
+    label="Consumer repository"; fontname="Arial Bold"; fontsize=16; color="#64a695"; style="rounded,dashed"; margin=16
+    context [label="Reviewed guidance\nand repository index"]
+    code [label="Source and tests"]
+    records [label="Feature state, decisions\nand evidence"]
+  }
+  engineer -> host
+  host -> kernel [label=" CLI / MCP"]
+  host -> runner [label=" supervised run"]
+  runner -> worker [label=" scoped brief"]
+  worker -> code [label=" edit and test"]
+  context -> worker [label=" focused context"]
+  runner -> kernel [label=" results"]
+  kernel -> records [label=" record progress"]
+  records -> pulse [label=" read snapshot"]
+  pulse -> engineer [label=" next action", constraint=false]
+}

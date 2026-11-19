@@ -58,6 +58,14 @@ verified in Vercel, run **Actions → Release ADLC5 site to production** on
 `main`, confirm the preview check, and approve the `production` environment gate
 before deployment.
 
+After the production deploy succeeds, the release workflow copies the reviewed
+`docs/github-wiki/Home.md` and `_Sidebar.md` to the public GitHub Wiki. The
+release replaces those two pages, so make lasting edits in the main repository.
+Check the **publish-wiki** job, then open the [Wiki Home](https://github.com/dango-tech/adlc5/wiki)
+and verify the sidebar and its System architecture link. If Wiki publication
+fails after the site is live, correct the reported Git or permission issue and
+rerun the failed job. Repeating the sync with matching pages adds no commit.
+
 Enable Web Analytics from the project's **Analytics** page before the first
 deployment with analytics enabled. The generated MkDocs pages load Vercel's
 `/_vercel/insights/script.js` endpoint only when built for `adlc5.dev`; legacy

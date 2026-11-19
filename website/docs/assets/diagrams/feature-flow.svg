@@ -1,0 +1,85 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="427" viewBox="0 0 680 427" role="img" aria-labelledby="title desc">
+  <title id="title">CSV export workflow</title>
+  <desc id="desc">A missing role policy goes to the product owner. Both paths continue through planning, tasks, implementation and review.</desc>
+  <defs>
+    <pattern id="dots" width="12" height="12" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r=".75" fill="#dce4dc"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0l9 5-9 5" fill="#16785b"/>
+    </marker>
+    <marker id="amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0l9 5-9 5" fill="#9c6416"/>
+    </marker>
+  </defs>
+  <style>a:hover .tile,a:focus .tile{stroke:#16785b;stroke-width:3}a:focus{outline:none}</style>
+  <rect x="1" y="1" width="678" height="425" rx="18" fill="#f8faf7" stroke="#dce4dc"/>
+  <rect x="2" y="2" width="676" height="423" rx="18" fill="url(#dots)" stroke="none"/>
+  <rect x="18" y="16" width="644" height="85" rx="12" fill="#112825" stroke="none"/>
+  <text x="38" y="42" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#8ae6ba">ADLC5  /  FEATURE WORKFLOW</text>
+  <text x="37" y="79" font-family="Inter,Arial,Helvetica,sans-serif" font-size="29" font-weight="650" fill="white">From export request to review</text>
+  <path d="M174 183V230" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M328 152H368" fill="none" stroke="#9c6416" stroke-width="2" stroke-linejoin="round" marker-end="url(#amber)"/>
+  <path d="M506 183V207H317V229" fill="none" stroke="#9c6416" stroke-width="2" stroke-linejoin="round" marker-end="url(#amber)"/>
+  <path d="M328 264H367" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M506 295V333" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <path d="M371 367H331" fill="none" stroke="#16785b" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="327" y="116" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#9c6416">Policy missing</text>
+  <text x="188" y="209" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#16785b">Policy known</text>
+  <text x="519" y="203" font-family="Inter,Arial,Helvetica,sans-serif" font-size="13" font-weight="600" fill="#9c6416">Policy recorded</text>
+  <a href="../../walkthrough/#specify" target="_top">
+    <rect class="tile" x="26" y="121" width="302" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+    <rect x="37" y="134" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+    <g transform="translate(43 140)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3h18v13H9l-5 4v-4H3z"/>
+    </g>
+    <text x="84" y="147" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Specify</text>
+    <text x="84" y="168" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Who may export?</text>
+  </a>
+  <a href="../../walkthrough/#plan" target="_top">
+    <rect class="tile" x="26" y="233" width="302" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+    <rect x="37" y="246" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+    <g transform="translate(43 252)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 4l7-2 6 3 7-2v16l-7 2-6-3-7 2z M9 2v16m6-13v16"/>
+    </g>
+    <text x="84" y="259" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Plan</text>
+    <text x="84" y="280" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Locate the existing CSV writer</text>
+  </a>
+  <a href="../../walkthrough/#tasks" target="_top">
+    <rect class="tile" x="371" y="233" width="280" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+    <rect x="382" y="246" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+    <g transform="translate(388 252)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6l2 2 4-5m3 3h9M3 16l2 2 4-5m3 3h9"/>
+    </g>
+    <text x="429" y="259" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Tasks</text>
+    <text x="429" y="280" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Define allowed and denied cases</text>
+  </a>
+  <a href="../../walkthrough/#implement" target="_top">
+    <rect class="tile" x="371" y="337" width="280" height="62" rx="10" fill="white" stroke="#bfd1c9"/>
+    <rect x="382" y="350" width="36" height="36" rx="8" fill="#d9f4e4" stroke="none"/>
+    <g transform="translate(388 356)" fill="none" stroke="#16785b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 6l-6 6 6 6m8-12 6 6-6 6m-3-14-2 16"/>
+    </g>
+    <text x="429" y="363" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#112825">Implement</text>
+    <text x="429" y="384" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#526964">Change code and run tests</text>
+  </a>
+  <a href="../../walkthrough/#review" target="_top">
+    <rect class="tile" x="26" y="337" width="302" height="62" rx="10" fill="#112825" stroke="#112825"/>
+    <rect x="37" y="350" width="36" height="36" rx="8" fill="#26453c" stroke="none"/>
+    <g transform="translate(43 356)" fill="none" stroke="#77e7b1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 11a8 8 0 1 0-8 8 M16 16l6 6 M7 10l3 3 5-6"/>
+    </g>
+    <text x="84" y="363" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="white">Review</text>
+    <text x="84" y="384" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#bdd5ca">Inspect the diff and test evidence</text>
+  </a>
+  <a href="../../walkthrough/#decision" target="_top">
+    <rect class="tile" x="371" y="121" width="280" height="62" rx="10" fill="#fff3d6" stroke="#d9ac58"/>
+    <rect x="382" y="134" width="36" height="36" rx="8" fill="#f9db98" stroke="none"/>
+    <g transform="translate(388 140)" fill="none" stroke="#9c6416" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 8a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M3 21c0-8 18-8 18 0"/>
+    </g>
+    <text x="429" y="147" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" font-weight="650" fill="#573b0d">Owner decision</text>
+    <text x="429" y="168" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="450" fill="#76501a">Choose the permitted roles</text>
+  </a>
+</svg>

@@ -125,3 +125,69 @@ These are starting thresholds to freeze with workload count, repetitions, review
 Report active, human-wait, quota-wait, CI-wait, and unclassified time. Use exclusive elapsed intervals when reconstructing a timeline and flag gaps or overlapping measurements. Include queue time before deadline acceptance after the task is released. Count billed or otherwise comparable campaign spend across every started run when reporting cost per accepted feature. Publish the count of accepted outcomes used in that denominator, the accounting coverage, and the spend on failed and late runs. Keep missing cost unavailable and never let a cost improvement compensate for a delivery miss.
 
 Promote 5.4.0 only after the required PRs and CI, signed-in host qualification, deadline-based trial results, newcomer decision trial, and exact release artifact/upgrade recovery receipts are attached. A reviewed, green consumer PR completes the advertised delivery workflow. Merge and deploy approvals remain separate.
+
+## 7. Website and Wiki launch plan
+
+**Audience and destination.** The first-time engineer wants to know what happens after handing a feature to an agent. The engineering lead wants to inspect the checks, host limits, and cost evidence before trying it with a team. On November 18, 2026, the live ADLC5 homepage opened as “ADLC5 developer guide,” and the GitHub Wiki root opened on its page list. The verified product destination is [adlc5.dev](https://www.adlc5.dev/). The requested addna.dev domain did not resolve during inspection. If AdDNA is an intentional second destination, use a short engineering case study on its confirmed site, linking to the ADLC5 walkthrough. Establish the domain owner, audience, permission to identify the consumer, and publishable results before scheduling that placement.
+
+### What the visitor sees
+
+**Proposed homepage headline:** “See what your coding agent is building.” Follow with “Follow a feature from the original request through planning, code changes, tests, and review. Open Pulse to see progress and what needs your attention.” Put **Walk through a feature** beside **Choose your agent**. Preserve the existing brand and public-preview label. Show a legible crop of real Pulse output above the fold, with a caption identifying the version and demo repository. Follow with the four-stage graphic, one engineering example, and a host picker linking directly to the matching setup instructions and verified capability row.
+
+Use one disposable example throughout the site and Wiki: a team asks for a CSV export. The repository reveals the existing CSV writer and test command. The product owner decides who may export. The implementation reuses the writer, and a denied-role test supplies review evidence. Label this example as illustrative until a recorded run supplies the artifacts. Use a real screen capture for product UI and an illustration for conceptual flows.
+
+### Graphic 1 · Follow a feature
+
+Homepage illustration, with a vertical reading order on narrow screens. The decision branch shows where an engineer contributes. Clicking a stage should open the corresponding point in the walkthrough.
+
+```mermaid
+flowchart LR
+    S["Specify · Who can export?"] --> D{"Role policy known?"}
+    D -->|Yes| P["Plan · Locate the existing CSV writer"]
+    D -->|No| H["Owner decides who may export"]
+    H --> P
+    P --> T["Tasks · Define allowed and denied cases"]
+    T --> I["Implement · Change code and run tests"]
+    I --> R["Review · Inspect the diff and test evidence"]
+```
+
+### Graphic 2 · How ADLC5 works inside your repo
+
+Place this on Wiki Home and the website architecture guide. Draw a visible boundary around the consumer repository. The engineer should be able to point to the component that decides whether work advances and the files that survive a new chat.
+
+```mermaid
+flowchart TB
+    E["Engineer"] --> H["Claude Code · Codex · Cursor · Hermes"]
+    H -->|"CLI or MCP"| K["ADLC5 kernel · validate gates and advance state"]
+    H -->|"start supervised run"| W["Runner and host adapter"]
+    W -->|"launch scoped work"| A["Agent worker · reason, edit, review"]
+    W -->|"submit results"| K
+    subgraph Repo["Consumer repository"]
+        C["Reviewed constitution and repository index"]
+        F["Feature intent, decisions and stories"]
+        X["Source code and declared tests"]
+        L["Feature state, evidence and usage ledger"]
+    end
+    C -->|"focused context"| A
+    F --> A
+    A --> X
+    X -->|"check results"| K
+    K --> L
+    L --> P["Pulse · progress, evidence and recorded usage"]
+    P -->|"next action"| E
+```
+
+### Graphic 3 · A decision in Pulse
+
+Produce a three-frame annotated strip from the disposable export example. Frame one shows the original ask and current stage. Frame two highlights the unresolved role decision and identifies the owner. Frame three pairs the resumed story with the exact denied-role test and its result. On mobile stack the frames in order. Each caption should explain what changed, with a link to the matching walkthrough step. Capture the actual host action and label its surface. Use mockups only in design review. Publish the resolved-decision strip once the guided decision trial demonstrates the sequence.
+
+### Delivery, owners, and checks
+
+| Order | Deliverable and owner | Acceptance |
+| --- | --- | --- |
+| 1. Establish entry points | Docs maintainer creates Wiki Home and sidebar linking Overview, Pulse, Walkthrough, Host support, and release evidence. Preserve existing page URLs. Revise the MkDocs landing page in `website/docs/index.md`; retain installation, reference, and support routes. | A first-time visitor can reach the walkthrough or their host instructions from either landing page in two selections. Each installation command and compatibility claim has one maintained source. |
+| 2. Build the visual walkthrough | Designer and engineer produce the two diagrams above and annotated Pulse frames using existing brand colors and typography. Keep editable sources together and supply static exports plus text equivalents for both surfaces. | Verify legibility on a phone and desktop, light/dark contrast, keyboard navigation, meaningful alt text, and clear evidence labels. Scrub private paths, prompts, names, and credentials from captures. |
+| 3. Connect release evidence | Release owner adds a dated case card after the paired brownfield trial. Link the consumer PR, CI result, host/version, elapsed time, and accounting coverage where publishable. For an AdDNA placement, explain one documented engineering decision and its outcome for that audience. | Each public claim traces to a release or trial receipt. Proposed savings stay in the roadmap until supported by matched runs. Unsupported surfaces show their specific qualification status. |
+| 4. Validate and publish | Docs owner runs the repo docs build, tests Wiki rendering, and checks links, redirects, canonical URLs, social preview, sitemap, and phone layout on preview. Publish website and Wiki revisions, then recheck the actual public journeys. | A newcomer can explain the workflow, find the correct host setup, and locate the evidence behind a claim unaided. Record failed steps and revise the entry points. |
+
+**Measure adoption.** Before launch, record the current time and success rate for finding host setup and interpreting a Pulse blocker in a newcomer task. Repeat the same tasks after launch. Use available aggregate page or link counts for walkthrough visits and host setup clicks. Record verified first-run completion separately in opt-in trials. Preserve unknowns where collection is unavailable. Refresh host rows, screenshots, and evidence links as part of each release.
