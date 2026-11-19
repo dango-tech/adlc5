@@ -12,6 +12,7 @@ HOSTS = ("codex", "claude", "cursor", "hermes")
 MODES = {"codex": ("confined",), "claude": ("allowlist",), "cursor": ("confined",), "hermes": ("attended", "confined")}
 AVAILABLE_MODES = {"codex": ("confined", "attended"), "claude": ("allowlist", "attended"),
                    "cursor": ("confined", "attended"), "hermes": ("attended", "confined")}
+OBSERVED_TOKEN_MODES = {("codex", "confined"), ("claude", "allowlist")}
 
 
 def in_declared_container(workspace: Path, runtime_detected: bool | None = None) -> bool:
@@ -113,11 +114,29 @@ def _usage(value: dict[str, Any], mapping: dict[str, str]) -> dict[str, int]:
     return result
 
 
+def _token_total(usage: dict[str, Any], *fields: str) -> int | None:
+    values = [usage.get(field) for field in fields]
+    if any(type(value) is not int or value < 0 for value in values):
+        return None
+    return sum(values)
+
+
+def quota_fields(error: Any) -> dict[str, Any]:
+    """Preserve explicit provider quota data when structured error data supplies it."""
+    if not isinstance(error, dict):
+        return {}
+    codes = ("insufficient_quota", "usage_limit_reached", "rate_limit_exceeded", "rate_limit_error")
+    if error.get("code") not in codes and error.get("type") not in codes:
+        return {}
+    return {"quota_limited": True, "earliest_retry_at": error.get("retry_at")}
+
+
 def parse_events(host: str, text: str) -> dict[str, Any]:
     """Normalize supported host result formats; preserve denial and error signals."""
     if host == "codex":
         final, usage, model, session_id, calls = "", {}, None, None, 0
         error = None
+        observed_tokens = None
         for line in text.splitlines():
             try:
                 event = json.loads(line)
@@ -126,7 +145,7 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
             if not isinstance(event, dict):
                 continue
             if event.get('type') in ('error', 'turn.failed'):
-                error = event.get('message') or event.get('error') or 'Codex turn failed'
+                error = event.get('error') or event.get('message') or 'Codex turn failed'
             if event.get("type") in ("thread.started", "thread.resumed"):
                 session_id = event.get("thread_id") or session_id
             if event.get("type") == "item.completed":
@@ -136,6 +155,8 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
             if event.get("type") == "turn.completed":
                 calls += 1
                 turn_usage = event.get("usage") or {}
+                # Use the enclosing counters from the terminal event, without adding subcounters.
+                observed_tokens = _token_total(turn_usage, "input_tokens", "output_tokens")
                 usage.update(_usage(turn_usage, {"input": "input_tokens", "cache_read": "cached_input_tokens",
                     "cache_creation": "cache_write_input_tokens", "output": "output_tokens", "thinking": "reasoning_output_tokens"}))
                 model = (event.get("model_provider") or {}).get("model") or event.get("model") or model
@@ -149,7 +170,8 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
         if "input" in usage and "cache_read" in usage:
             usage["input"] = max(0, usage["input"] - usage["cache_read"])
         return {"text": final, "usage": usage, "model_id": model, "session_id": session_id, "calls": calls,
-                **({'is_error': True, 'error': error} if error else {})}
+                "observed_token_total": observed_tokens if calls == 1 and not error else None,
+                **({'is_error': True, 'error': error, **quota_fields(error)} if error else {})}
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -158,12 +180,16 @@ def parse_events(host: str, text: str) -> dict[str, Any]:
         data = {}
     if host == "claude":
         usage = data.get("usage") or {}
-        return {"text": data.get("structured_output") or data.get("result", ""), "usage": _usage(usage, {"input": "input_tokens", "output": "output_tokens",
+        # Print-mode Claude reports uncached input and separate cache counters.
+        observed_tokens = (_token_total(usage, "input_tokens", "output_tokens",
+                                       "cache_read_input_tokens", "cache_creation_input_tokens")
+                           if data.get("type") == "result" else None)
+        return {"observed_token_total": observed_tokens, "text": data.get("structured_output") or data.get("result", ""), "usage": _usage(usage, {"input": "input_tokens", "output": "output_tokens",
                 "cache_read": "cache_read_input_tokens", "cache_creation": "cache_creation_input_tokens"}),
                 "model_id": data.get("model") or next(iter(data.get("modelUsage") or {}), None),
                 "session_id": data.get("session_id"), "calls": 1,
                 "host_reported_cost_usd": data.get("total_cost_usd"), "denied_actions": data.get("permission_denials", []),
-                "is_error": data.get("is_error", False)}
+                "is_error": data.get("is_error", False), **quota_fields(data.get("error"))}
     if host == "cursor":
         usage = data.get("usage") or data.get("token_usage") or {}
         # Cursor Agent reports camelCase counters; older snake_case names are kept as a fallback.
