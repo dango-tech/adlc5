@@ -17,7 +17,7 @@ from lib.simple_yaml import load_frontmatter
 from lib.state_v2 import load_feature_state
 
 
-def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tuple[str, list[str]]:
+def assemble_sections(workspace: Path, feature: str, story_id: str, persona: str) -> tuple[list[tuple[str, bool]], list[str]]:
     workspace = workspace.resolve()
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", feature):
         raise ValueError("feature must be kebab-case")
@@ -43,12 +43,12 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
         raise ValueError("required spec-handoff.md missing")
 
     budget = int((state.get("memory") or {}).get("context_budget_tokens") or 8000)
-    parts = [f"# Context pack — {story_id}\n\nFeature: {feature}\nPersona: {persona}",
-             "## Story and acceptance\n\n```json\n" + json.dumps(story, indent=2) + "\n```"]
+    parts = [(f"# Context pack — {story_id}\n\nFeature: {feature}\nPersona: {persona}", False),
+             ("## Story and acceptance\n\n```json\n" + json.dumps(story, indent=2) + "\n```", False)]
     sources: list[str] = []
-    included_tokens = sum(len(part) // 4 for part in parts)
+    included_tokens = sum(len(text) // 4 for text, _ in parts)
 
-    def include(path: Path, title: str, *, required: bool = True) -> None:
+    def include(path: Path, title: str, *, required: bool = True, shareable: bool = False) -> None:
         nonlocal included_tokens
         resolved = path.resolve()
         if not resolved.is_relative_to(workspace):
@@ -56,26 +56,26 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
         content = path.read_text(encoding="utf-8")
         estimated = max(1, len(content) // 4)
         if not required and included_tokens + estimated > budget:
-            parts.append(f"## {title}\n\nOmitted automatically: context budget reached; retrieve `{path.relative_to(workspace).as_posix()}` only if needed.")
+            parts.append((f"## {title}\n\nOmitted automatically: context budget reached; retrieve `{path.relative_to(workspace).as_posix()}` only if needed.", False))
             return
         rel = path.relative_to(workspace).as_posix()
         sources.append(rel)
-        parts.append(f"## {title}\n\nSource: `{rel}`\n\n" + content)
+        parts.append((f"## {title}\n\nSource: `{rel}`\n\n" + content, shareable))
         included_tokens += estimated
 
     include(spec, "Code spec" if spec.name != "change.md" else "Bounded change")
-    include(handoff, "Locked requirements")
+    include(handoff, "Locked requirements", shareable=True)
     readiness = directory / 'requirements-readiness.json'
     if readiness.exists():
         from lib.requirements_readiness import check
         assessed = check(workspace, feature)
         if assessed['status'] != 'pass':
             raise ValueError(assessed['message'])
-        include(readiness, 'Current requirements and decision review')
+        include(readiness, 'Current requirements and decision review', shareable=True)
     for rel in ("AGENTS.md", ".agents/architecture.yaml", ".agents/boundaries.yaml", ".agents/commands.yaml"):
         path = workspace / rel
         if path.is_file():
-            include(path, f"Repository rules: {rel}", required=False)
+            include(path, f"Repository rules: {rel}", required=False, shareable=True)
     fm, _ = load_frontmatter(spec.read_text(encoding="utf-8"))
     if spec.name != "change.md" and (not fm or fm.get("story_id") != story_id):
         raise ValueError("code spec needs valid frontmatter matching the story id")
@@ -83,21 +83,30 @@ def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tupl
     if not declared or any(not isinstance(path, str) or not path or Path(path).is_absolute() or ".." in Path(path).parts for path in declared):
         raise ValueError("declare a nonempty safe file boundary in the story or code spec")
     boundary = sorted(set(declared))
-    parts.append("## File boundary\n\n" + json.dumps(boundary))
-    parts.append("## Repository navigation\n\nInspect boundary files and their callers before editing. "
-                 "Query `.agent-cache/repo-index.json` when available; code is authoritative.")
+    parts.append(("## File boundary\n\n" + json.dumps(boundary), False))
+    parts.append(("## Repository navigation\n\nInspect boundary files and their callers before editing. "
+                  "Query `.agent-cache/repo-index.json` when available; code is authoritative.", True))
     if persona == "tester":
         for rel in ("design/plan.md", "design/1a-discovery.md", "design/1b-contracts.md", "design/1c-operations.md"):
             path = directory / rel
             if path.is_file():
-                include(path, rel, required=False)
+                include(path, rel, required=False, shareable=True)
     else:
-        parts.append("## Design pointers\n\nOmitted for coder persona — use the code spec.")
+        parts.append(("## Design pointers\n\nOmitted for coder persona — use the code spec.", True))
     if persona_mode_enabled(load_policies(workspace, feature)):
         result = check_persona_context(persona, sources, feature)
         if result["status"] != "pass":
             raise ValueError("persona context violation: " + json.dumps(result))
-    return "\n\n".join(parts) + "\n", sources
+    return parts, sources
+
+
+def render(sections: list[tuple[str, bool]]) -> str:
+    return "\n\n".join(text for text, _ in sections) + "\n"
+
+
+def assemble(workspace: Path, feature: str, story_id: str, persona: str) -> tuple[str, list[str]]:
+    sections, sources = assemble_sections(workspace, feature, story_id, persona)
+    return render(sections), sources
 
 
 def main() -> int:
@@ -106,10 +115,12 @@ def main() -> int:
     parser.add_argument("--feature", required=True)
     parser.add_argument("--story-id", required=True)
     parser.add_argument("--persona", choices=("coder", "tester"), default="coder")
+    parser.add_argument("--structured-sections", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     workspace = Path(args.workspace).resolve()
     try:
-        content, sources = assemble(workspace, args.feature, args.story_id, args.persona)
+        sections, sources = assemble_sections(workspace, args.feature, args.story_id, args.persona)
+        content = render(sections)
         directory = workspace / ".adlc5" / args.feature / "memory/context-packs"
         directory.mkdir(parents=True, exist_ok=True)
         prefix = "story" if args.persona == "coder" else "verify"
@@ -122,6 +133,8 @@ def main() -> int:
         report = json.loads(budget.stdout)
         result = {"status": "ok" if budget.returncode == 0 else "fail", "pack": str(pack.relative_to(workspace)),
                   "persona": args.persona, "sources": sources, "budget": report}
+        if args.structured_sections:
+            result["sections"] = [{"text": text, "shareable": shareable} for text, shareable in sections]
         print(json.dumps(result))
         return 0 if budget.returncode == 0 else 1
     except (ValueError, OSError, TypeError) as exc:

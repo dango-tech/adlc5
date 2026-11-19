@@ -397,6 +397,19 @@ def ensure_isolation(workspace: Path, feature: str, feature_dir: Path, args: arg
     return branch, isolation
 
 
+def combine_story_packs(packs: list[list[dict[str, Any]]]) -> str:
+    # Compare structured, provenance-bearing sections. A source present only in
+    # some packs (for example because another story hit its cap) stays local.
+    common = set.intersection(*({section["text"] for section in pack if section["shareable"]}
+                                for pack in packs))
+    shared = [section["text"] for section in packs[0] if section["shareable"] and section["text"] in common]
+    stories = ["\n\n".join(section["text"] for section in pack
+                            if not section["shareable"] or section["text"] not in common) for pack in packs]
+    if shared:
+        stories.insert(0, "\n\n".join(["# Shared context for all stories", *shared]))
+    return "\n\n---\n\n".join(stories)
+
+
 def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: str | None = None) -> tuple[str, str | None]:
     state = load_feature_state(workspace, feature) or {}
     stage = str(state.get("current_stage", "specify"))
@@ -407,15 +420,19 @@ def stage_brief(workspace: Path, feature: str, step: str, gates: Any, rework: st
         story = next((s.get("id") for s in stories if step.endswith("build") and s.get("type") != "integration" and s.get("status") not in ("implementation_complete", "verified")), None)
         targets = [story] if story else ([s.get("id") for s in stories if s.get("type") != "integration" and s.get("status") in ("implementation_complete", "verified")] if step.endswith("verify") else [])
         packs = []
+        combine = len(targets) > 1
+        section_flag = ["--structured-sections"] if combine else []
         for story_id in targets:
             proc = subprocess.run([BASH, str(SCRIPTS / "memory/generate-pack.sh"), "--feature", feature,
                                    "--story-id", str(story_id), "--persona", "coder" if step.endswith("build") or rework else "tester",
-                                   "--workspace", str(workspace)], cwd=workspace, capture_output=True, text=True)
+                                   "--workspace", str(workspace), *section_flag], cwd=workspace, capture_output=True, text=True)
             if proc.returncode:
                 raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"context pack failed for {story_id}")
-            packs.append((workspace / json.loads(proc.stdout)["pack"]).read_text(encoding="utf-8"))
+            packs.append(json.loads(proc.stdout))
         if packs:
-            text = "\n\n---\n\n".join(packs) + "\n\nGate feedback:\n" + json.dumps(gates, indent=2)
+            text = (combine_story_packs([pack["sections"] for pack in packs]) if combine else
+                    (workspace / packs[0]["pack"]).read_text(encoding="utf-8"))
+            text += "\n\nGate feedback:\n" + json.dumps(gates, indent=2)
             if rework:
                 text = ((ROOT / "skills/adlc5-assure-reworker/SKILL.md").read_text(encoding="utf-8") + "\n\n---\n\n" + text +
                         "\n\nVerification findings to fix (do not review; fix the code):\n" + rework)

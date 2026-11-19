@@ -445,9 +445,77 @@ def check_attended_worktree_bootstrap() -> None:
         assert target_state.read_text() == "{}"
 
 
+def check_verification_context() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        workspace = Path(temp)
+        feature = workspace / ".adlc5/demo"
+        specs = feature / "tasks/code-spec"
+        specs.mkdir(parents=True)
+        design = feature / "design"
+        design.mkdir()
+        (feature / "spec-handoff.md").write_text("Require tenant isolation for every story.\n")
+        (workspace / "AGENTS.md").write_text("Run the deterministic suite before review.\n")
+        (design / "1b-contracts.md").write_text("Preserve repository API compatibility.\n")
+        stories = []
+        for name, constraint in (("one", "Deny cross-tenant reads."), ("two", "Log successful exports.")):
+            stories.append({"id": name, "status": "implementation_complete", "acceptance": [f"AC-{name}"]})
+            (specs / f"{name}.md").write_text(
+                f"---\nstory_id: {name}\nfiles_to_modify: [src/{name}.py]\n---\n"
+                f"## Locked requirements\n\n{constraint}\n")
+        (feature / "state.json").write_text(json.dumps({
+            "schema_version": "3.0", "feature": "demo", "current_stage": "implement",
+            "current_step": "implement-2-verify", "stage_status": {}, "tasks": {"stories": stories},
+        }))
+        from readiness_fixture import reviewed_fixture
+        from lib.requirements_readiness import load_record, record, source
+        reviewed_fixture(workspace)
+        review = load_record(feature / "requirements-readiness.json")
+        review["delivery"]["constraints"] = [{"requirement_ids": ["FIXTURE-1"],
+            "text": "Reject unauthenticated requests before storage access.",
+            "source": source(workspace, ".adlc5/demo/spec-handoff.md")}]
+        record(workspace, "demo", review)
+        for finding in (None, "The reviewer found an authorization gap."):
+            brief, story = runner.stage_brief(workspace, "demo", "implement-2-verify", {"status": "fail"}, finding)
+            assert story is None
+            assert brief.count("Require tenant isolation for every story.") == 1
+            assert brief.count("Source: `.adlc5/demo/spec-handoff.md`") == 1
+            assert brief.count("Run the deterministic suite before review.") == 1
+            assert brief.count("Reject unauthenticated requests before storage access.") == 1
+            assert brief.count("Source: `.adlc5/demo/requirements-readiness.json`") == 1
+            assert brief.count("Gate feedback:") == 1
+            shared, first = brief.split("# Context pack — one", 1)
+            first, second = first.split("# Context pack — two", 1)
+            assert "# Shared context for all stories" in shared
+            assert "AC-one" in first and "AC-two" in second
+            assert "Deny cross-tenant reads." in first and "Log successful exports." in second
+            assert "Log successful exports." not in first and "Deny cross-tenant reads." not in second
+            assert "Source: `.adlc5/demo/tasks/code-spec/one.md`" in first
+            assert "Source: `.adlc5/demo/tasks/code-spec/two.md`" in second
+            assert "src/one.py" in first and "src/two.py" in second
+            if finding:
+                assert finding in brief and "Preserve repository API compatibility." not in brief
+            else:
+                assert brief.count("Preserve repository API compatibility.") == 1
+                assert "Source: `.adlc5/demo/design/1b-contracts.md`" in shared
+            prefix = "story" if finding else "verify"
+            for name in ("one", "two"):
+                pack_path = feature / "memory/context-packs" / f"{prefix}-{name}.md"
+                assert "Require tenant isolation for every story." in pack_path.read_text()
+
+    # Partial inclusion or differing content keeps the section under its own story.
+    merge = runner.combine_story_packs([
+        [{"text": "# One", "shareable": False}, {"text": "Rules version one", "shareable": True}],
+        [{"text": "# Two", "shareable": False}, {"text": "Rules version two", "shareable": True}],
+        [{"text": "# Three", "shareable": False}, {"text": "Rules omitted at cap", "shareable": False}],
+    ])
+    assert "# Shared context" not in merge
+    assert merge.split("\n\n---\n\n") == ["# One\n\nRules version one", "# Two\n\nRules version two", "# Three\n\nRules omitted at cap"]
+
+
 def main() -> None:
     check_bootstrap()
     check_bounded_execution()
+    check_verification_context()
     check_concurrent_stale_lock_recovery()
     check_attended_worktree_bootstrap()
     assert runner.decode_worker_result({'attempt_id': 'a', 'status': 'needs_human', 'summary': 'decision',
