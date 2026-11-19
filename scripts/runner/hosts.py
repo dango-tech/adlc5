@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 from pathlib import Path
@@ -13,6 +14,7 @@ MODES = {"codex": ("confined",), "claude": ("allowlist",), "cursor": ("confined"
 AVAILABLE_MODES = {"codex": ("confined", "attended"), "claude": ("allowlist", "attended"),
                    "cursor": ("confined", "attended"), "hermes": ("attended", "confined")}
 OBSERVED_TOKEN_MODES = {("codex", "confined"), ("claude", "allowlist")}
+NATIVE_USD_BUDGET_MODE = ("claude", "allowlist")
 
 
 def in_declared_container(workspace: Path, runtime_detected: bool | None = None) -> bool:
@@ -30,12 +32,27 @@ def in_declared_container(workspace: Path, runtime_detected: bool | None = None)
     return isinstance(value, dict) and value.get("type") == "container" and value.get("declared_by") == "user"
 
 
+def validate_worker_usd(value: Any) -> int | float:
+    if type(value) in (int, float):
+        try:
+            if value > 0 and math.isfinite(value):
+                return value
+        except OverflowError:
+            pass  # The native CLI cannot represent this integer as a finite number.
+    raise ValueError("max_worker_usd must be a positive finite number")
+
+
 def command(*, host: str, mode: str, workspace: Path, prompt: str, model: str | None,
             effort: str | None, allowlist: list[str] | None = None, session_id: str | None = None,
-            usage_file: Path | None = None, container_runtime_detected: bool | None = None) -> list[str]:
+            usage_file: Path | None = None, container_runtime_detected: bool | None = None,
+            max_worker_usd: int | float | None = None) -> list[str]:
     """Build an invocation using only the host's declared supervision modes."""
     if host not in HOSTS:
         raise ValueError(f"unsupported host: {host}")
+    if max_worker_usd is not None:
+        max_worker_usd = validate_worker_usd(max_worker_usd)
+        if (host, mode) != NATIVE_USD_BUDGET_MODE:
+            raise ValueError("native worker USD budget requires Claude allowlist mode")
     if model and model.strip().lower() in ("inherit", "host default", "default"):
         model = None
     if host == "hermes" and mode != "attended" and not in_declared_container(workspace, container_runtime_detected):
@@ -84,6 +101,8 @@ def command(*, host: str, mode: str, workspace: Path, prompt: str, model: str | 
             argv.extend(("--model", model))
         if effort:
             argv.extend(("--effort", effort))
+        if max_worker_usd is not None:
+            argv.extend(("--max-budget-usd", str(max_worker_usd)))
     elif host == "cursor":
         argv = ["cursor-agent", "-p", "--output-format", "json", "--sandbox", "enabled", "--trust",
                 "--workspace", str(workspace)]
