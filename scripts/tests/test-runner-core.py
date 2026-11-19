@@ -204,6 +204,34 @@ def check_bounded_execution() -> None:
             assert receipt["estimated_tokens"] > 10
             worker.assert_not_called()
 
+        prior_attempt = {"attempt_id": "observed", "run_id": "prior-run", "config_sha256": "config",
+                         "start_commit": git("rev-parse", "HEAD"), "step": "specify-1-discover",
+                         "host": "codex", "mode": "confined", "number": 1}
+        attempts_file = pilot / "attempts.jsonl"
+        runner.append(attempts_file, prior_attempt)
+        runner.close_attempt(attempts_file, prior_attempt, 1, "pass")
+        config["pack_budget_tokens"]["balanced"] = 60000
+        policy = {"autopilot": {"max_observed_worker_tokens": 20}}
+        with patch.object(runner, "merge_model_config", return_value=config), \
+             patch.object(runner, "load_policies", return_value=policy), \
+             patch.object(runner.hosts, "resolve_model") as models, \
+             patch.object(runner, "run_worker") as worker, redirect_stdout(io.StringIO()):
+            assert runner.run(args) == 1
+            receipt = json.loads((pilot / "runner-stop.json").read_text())
+            assert receipt["condition"] == "observed_token_usage_unavailable"
+            assert receipt["unmeasured_attempts"] == 1
+            runner.record_usage(checkout, "bounded", prior_attempt,
+                                {"usage": {"input": 12, "output": 8}, "observed_token_total": 20},
+                                {"model_id": "test-model"})
+            assert runner.run(args) == 1
+            receipt = json.loads((pilot / "runner-stop.json").read_text())
+            assert receipt["condition"] == "observed_token_budget_exhausted"
+            assert receipt["observed_tokens"] == 20
+            assert receipt["unmeasured_attempts"] == 0
+            models.assert_not_called()
+            worker.assert_not_called()
+        assert len(runner.journal(attempts_file)) == 2
+
         state = json.loads(state_file.read_text())
         state.update(current_stage="implement", current_step="implement-1-build",
                      tasks={"stories": [{"id": "US-1", "status": "implementation_complete"}]})
@@ -445,6 +473,60 @@ def check_attended_worktree_bootstrap() -> None:
         assert target_state.read_text() == "{}"
 
 
+def check_observed_usage_attribution() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        feature_dir = Path(temp) / "feature"
+        ledger = feature_dir / "memory/usage-ledger.jsonl"
+        policy = {"max_observed_worker_tokens": 21}
+        attempt = {"attempt_id": "a", "run_id": "run", "host": "claude", "mode": "allowlist",
+                   "step": "implement-1-build", "start_commit": "abc", "config_sha256": "config"}
+        trusted = {"feature": "feature", "platform": "claude", "run_id": "run", "step": "implement-1-build",
+                   "source": "api", "extra": {"attempt_id": "a", "observed_token_total": 20,
+                                              "usage_unavailable": False, "config_sha256": "config"}}
+
+        journal = feature_dir / "pilot/attempts.jsonl"
+
+        def check(host="claude", mode="allowlist"):
+            runner.enforce_observed_token_budget(feature_dir, "implement-1-build", policy, host, mode)
+
+        check()
+        try:
+            check("cursor", "confined")
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "observed_token_budget_unsupported"
+        else:
+            raise AssertionError("unsupported host accepted observed-token budget")
+
+        runner.append(ledger, trusted)
+        runner.append(ledger, trusted)
+        runner.append(ledger, {**trusted, "extra": {"attempt_id": "unrelated", "observed_token_total": 20}})
+        try:
+            check()
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "observed_token_usage_unavailable"
+            assert exc.outcome["unmeasured_attempts"] == 1
+        else:
+            raise AssertionError("orphaned runner usage receipt was silently ignored")
+        runner.append(journal, attempt)
+        check()  # One attributable measurement totaling 20, below 21.
+        runner.append(ledger, {**trusted, "run_id": "unexpected"})
+        try:
+            check()
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "observed_token_usage_unavailable"
+            assert exc.outcome["unmeasured_attempts"] == 1
+        else:
+            raise AssertionError("conflicting receipt was counted as complete")
+        with journal.open("a") as stream:
+            stream.write('{"attempt_id": "incomplete"\n')
+        assert runner.journal(journal) == [attempt]  # Legacy callers remain tolerant.
+        try:
+            check()
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "observed_token_usage_unavailable"
+            assert "invalid attempt journal" in exc.outcome["next_action"]
+        else:
+            raise AssertionError("malformed reservation was silently ignored")
 def check_verification_context() -> None:
     with tempfile.TemporaryDirectory() as temp:
         workspace = Path(temp)
@@ -515,6 +597,7 @@ def check_verification_context() -> None:
 def main() -> None:
     check_bootstrap()
     check_bounded_execution()
+    check_observed_usage_attribution()
     check_verification_context()
     check_concurrent_stale_lock_recovery()
     check_attended_worktree_bootstrap()

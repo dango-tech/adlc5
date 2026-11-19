@@ -25,6 +25,10 @@ def main() -> None:
     assert events["text"] == '{"status":"completed"}'
     # Cached input is a subset of Codex's input_tokens; only the uncached part is recorded as input.
     assert events["usage"] == {"input": 2, "cache_read": 8, "cache_creation": 1, "output": 2, "thinking": 1}
+    assert events["observed_token_total"] == 12
+    codex_turn = '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}'
+    assert hosts.parse_events("codex", codex_turn + "\n" + codex_turn)["observed_token_total"] is None
+    assert hosts.parse_events("codex", '{"type":"turn.completed","usage":{"input_tokens":10}}')["observed_token_total"] is None
     quota = hosts.parse_events("codex", '{"type":"turn.failed","error":{"code":"usage_limit_reached",'
                               '"retry_at":"2099-01-01T00:00:00Z"}}')
     assert quota["quota_limited"] and quota["earliest_retry_at"] == "2099-01-01T00:00:00Z"
@@ -34,6 +38,7 @@ def main() -> None:
     usage_record = hosts.parse_events("codex", '{"type":"token_usage_record","payload":{"session_id":"s2","usage":{"input_tokens":31,"cached_input_tokens":16,"cache_write_input_tokens":7,"output_tokens":4,"reasoning_output_tokens":2}}}')
     assert usage_record["usage"] == {"input": 15, "cache_read": 16, "cache_creation": 7, "output": 4, "thinking": 2}
     assert usage_record["session_id"] == "s2"
+    assert usage_record["observed_token_total"] is None
     claude = hosts.command(host="claude", mode="allowlist", workspace=workspace, prompt="work", model="sonnet",
                            effort="low", allowlist=["Bash(pytest)"])
     assert "--permission-mode" in claude and "acceptEdits" in claude and "--allowedTools" in claude
@@ -45,6 +50,12 @@ def main() -> None:
     assert measured["usage"] == {"input": 20760, "output": 39, "cache_read": 1152, "cache_creation": 0}
     claude_result = hosts.parse_events("claude", '{"result":"OK","usage":{"input_tokens":10},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10}}}')
     assert claude_result["model_id"] == "claude-haiku-4-5-20251001"
+    assert claude_result["observed_token_total"] is None
+    claude_terminal = ('{"type":"result","usage":{"input_tokens":3,"output_tokens":2,'
+                       '"cache_creation_input_tokens":4,"cache_read_input_tokens":11}}')
+    assert hosts.parse_events("claude", claude_terminal)["observed_token_total"] == 20
+    claude_partial = claude_terminal.replace(',"cache_read_input_tokens":11', '')
+    assert hosts.parse_events("claude", claude_partial)["observed_token_total"] is None
     for host, mode in (("codex", "confined"), ("claude", "allowlist"), ("cursor", "confined"), ("hermes", "attended")):
         with patch.object(hosts.os, "isatty", return_value=True):
             default_model = hosts.command(host=host, mode=mode, workspace=workspace, prompt="work",
