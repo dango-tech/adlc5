@@ -164,7 +164,13 @@ def rework_findings(events: list[dict[str, Any]], budget: int) -> str | None:
     if not closed or not closed[-1].get("rework"):
         return None
     if sum(1 for item in closed if item.get("kind") == "rework") >= budget:
-        raise RuntimeError(f"verification still failing after {budget} rework attempts; human review required")
+        raise RunnerStop(
+            "verification_rework_exhausted",
+            "implement-2-verify",
+            f"Verification remains failing after {budget} rework attempts. Review the findings and adjust the implementation before resuming.",
+            rework_attempts=budget,
+            findings=str(closed[-1].get("findings") or "verification failed")[:500],
+        )
     return str(closed[-1].get("findings") or "verification failed")
 
 

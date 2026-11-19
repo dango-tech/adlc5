@@ -188,8 +188,18 @@ def campaign_acceptance(run, manifest, observations, review, outcome, now):
     repo_url = 'https://github.com/' + policy['repository'] + '/pull/'
     consumer = run / 'consumer'
     if (not isinstance(url, str) or not re.fullmatch(re.escape(repo_url) + r'[1-9][0-9]*', url)
-            or head != command(['git', 'rev-parse', 'HEAD'], consumer)
-            or command(['git', 'status', '--porcelain', '--untracked-files=normal'], consumer)):
+            or head != command(['git', 'rev-parse', 'HEAD'], consumer)):
+        return dict(result, reason='remote PR does not identify the clean evaluation checkout')
+    status = command(['git', 'status', '--porcelain', '--untracked-files=all'], consumer)
+    runtime_roots = ('.adlc5/', '.agent-cache/', '.agents/')
+    unexpected_changes = []
+    for line in status.splitlines():
+        path = line[3:].split(' -> ')[-1].strip('"')
+        parts = Path(path).parts
+        is_bytecode_cache = '__pycache__' in parts
+        if not path.startswith(runtime_roots) and not is_bytecode_cache:
+            unexpected_changes.append(line)
+    if unexpected_changes:
         return dict(result, reason='remote PR does not identify the clean evaluation checkout')
     reviewed = observed_time(review.get('reviewed_at'))
     captured = observed_time(receipt.get('observed_at'))

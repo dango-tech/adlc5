@@ -262,6 +262,7 @@ def check_bounded_execution() -> None:
         state.update(current_stage="specify", current_step="specify-2-requirements")
         state_file.write_text(json.dumps(state))
 
+        config["pack_budget_tokens"]["balanced"] = 60000
         with patch.object(runner, "merge_model_config", return_value=config), \
              patch.object(runner, "stage_brief", return_value=("tiny", None)), \
              patch.object(runner.hosts, "resolve_model", return_value={"model_id": "test-model"}), \
@@ -526,8 +527,6 @@ def check_observed_usage_attribution() -> None:
             assert "invalid attempt journal" in exc.outcome["next_action"]
         else:
             raise AssertionError("malformed reservation was silently ignored")
-
-
 def check_verification_context() -> None:
     with tempfile.TemporaryDirectory() as temp:
         workspace = Path(temp)
@@ -712,8 +711,10 @@ def main() -> None:
         runner.close_attempt(journal, {**verify, "attempt_id": "v2"}, 1, "fail", rework=True, findings="still failing")
         try:
             runner.rework_findings(runner.journal(journal), 1)
-        except RuntimeError as exc:
-            assert "human review required" in str(exc)
+        except runner.RunnerStop as exc:
+            assert exc.outcome["condition"] == "verification_rework_exhausted"
+            assert exc.outcome["resume_owner"] == "operator"
+            assert exc.outcome["findings"] == "still failing"
         else:
             raise AssertionError("an exhausted rework budget must stop the run")
         # A dirty main checkout gets one worktree under .worktrees/, and the feature state moves into it.

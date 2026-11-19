@@ -2,6 +2,9 @@
 """Contract checks for the read-only ADLC5 Pulse projection."""
 from __future__ import annotations
 
+from datetime import datetime
+
+import hashlib
 import json
 import os
 import subprocess
@@ -13,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from lib.pulse import Reader, _evaluation, band, board_document, handoff, project_workspace  # noqa: E402
+from lib.pulse import Reader, _duration, _evaluation, band, board_document, handoff, project_workspace  # noqa: E402
 from lib.completion_evidence import fingerprint, gate_dependency_digest  # noqa: E402
 
 
@@ -47,6 +50,148 @@ class PulseTests(unittest.TestCase):
             "stage_status": {"specify": "completed", "plan": "completed", "tasks": "completed", "implement": "in_progress"},
         }))
         return base
+
+    def test_git_blocker_is_shown_only_at_the_opening_step(self):
+        base = self.feature()
+        state_file = base / "state.json"
+        state = json.loads(state_file.read_text())
+        state.update(current_stage="specify", current_step="specify-0-git")
+        state_file.write_text(json.dumps(state))
+        (base / "pilot").mkdir()
+        (base / "pilot/git-bootstrap.json").write_text(json.dumps({
+            "status": "blocked", "step": "specify-0-git", "condition": "branch_checked_out",
+            "next_action": "Open the worktree that already checks out the feature branch.",
+            "path": "/sensitive/absolute/path",
+        }))
+        feature = project_workspace(self.workspace)["features"][0]
+        self.assertEqual(feature["next_action"]["reason_code"], "branch_checked_out")
+        self.assertEqual(feature["last_blocker"]["source"], ".adlc5/sample-feature/pilot/git-bootstrap.json")
+        self.assertNotIn("/sensitive/absolute/path", json.dumps(feature))
+        state["current_step"] = "specify-1-discover"
+        state_file.write_text(json.dumps(state))
+        self.assertIsNone(project_workspace(self.workspace)["features"][0]["last_blocker"])
+        (base / "pilot/runner-stop.json").write_text(json.dumps({
+            "status": "stopped", "step": "specify-1-discover", "condition": "pack_over_budget",
+            "next_action": "Narrow the step context and resume.",
+        }))
+        feature = project_workspace(self.workspace)["features"][0]
+        self.assertEqual(feature["next_action"]["reason_code"], "pack_over_budget")
+
+    def test_runner_pending_permission_is_visible_without_exporting_command(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        pending = base / "pilot/pending-question.json"
+        question = {"step": "implement-2-verify", "category": "permission", "question": "private question",
+                    "denied_actions": [{"command": "private command"}]}
+        pending.write_text(json.dumps(question))
+        snapshot = project_workspace(self.workspace)
+        feature = snapshot["features"][0]
+        self.assertEqual(feature["id"], "sample-feature")
+        self.assertEqual(feature["next_action"]["label"], "Review the recorded permission request")
+        self.assertEqual(feature["pending_input"]["category"], "permission")
+        self.assertNotIn("private command", json.dumps(snapshot))
+        pending.write_text(json.dumps({**question, "answer": "allow"}))
+        self.assertIsNone(project_workspace(self.workspace)["features"][0]["pending_input"])
+
+    def test_pause_metadata_passes_through_the_cli_board_without_raw_actions(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        stop = base / "pilot/runner-stop.json"
+        receipt = {
+            "step": "implement-2-verify", "status": "stopped", "condition": "host_quota",
+            "resume_owner": "operator", "earliest_retry_at": "2026-11-17T21:01:07+00:00",
+            "next_action": "private raw command",
+        }
+        stop.write_text(json.dumps(receipt))
+        cli = subprocess.run([sys.executable, str(ROOT / "scripts/pulse.py"), "board",
+                              "--workspace", str(self.workspace)], check=True, capture_output=True)
+        document = Path(json.loads(cli.stdout)["board"]).read_text()
+        self.assertIn('"resume_owner":"operator"', document)
+        self.assertIn('"earliest_retry_at":"2026-11-17T21:01:07Z"', document)
+        self.assertNotIn("private raw command", document)
+        for condition, category in (("worker_time_budget_exhausted", "time"),
+                                    ("observed_token_budget_exhausted", "budget"),
+                                    ("unrecognized_stop", "other")):
+            stop.write_text(json.dumps({**receipt, "condition": condition, "earliest_retry_at": "bad"}))
+            blocker = project_workspace(self.workspace)["features"][0]["last_blocker"]
+            self.assertEqual(blocker["category"], category)
+            self.assertEqual(blocker["resume_owner"], "operator")
+            self.assertIsNone(blocker["earliest_retry_at"])
+
+    def test_product_decision_links_only_recorded_digest_bound_requirements(self):
+        base = self.feature()
+        (base / "pilot").mkdir()
+        decision = {"step": "implement-2-verify", "category": "product", "decision_id": "D-1",
+                    "intent_sha256": "a" * 64, "requirement_ids": ["R-1", "R-2", "unsafe string"],
+                    "question": "private product text", "alternatives": ["private alternative"]}
+        (base / "pilot/pending-question.json").write_text(json.dumps(decision))
+        source = base / "spec.md"
+        source.write_text("recorded source")
+        source_id = source.relative_to(self.workspace).as_posix()
+        readiness = base / "requirements-readiness.json"
+        readiness.write_text(json.dumps({
+            "schema_version": 1, "feature": base.name, "intent_sha256": decision["intent_sha256"],
+            "sources": [{"path": source_id, "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}],
+            "requirements": [
+                {"id": "R-1", "source": source_id, "acceptance": ["private acceptance content"]},
+                {"id": "R-2", "source": "../somewhere.md", "acceptance": ["unsafe source"]},
+            ],
+        }))
+        snapshot = project_workspace(self.workspace)
+        question = snapshot["features"][0]["pending_input"]
+        self.assertEqual(question["decision_id"], "D-1")
+        self.assertEqual(question["resume_owner"], "operator")
+        self.assertIsNone(question["earliest_retry_at"])
+        self.assertEqual(question["requirement_ids"], ["R-1", "R-2"])
+        self.assertEqual(question["requirement_sources"], [{
+            "id": "R-1", "source": source_id,
+            "acceptance_record": readiness.relative_to(self.workspace).as_posix(),
+        }])
+        self.assertNotIn("private", json.dumps(question))
+        source.write_text("changed")
+        self.assertEqual(project_workspace(self.workspace)["features"][0]["pending_input"]["requirement_sources"], [])
+        source.unlink()
+        source.symlink_to(self.workspace / "README.md")
+        self.assertEqual(project_workspace(self.workspace)["features"][0]["pending_input"]["requirement_sources"], [])
+
+    def test_duration_normalizes_utc_suffix_for_python_310(self):
+        def legacy_parser(value):
+            if value.endswith("Z"):
+                raise ValueError("pre-3.11 datetime parser cannot parse Z")
+            return datetime.fromisoformat(value)
+
+        with patch("lib.pulse.datetime") as clock:
+            clock.fromisoformat.side_effect = legacy_parser
+            self.assertEqual(_duration("2026-11-06T21:22:52Z", "2026-11-06T21:23:13Z"), 21)
+            self.assertIsNone(_duration("2026-11-06T21:23:13Z", "2026-11-06T21:22:52Z"))
+
+    def test_runner_activity_accounts_for_failed_and_unclosed_attempts(self):
+        base = self.feature()
+        for name in ("pilot", "memory"):
+            (base / name).mkdir()
+        first = {"attempt_id": "a", "step": "implement-1-build", "story": "S-1", "host": "codex",
+                 "requested_model_id": "host default", "at": "2026-11-06T21:22:52Z"}
+        journal = [
+            first,
+            {**first, "attempt_id": "b", "host": "claude", "requested_model_id": "model-a"},
+            {"attempt_id": "a", "checkpoint": "closed", "outcome": "fail", "model_id": "requested-model",
+             "observed_model_id": None, "at": "2026-11-06T21:23:13Z", "reason_code": "gate_failed", "reason": "private error text"},
+        ]
+        usage = {"model_id": "unknown", "extra": {"attempt_id": "a"}, "tokens": {"input": 7, "cache_read": 61}}
+        for path, rows in (("pilot/attempts.jsonl", journal), ("memory/usage-ledger.jsonl", [usage, usage])):
+            (base / path).write_text("".join(json.dumps(row) + "\n" for row in rows))
+        snapshot = project_workspace(self.workspace)
+        runner = snapshot["features"][0]["runner"]
+        self.assertEqual((runner["observed_attempts"], runner["failed_attempts"], runner["unclosed_attempts"]), (2, 1, 1))
+        self.assertEqual(runner["by_step"][0]["attempt_seconds"], 21)
+        self.assertEqual(runner["by_step"][0]["timed_attempts"], 1)
+        failed, unclosed = runner["recent_attempts"]
+        self.assertEqual(failed["tokens"], {"input": 7, "cache_read": 61})
+        self.assertIsNone(failed["observed_model"])
+        self.assertIsNone(unclosed["duration_seconds"])
+        self.assertEqual(unclosed["requested_model"], "model-a")
+        self.assertNotIn("private error text", json.dumps(snapshot))
+
 
     def evaluation_fixture(self):
         base = self.feature()
@@ -177,6 +322,23 @@ class PulseTests(unittest.TestCase):
         self.assertIsNone(metrics["savings_pct"])
         self.assertIsNone(metrics["success_rate_pct"])
         self.assertIsNone(metrics["escaped_defects"])
+
+    def test_workspace_unstable_capture_clears_runner_attempt_projection(self):
+        base = self.feature()
+        pilot = base / "pilot"
+        pilot.mkdir()
+        (pilot / "attempts.jsonl").write_text(json.dumps({
+            "attempt_id": "attempt-1", "step": "implement-1-build",
+            "at": "2026-11-18T10:00:00Z",
+        }) + "\n")
+        stable = project_workspace(self.workspace)
+        self.assertEqual(stable["features"][0]["runner"]["observed_attempts"], 1)
+        with patch.object(Reader, "stable", side_effect=[True, False, False]):
+            snapshot = project_workspace(self.workspace)
+        feature = snapshot["features"][0]
+        self.assertFalse(snapshot["capture"]["stable"])
+        self.assertFalse(feature["capture"]["stable"])
+        self.assertIsNone(feature["runner"])
 
     def test_multiple_cases_use_total_cost_and_expose_case_range(self):
         base = self.evaluation_fixture()
@@ -350,6 +512,23 @@ class PulseTests(unittest.TestCase):
         self.assertEqual(usage["status"], "unavailable")
         self.assertIsNone(usage["known_cost_usd"])
         self.assertEqual(usage["invalid_records"], 2)
+
+    def test_usage_keeps_reported_cost_without_tokens_and_estimates_when_cost_is_null(self):
+        base = self.feature()
+        (base / "memory").mkdir()
+        rows = [
+            {"model_id": "unknown-model", "tokens": {"input": 0},
+             "extra": {"host_reported_cost_usd": 0.25, "usage_unavailable": True}},
+            {"model_id": "priced-model", "tokens": {"input": 10, "output": 10, "cache_creation": 0, "cache_read": 0},
+             "extra": {"host_reported_cost_usd": None}},
+        ]
+        (base / "memory/usage-ledger.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+        with patch("lib.pulse.estimate_cost_usd", return_value=(0.01, True)):
+            usage = project_workspace(self.workspace)["features"][0]["usage"]
+        self.assertEqual(usage["known_cost_usd"], 0.26)
+        self.assertEqual(usage["reported_cost_records"], 1)
+        self.assertEqual(usage["estimated_cost_records"], 1)
+        self.assertEqual(usage["token_records"], 1)
 
     def test_explicit_zero_cost_is_observed_but_total_stays_partial(self):
         base = self.feature()

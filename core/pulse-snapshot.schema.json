@@ -389,6 +389,55 @@
           "type": "object",
           "description": "Optional readable content: spec, stories, delivery, check results, review notes, last gate result, pending questions."
         },
+        "pending_input": {
+          "type": ["object", "null"],
+          "required": ["category", "source"],
+          "properties": {
+            "category": {"enum": ["product", "permission"]},
+            "source": {"type": "string"},
+            "resume_owner": {"enum": ["operator", null]},
+            "earliest_retry_at": {"type": ["string", "null"], "format": "date-time"},
+            "decision_id": {"type": "string"},
+            "requirement_ids": {"type": "array", "items": {"type": "string"}},
+            "requirement_sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "source"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "source": {"type": "string"},
+                  "acceptance_record": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "last_blocker": {
+          "type": ["object", "null"],
+          "required": ["condition", "next_action", "source"],
+          "properties": {
+            "condition": {"type": "string"},
+            "next_action": {"type": "string"},
+            "source": {"type": "string"},
+            "category": {"enum": ["quota", "time", "budget", "git", "other"]},
+            "resume_owner": {"enum": ["operator", null]},
+            "earliest_retry_at": {"type": ["string", "null"], "format": "date-time"}
+          }
+        },
+        "runner": {
+          "type": ["object", "null"],
+          "description": "Observed supervised runner attempts. Attempt durations are worker-attempt intervals, not feature elapsed time.",
+          "required": ["observed_attempts", "failed_attempts", "unclosed_attempts", "partial", "by_step", "recent_attempts"],
+          "properties": {
+            "observed_attempts": {"type": "integer", "minimum": 0},
+            "failed_attempts": {"type": "integer", "minimum": 0},
+            "unclosed_attempts": {"type": "integer", "minimum": 0},
+            "partial": {"type": "boolean"},
+            "by_step": {"type": "array", "items": {"type": "object"}},
+            "recent_attempts": {"type": "array", "items": {"type": "object"}}
+          }
+        },
         "receipts": {
           "type": "array",
           "items": {
