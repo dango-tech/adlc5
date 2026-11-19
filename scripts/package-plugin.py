@@ -161,14 +161,6 @@ def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> di
         # .codex-plugin/plugin.json as the documented compatibility fallback.
         manifest = json.loads(result["plugin.json"][0])
         manifest["version"] = version
-        manifest.setdefault("extensions", {}).setdefault("com.openai", {})["interface"] = {
-            "displayName": "ADLC5",
-            "shortDescription": "Evidence-driven software delivery for coding agents.",
-            "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
-            "developerName": "Dango Tech",
-            "category": "Developer tools",
-            "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
-        }
         result["plugin.json"] = (json.dumps(manifest, indent=2).encode() + b"\n", 0o644)
         compatibility = {
             "name": "adlc5",
@@ -177,14 +169,10 @@ def for_host(files: dict[str, tuple[bytes, int]], host: str, version: str) -> di
             "author": {"name": "Dango Tech", "url": "https://github.com/dango-tech"},
             "skills": "./skills/",
             "mcpServers": "./.mcp.json",
-            "interface": {
-                "displayName": "ADLC5",
-                "shortDescription": "Evidence-driven software delivery for coding agents.",
-                "longDescription": "Specify, plan, implement, and verify software changes with shared skills and a local deterministic kernel.",
-                "developerName": "Dango Tech",
-                "category": "Developer tools",
-                "capabilities": ["Plan and implement software changes", "Run deterministic workflow checks"],
-            },
+            "interface": manifest["extensions"]["com.openai"]["interface"],
+            "requires_local_executor": True,
+            "extensions": {"com.openai": {key: value for key, value in manifest["extensions"]["com.openai"].items()
+                                           if key not in ("interface", "requires_local_executor")}},
         }
         result[".codex-plugin/plugin.json"] = (json.dumps(compatibility, indent=2).encode() + b"\n", 0o644)
         mcp = {
@@ -229,7 +217,7 @@ def write_marketplace(root: Path, host: str, package_dir: Path) -> None:
                 "name": "adlc5",
                 "source": {"source": "local", "path": "./plugins/adlc5"},
                 "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-                "category": "Developer tools",
+                "category": "Developer Tools",
             }],
         }
         path = root / ".agents" / "plugins" / "marketplace.json"

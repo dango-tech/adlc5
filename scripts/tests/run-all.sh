@@ -2455,12 +2455,18 @@ codex_plugin = json.loads((root / '.codex-plugin/plugin.json').read_text(encodin
 assert codex_plugin['version'] == version
 assert (root / codex_plugin['skills']).is_dir()
 assert codex_plugin['author']['name'] and codex_plugin['interface']['displayName']
-assert 'extensions' not in codex_plugin
 assert codex_plugin['mcpServers'] == './.mcp.json'
 assert (root / codex_plugin['mcpServers']).is_file()
 assert (root / 'mcp.json').is_file()
 portable = json.loads((root / 'plugin.json').read_text(encoding='utf-8'))
-assert portable['extensions']['com.openai']['interface']['displayName'] == 'ADLC5'
+openai = portable['extensions']['com.openai']
+assert openai['interface']['displayName'] == 'ADLC5'
+assert codex_plugin['interface'] == openai['interface']
+assert codex_plugin['requires_local_executor'] is openai['requires_local_executor'] is True
+assert codex_plugin['extensions']['com.openai'] == {
+    key: value for key, value in openai.items()
+    if key not in ('interface', 'requires_local_executor')
+}
 claude_market = json.loads((root / '.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
 assert claude_market['plugins'][0]['name'] == 'adlc5' and claude_market['plugins'][0]['source'] == './'
 cursor_market = json.loads((root / '.cursor-plugin/marketplace.json').read_text(encoding='utf-8'))
@@ -3143,7 +3149,7 @@ print("\n".join(p for p in paths if any(reserved.match(c) for c in p.split("/"))
   pass "no tracked path uses a Windows reserved device name"
 fi
 
-for test in test-plugin-release.py test-plugin-install.py test-ci-plan.py test-shared-settings.py test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-pulse-fleet.py test-telemetry-share.py; do
+for test in test-plugin-release.py test-plugin-install.py test-codex-plugin.py test-ci-plan.py test-shared-settings.py test-requirements-readiness.py test-workflow-reliability.py test_completion_evidence.py test_completion_cli.py test_story_git_paths.py test-lightweight-workflow.py test-evaluation-pilot.py test-pilot-metadata.py test-runner-hosts.py test-runner-core.py test-config-routing.py test-pulse.py test-pulse-fleet.py test-telemetry-share.py; do
   python3 "./scripts/tests/$test" || fail "$test"
   pass "$test"
 done

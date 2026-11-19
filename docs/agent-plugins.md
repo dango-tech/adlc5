@@ -103,7 +103,9 @@ The repository provides `.claude-plugin/marketplace.json`, a Claude marketplace 
 
 The public directory shared by ChatGPT and Codex is a separate submission route from local and Git-backed marketplaces. Follow OpenAI's [plugin submission and publishing guide](https://developers.openai.com/plugins/deploy/submission): prepare and validate the package, submit it through the plugin submission portal, and complete OpenAI's review. A local or repository marketplace entry does not create a public listing.
 
-The current ADLC5 Codex package configures a local stdio MCP server (`python3 ./scripts/adlc5-mcp.py`). OpenAI's public submission guidance requires a remotely reachable HTTPS MCP endpoint for public submissions; the local stdio package is therefore for local/repo marketplace distribution. To pursue a public listing, deploy an HTTPS MCP service and create a public-submission package/configuration that points to it, then submit that package and endpoint through the portal. Keep the local package available for developers who want the self-contained local runtime.
+The current ADLC5 Codex package configures a local stdio MCP server (`python3 ./scripts/adlc5-mcp.py`). OpenAI supports this through its [desktop-only submission route](https://developers.openai.com/plugins/deploy/desktop-only), currently limited to approved partners whose submitting organization has been allowlisted. Confirm eligibility with an OpenAI representative before submitting. Test a clean desktop installation and the main workflows, include the local runtime and dependencies, and complete the standard listing and review requirements. Local/repo marketplace installation remains available separately.
+
+See the [Codex submission preparation record](codex-submission.md) for package metadata, review fixtures, demo steps, local validation and remaining publication requirements.
 
 ### Hermes
 
